@@ -29,11 +29,30 @@ verde para los 13 módulos. Pendiente real: Firebase todavía no está
 creado, así que `core:network` usa una `BASE_URL` placeholder y ninguna
 feature tiene datos de verdad — eso arranca en la Fase 2.
 
-## Fase 2 — Auth + búsqueda
-- [ ] Firebase Authentication (email/password)
-- [ ] Pantalla login/registro, selección de rol
+## Fase 2 — Auth + búsqueda 🔧 *(en progreso)*
+- [x] Proyecto Firebase creado (`kinecare-cl`, plan Spark, cuenta
+      crasd69@gmail.com) y app Android registrada
+      (`com.darjnest.kinecare`, `app/google-services.json`)
+- [x] Firestore inicializado con Security Rules reales (pagos/verificación
+      denegados desde el cliente, perfiles públicos de solo lectura,
+      reseñas solo sobre reservas completadas) + índices compuestos
+      (`firestore.rules`, `firestore.indexes.json`) — desplegados
+- [x] Firebase Authentication (email/password) habilitado
+- [x] `:feature:auth`: `AuthRepository`/`AuthRepositoryImpl` reales contra
+      Firebase Auth + Firestore (`usuarios/{uid}`), pantalla de
+      login/registro con selección de rol, `AuthViewModel` con estado real
 - [ ] `:feature:search`: pantalla inicio con filtros, resultados
-- [ ] Firestore: colección `profesionales` + índices de búsqueda
+- [ ] Firestore: colección `profesionales` real con datos (hoy no hay
+      ningún profesional cargado, ni pantalla que los liste)
+- [ ] Storage: **bloqueado** — Firebase Storage ya no se puede inicializar
+      en proyectos nuevos con plan Spark (Google lo restringió a Blaze).
+      Hay que subir a Blaze antes de la Fase 6 (fotos de perfil,
+      credenciales de verificación)
+- [ ] Decisión pendiente: cómo el `NavHost` de `:app` pasa de `AuthRoute`
+      a las pantallas de cliente/profesional una vez hay sesión iniciada
+      (hoy `AuthScreen` solo muestra una confirmación de sesión, no
+      navega a ningún lado — ver comentario en
+      `app/.../navigation/KineCareNavHost.kt`)
 
 ## Fase 3 — Perfil profesional + reseñas
 - [ ] `:feature:professional-profile`: perfil con insignias expandibles
