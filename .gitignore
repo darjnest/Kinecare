@@ -8,7 +8,10 @@
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
 .DS_Store
-/build
+# Sin "/" al inicio a proposito: debe matchear build/ de CUALQUIER modulo
+# (core/*, feature/*), no solo el de la raiz. Un modulo nuevo sin su propio
+# .gitignore no debe terminar versionando sus artefactos compilados.
+build/
 /captures
 .externalNativeBuild
 .cxx

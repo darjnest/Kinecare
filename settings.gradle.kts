@@ -24,3 +24,17 @@ dependencyResolutionManagement {
 
 rootProject.name = "Kinecare"
 include(":app")
+
+include(":core:common")
+include(":core:designsystem")
+include(":core:network")
+include(":core:database")
+
+include(":feature:auth")
+include(":feature:search")
+include(":feature:professional-profile")
+include(":feature:booking")
+include(":feature:payment")
+include(":feature:verification")
+include(":feature:professional-panel")
+include(":feature:reviews")
