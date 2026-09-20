@@ -39,6 +39,42 @@ Testing, GitHub Actions.
 - Modelos y estados de negocio en español (`Reserva`, `Insignia`,
   `EstadoReserva`); nombres técnicos (ViewModel, Repository, DTO) en inglés.
 
+## Repositorio y flujo de ramas
+Repo: [github.com/darjnest/Kinecare](https://github.com/darjnest/Kinecare)
+(privado, cuenta personal). Modelo de ramas por ambiente:
+
+```
+feature/* fix/* chore/*  ──PR──►  QA  ──PR (merge commit)──►  PRD
+     ▲                                                          │
+     └────────────── se crean desde QA ─────────────────────────┘
+     hotfix/*  ◄──── sale de PRD ──────────────────────────────
+        └──PR──► PRD  ──back-merge inmediato──►  QA
+```
+
+- **`QA`** es la rama de integración y la rama por defecto del repo (así los
+  PR nuevos no apuntan a producción por descuido).
+- **`PRD`** es la rama de producción (equivalente a `main`, renombrada a
+  propósito).
+- `QA → PRD` siempre con **merge commit**, nunca squash ni rebase — un
+  squash le da un SHA distinto a cada commit y producción deja de contener
+  la base común con integración, generando conflictos fantasma en cada
+  promoción siguiente.
+- `PRD → QA` solo existe para back-merge de un hotfix, y se hace de
+  inmediato tras el merge a `PRD`.
+- `QA` no es un estacionamiento: todo lo que entra ahí está comprometido a
+  llegar a `PRD`.
+- Repo config aplicada: rama por defecto `QA`, borrado automático de ramas
+  al mergear, "Allow rebase merging" desactivado a nivel de repo.
+
+**PENDIENTE:** protección de ramas (PR obligatorio, aprobaciones, bloqueo
+de force-push/borrado, "Require linear history" apagado en `PRD`). GitHub
+no permite branch protection ni rulesets en un repo **privado** de cuenta
+personal en plan Free — solo en repos públicos o con GitHub Pro. Mientras
+no se resuelva (upgrade a Pro, o hacer el repo público), estas reglas se
+respetan por disciplina de equipo, no están técnicamente forzadas.
+CI (Fase 4) y release firmado (Fase 5) del estándar del equipo también
+quedan pendientes hasta que exista código funcional que compilar/firmar.
+
 ## Agentes especializados
 Este proyecto define subagentes en `.claude/agents/` — úsalos para el tipo
 de tarea correspondiente en vez de trabajar genéricamente:
