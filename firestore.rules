@@ -1,0 +1,67 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function esDueno(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    match /usuarios/{usuarioId} {
+      allow read: if request.auth != null;
+      allow create: if esDueno(usuarioId);
+      allow update: if esDueno(usuarioId)
+        && request.resource.data.rol == resource.data.rol;
+      allow delete: if false;
+    }
+
+    match /clientes/{usuarioId} {
+      allow read, write: if esDueno(usuarioId);
+    }
+
+    match /profesionales/{usuarioId} {
+      allow read: if true;
+      allow create: if esDueno(usuarioId);
+      allow update: if esDueno(usuarioId)
+        && request.resource.data.insignias == resource.data.insignias
+        && request.resource.data.estadoVerificacionGeneral == resource.data.estadoVerificacionGeneral;
+      allow delete: if false;
+
+      match /servicios/{servicioId} {
+        allow read: if true;
+        allow write: if esDueno(usuarioId);
+      }
+    }
+
+    match /reservas/{reservaId} {
+      allow read: if request.auth != null &&
+        (request.auth.uid == resource.data.clienteId || request.auth.uid == resource.data.profesionalId);
+      // crearReserva/iniciarPago (Cloud Functions, Admin SDK) son el unico camino de escritura.
+      allow write: if false;
+    }
+
+    match /pagos/{pagoId} {
+      allow read: if request.auth != null && (
+        get(/databases/$(database)/documents/reservas/$(resource.data.reservaId)).data.clienteId == request.auth.uid ||
+        get(/databases/$(database)/documents/reservas/$(resource.data.reservaId)).data.profesionalId == request.auth.uid
+      );
+      allow write: if false;
+    }
+
+    match /resenas/{resenaId} {
+      allow read: if true;
+      allow create: if request.auth != null
+        && request.auth.uid == request.resource.data.clienteId
+        && get(/databases/$(database)/documents/reservas/$(request.resource.data.reservaId)).data.estado == 'COMPLETADA'
+        && get(/databases/$(database)/documents/reservas/$(request.resource.data.reservaId)).data.clienteId == request.auth.uid;
+      allow update: if request.auth != null
+        && request.auth.uid == resource.data.profesionalId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['respuestaProfesional']);
+      allow delete: if false;
+    }
+
+    match /solicitudesVerificacion/{solicitudId} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.profesionalId;
+      allow write: if false;
+    }
+  }
+}

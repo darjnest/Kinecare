@@ -5,7 +5,10 @@ plugins {
 }
 
 dependencies {
-    implementation(libs.kotlinx.datetime)
+    // api: Instant/LocalTime/DayOfWeek son parte de la API publica de los
+    // modelos de dominio - los modulos que consumen :core:common necesitan
+    // este tipo en su propio classpath de compilacion.
+    api(libs.kotlinx.datetime)
     implementation(libs.kotlinx.coroutines.core)
 
     testImplementation(libs.junit.jupiter)

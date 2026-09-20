@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "105411472154",
+    "project_id": "kinecare-cl",
+    "storage_bucket": "kinecare-cl.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:105411472154:android:716bfb2334bf7d14359aa3",
+        "android_client_info": {
+          "package_name": "com.darjnest.kinecare"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCsYf1MMhwal2uw_jd5zPdOjNgQVUBh5Fg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

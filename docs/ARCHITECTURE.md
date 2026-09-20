@@ -64,14 +64,21 @@ duplicada entre módulos.
   `NavGraphBuilder.xxxGraph(...)` que `:app` ensambla.
 
 ## Backend: Firebase
+Proyecto real: **`kinecare-cl`** (cuenta crasd69@gmail.com, plan Spark por
+ahora — ver [TASKS.md](TASKS.md#fase-2--auth--búsqueda)).
+
 - **Firestore**: base de datos principal (usuarios, profesionales, servicios,
-  reservas, reseñas).
-- **Firebase Authentication**: login (email/password inicialmente).
+  reservas, reseñas). Security Rules reales desplegadas (`firestore.rules`).
+- **Firebase Authentication**: login (email/password), habilitado.
 - **Cloud Functions**: toda la lógica sensible — pagos, cálculo de comisión,
   verificación de identidad. El cliente Android **nunca** resuelve estos
-  estados localmente, solo los lee tras la respuesta de la función.
+  estados localmente, solo los lee tras la respuesta de la función. Todavía
+  no hay ninguna desplegada (requiere subir a Blaze primero).
 - **Cloud Messaging**: notificaciones, tópicos separados por reserva y por rol.
-- **Storage**: fotos de perfil y credenciales de profesionales.
+  Sin configurar todavía.
+- **Storage**: fotos de perfil y credenciales de profesionales. **Bloqueado
+  en plan Spark** — Google ya no permite inicializar Storage en proyectos
+  nuevos sin plan Blaze. Subir a Blaze antes de la Fase 6.
 - Acceso a Firestore/Storage/Auth vía SDK directo; acceso a Cloud Functions
   HTTP vía Retrofit (`:core:network`).
 
