@@ -65,15 +65,20 @@ feature/* fix/* chore/*  ──PR──►  QA  ──PR (merge commit)──►
   llegar a `PRD`.
 - Repo config aplicada: rama por defecto `QA`, borrado automático de ramas
   al mergear, "Allow rebase merging" desactivado a nivel de repo.
+- Repo **público** (decisión explícita: GitHub Free no permite branch
+  protection en repos privados de cuenta personal, solo en públicos o con
+  Pro). Protección activa vía repository rulesets:
+  - `QA`: PR obligatorio (0 aprobaciones), sin force-push, sin borrado.
+  - `PRD`: PR obligatorio (1 aprobación), sin force-push, sin borrado,
+    **método de merge restringido a "merge commit"** (squash/rebase
+    deshabilitados para esta rama — es la regla no negociable de arriba,
+    forzada técnicamente, no solo por disciplina).
+  - Verificado con `gh api repos/darjnest/Kinecare/rules/branches/<rama>`.
 
-**PENDIENTE:** protección de ramas (PR obligatorio, aprobaciones, bloqueo
-de force-push/borrado, "Require linear history" apagado en `PRD`). GitHub
-no permite branch protection ni rulesets en un repo **privado** de cuenta
-personal en plan Free — solo en repos públicos o con GitHub Pro. Mientras
-no se resuelva (upgrade a Pro, o hacer el repo público), estas reglas se
-respetan por disciplina de equipo, no están técnicamente forzadas.
-CI (Fase 4) y release firmado (Fase 5) del estándar del equipo también
-quedan pendientes hasta que exista código funcional que compilar/firmar.
+**PENDIENTE:** CI (Fase 4) y release firmado (Fase 5) del estándar del
+equipo, hasta que exista código funcional que compilar/firmar. También
+pendiente: exigir un check de CI como obligatorio en ambas ramas (recién
+se puede una vez que el workflow haya corrido al menos una vez).
 
 ## Agentes especializados
 Este proyecto define subagentes en `.claude/agents/` — úsalos para el tipo
