@@ -3,20 +3,31 @@
 Estimación total ≈ 940 horas a tiempo completo (~24 semanas). Orden
 sugerido por dependencias técnicas y de negocio.
 
-## Fase 1 — Arquitectura base 🔧 *(en progreso)*
-- [ ] Inicializar repositorio git
-- [ ] `build-logic` con convention plugins (app, library, feature, Hilt, Room)
-- [ ] Version catalog completo (Hilt, Navigation Compose, Retrofit, OkHttp,
-      Kotlinx Serialization, Room, Coroutines, Coil, Maps Compose,
-      DataStore, security-crypto, JUnit5, MockK, Turbine)
-- [ ] Módulos `:core:common`, `:core:network`, `:core:database`,
+## Fase 1 — Arquitectura base ✅
+- [x] Inicializar repositorio git (github.com/darjnest/Kinecare, ramas QA/PRD)
+- [ ] `build-logic` con convention plugins — diferido: cada módulo declara
+      su propio `build.gradle.kts` por ahora (ver docs/SOLUTION_STRUCTURE.md,
+      motivo: AGP 9.4.1 built-in Kotlin todavía es muy nuevo para fijar una
+      abstracción encima sin haber visto el patrón estabilizarse)
+- [x] Version catalog completo (Hilt, Navigation Compose, Retrofit, OkHttp,
+      Kotlinx Serialization, Room, Coroutines, Coil, DataStore,
+      security-crypto, JUnit5, MockK, Turbine) — Maps Compose queda para
+      cuando `:feature:search` lo necesite de verdad
+- [x] Módulos `:core:common`, `:core:network`, `:core:database`,
       `:core:designsystem`
-- [ ] Módulos `:feature:*` (esqueleto vacío, sin lógica)
-- [ ] Hilt Application + `MainActivity` con `NavHost` raíz
-- [ ] Design system: paleta verde salvia / azul petróleo / blanco / gris,
-      tema Material 3
-- [ ] Modelos de dominio en `:core:common` (ver [DOMAIN.md](DOMAIN.md))
-- [ ] CLAUDE.md + docs de contexto (arquitectura, dominio, datos, tareas)
+- [x] Módulos `:feature:*` (esqueleto vacío, sin lógica: presentation con
+      navigation/view/viewmodel, wireados en el NavHost de `:app`)
+- [x] Hilt Application + `MainActivity` con `NavHost` raíz
+- [x] Design system: paleta verde salvia / azul petróleo / blanco / gris,
+      tema Material 3, componentes base (button, card, label/badge,
+      loading, dialog)
+- [x] Modelos de dominio en `:core:common` (ver [DOMAIN.md](DOMAIN.md))
+- [x] CLAUDE.md + docs de contexto (arquitectura, dominio, datos, tareas)
+
+Verificado con `./gradlew build` (debug+release, lint, unit tests) en
+verde para los 13 módulos. Pendiente real: Firebase todavía no está
+creado, así que `core:network` usa una `BASE_URL` placeholder y ninguna
+feature tiene datos de verdad — eso arranca en la Fase 2.
 
 ## Fase 2 — Auth + búsqueda
 - [ ] Firebase Authentication (email/password)
