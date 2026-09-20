@@ -69,10 +69,13 @@ feature/* fix/* chore/*  ──PR──►  QA  ──PR (merge commit)──►
   protection en repos privados de cuenta personal, solo en públicos o con
   Pro). Protección activa vía repository rulesets:
   - `QA`: PR obligatorio (0 aprobaciones), sin force-push, sin borrado.
-  - `PRD`: PR obligatorio (1 aprobación), sin force-push, sin borrado,
-    **método de merge restringido a "merge commit"** (squash/rebase
-    deshabilitados para esta rama — es la regla no negociable de arriba,
-    forzada técnicamente, no solo por disciplina).
+  - `PRD`: PR obligatorio, sin force-push, sin borrado, **método de merge
+    restringido a "merge commit"** (squash/rebase deshabilitados para esta
+    rama — es la regla no negociable de arriba, forzada técnicamente, no
+    solo por disciplina). Aprobaciones requeridas: **0** por ahora — el
+    repo tiene un solo colaborador y una regla de 1 aprobación deja todo
+    PR a `PRD` irrecuperablemente bloqueado. Subir a 1 aprobación en cuanto
+    haya un segundo colaborador con permiso de revisar.
   - Verificado con `gh api repos/darjnest/Kinecare/rules/branches/<rama>`.
 
 **PENDIENTE:** CI (Fase 4) y release firmado (Fase 5) del estándar del
