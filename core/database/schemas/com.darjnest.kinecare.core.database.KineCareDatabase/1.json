@@ -1,0 +1,118 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "0fd3c95cccdb5ffae200e68e5016e62b",
+    "entities": [
+      {
+        "tableName": "favoritos",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`usuarioId` TEXT NOT NULL, `profesionalId` TEXT NOT NULL, PRIMARY KEY(`usuarioId`, `profesionalId`))",
+        "fields": [
+          {
+            "fieldPath": "usuarioId",
+            "columnName": "usuarioId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "profesionalId",
+            "columnName": "profesionalId",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "usuarioId",
+            "profesionalId"
+          ]
+        }
+      },
+      {
+        "tableName": "busqueda_cache",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `resultadosJson` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "resultadosJson",
+            "columnName": "resultadosJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timestamp",
+            "columnName": "timestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "borrador_reserva",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`usuarioId` TEXT NOT NULL, `profesionalId` TEXT NOT NULL, `servicioId` TEXT, `modalidad` TEXT, `fechaHoraEpoch` INTEGER, `direccionJson` TEXT, `pasoActual` INTEGER NOT NULL, PRIMARY KEY(`usuarioId`))",
+        "fields": [
+          {
+            "fieldPath": "usuarioId",
+            "columnName": "usuarioId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "profesionalId",
+            "columnName": "profesionalId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "servicioId",
+            "columnName": "servicioId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "modalidad",
+            "columnName": "modalidad",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "fechaHoraEpoch",
+            "columnName": "fechaHoraEpoch",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "direccionJson",
+            "columnName": "direccionJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "pasoActual",
+            "columnName": "pasoActual",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "usuarioId"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '0fd3c95cccdb5ffae200e68e5016e62b')"
+    ]
+  }
+}

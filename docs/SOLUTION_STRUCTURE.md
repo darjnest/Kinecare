@@ -4,20 +4,12 @@
 
 ```
 Kinecare/
-├── build-logic/                      # Convention plugins de Gradle
-│   └── convention/
-│       └── src/main/kotlin/
-│           ├── AndroidApplicationConventionPlugin.kt
-│           ├── AndroidFeatureConventionPlugin.kt   (Android lib + Compose + Hilt)
-│           ├── AndroidLibraryConventionPlugin.kt
-│           ├── HiltConventionPlugin.kt
-│           └── RoomConventionPlugin.kt
 ├── app/                               # Ensambla NavGraph, Hilt Application, MainActivity
 ├── core/
-│   ├── common/                        # Modelos de dominio, Result/DataError, extensiones
-│   ├── network/                       # Retrofit/OkHttp hacia Cloud Functions, wrapper Firebase SDK
+│   ├── common/                        # Modelos de dominio (Kotlin puro), Result/DataError
+│   ├── network/                       # Retrofit/OkHttp hacia Cloud Functions (Hilt di/)
 │   ├── database/                      # Room: caché, favoritos, borrador de reserva
-│   └── designsystem/                  # Colores, tipografía, componentes Compose, tema Material 3
+│   └── designsystem/                  # Tema Material 3 + componentes Compose reutilizables
 ├── feature/
 │   ├── auth/
 │   ├── search/
@@ -30,35 +22,77 @@ Kinecare/
 └── docs/                              # Este set de documentos de contexto
 ```
 
-## Estructura interna de un módulo `:feature:*`
+`build-logic` (convention plugins) queda pendiente como mejora de corto
+plazo: por ahora cada módulo declara su propio `build.gradle.kts`
+consistente. Se extraerá a convention plugins una vez que el patrón esté
+estable en 2-3 módulos (evita fijar una abstracción prematura sobre un DSL
+de AGP todavía nuevo — AGP 9.4.1 con sintaxis declarativa
+`compileSdk { version = release(37) }`).
 
-Cada feature es **un solo módulo Gradle** (no se divide en submódulos
-`data`/`domain`/`presentation` como módulos separados — eso vive como
-paquetes dentro del mismo módulo, según el brief del proyecto):
+## Estructura interna de un módulo `:core:*` o `:feature:*`
+
+Convención adoptada (alineada con otros proyectos de StarConsulting, ej.
+`bf_reserva`): cada módulo organiza su código por **capa técnica**
+(`data` / `di` / `domain` / `presentation`), y dentro de `presentation` por
+**tipo de artefacto Compose** (`navigation`, `view`, `viewmodel`, `util`).
+No se crean carpetas vacías "por si acaso" — cada una aparece cuando tiene
+contenido real.
 
 ```
-feature/booking/src/main/java/com/darjnest/kinecare/feature/booking/
+feature/booking/src/main/kotlin/com/darjnest/kinecare/feature/booking/
 ├── data/
-│   ├── dto/                # DTOs de Firestore/Cloud Functions
-│   ├── mapper/              # DTO ↔ modelo de dominio
-│   └── BookingRepositoryImpl.kt
+│   ├── repository/           # interfaces de repositorio
+│   ├── repository_impl/       # implementaciones (Firestore/Cloud Functions)
+│   └── service/                # mappers/adaptadores sobre Firebase o Retrofit
+├── di/
+│   └── BookingModule.kt        # @Module @InstallIn(SingletonComponent::class)
 ├── domain/
-│   ├── BookingRepository.kt # interfaz
-│   └── usecase/             # casos de uso puros, si se justifican
-├── presentation/
-│   ├── BookingViewModel.kt
-│   ├── BookingState.kt / BookingAction.kt / BookingEvent.kt
-│   └── screens/              # composables (Root + Screen, ver convención MVI)
-└── navigation/
-    └── BookingNavGraph.kt    # NavGraphBuilder.bookingGraph(...)
+│   ├── model/                   # modelos exclusivos de la feature (si los hay)
+│   └── service/                  # logica de negocio pura (equivalente a use cases)
+└── presentation/
+    ├── navigation/                # Route (@Serializable) + NavGraphBuilder.xxxGraph()
+    ├── view/                       # Root (conecta ViewModel) + Screen (stateless, @Preview)
+    ├── viewmodel/                   # ViewModel + State/Action/Event
+    └── util/                        # helpers de UI exclusivos de la feature (raro; si es
+                                       # generico va a :core:designsystem en vez de aqui)
 ```
 
-`:app` importa cada `xxxNavGraph.kt` y los compone en `clienteGraph` /
-`profesionalGraph` según corresponda.
+`:core:designsystem` sigue la misma logica para sus propios componentes:
+
+```
+core/designsystem/src/main/kotlin/com/darjnest/kinecare/core/designsystem/
+├── theme/            # Color.kt, Type.kt, Theme.kt (paleta + Material 3)
+└── components/
+    ├── button/
+    ├── card/
+    ├── label/         # badges/insignias (tono semantico, sin conocer modelos de dominio)
+    ├── loading/
+    ├── dialog/
+    └── ...             # bar/, form/, icon/, tooltip/, etc. se agregan cuando una
+                          # pantalla real los necesite, no antes
+```
+
+`:core:database` sigue `entity/`, `dao/`, `di/` (sin `presentation`, no
+tiene UI). `:core:network` sigue `di/` (y sumará `service/`,
+`dto/`, `firebase/` cuando existan endpoints reales — ver
+docs/TASKS.md Fase 2 en adelante).
+
+## Reglas de dependencia (sin cambios respecto a antes)
+
+| Módulo | Puede depender de |
+|---|---|
+| `:feature:*` | `:core:common`, `:core:network`, `:core:database`, `:core:designsystem` |
+| `:core:network` | `:core:common` |
+| `:core:database` | `:core:common` |
+| `:core:designsystem` | (nada de negocio; solo Compose/Material3) |
+| `:app` | todos los módulos (ensambla NavGraph + Hilt) |
+
+Las features **nunca se dependen entre sí**. Un módulo declara solo las
+dependencias que usa de verdad — no se agrega `:core:network` o
+`:core:database` a una feature "por si se necesita después".
 
 ## Paquete base
-`com.darjnest.kinecare` (namespace ya definido en el proyecto generado por
-Android Studio). Cada módulo usa
+`com.darjnest.kinecare` (namespace del proyecto). Cada módulo usa
 `com.darjnest.kinecare.<core|feature>.<nombre>` como namespace.
 
 ## Convenciones de nombres
@@ -72,13 +106,10 @@ Android Studio). Cada módulo usa
 ## Gradle
 - Version catalog único: `gradle/libs.versions.toml`.
 - Sin versiones hardcodeadas en `build.gradle.kts` de ningún módulo.
-- Convention plugins en `build-logic` para: app Android, librería Android,
-  feature Android (lib + Compose + Hilt), Hilt, Room. Evita repetir
-  `compileSdk`, `minSdk`, `compose { }`, `kapt`/`ksp` en cada módulo.
 
 ## CI (GitHub Actions, a configurar en fase 8)
 - `build.yml`: `./gradlew build` + `./gradlew testDebugUnitTest` +
-  `./gradlew lintDebug` en cada PR contra `main`.
+  `./gradlew lintDebug` en cada PR contra `QA` y `PRD`.
 
 Ver también: [ARCHITECTURE.md](ARCHITECTURE.md), [DOMAIN.md](DOMAIN.md),
 [DATA_MODEL.md](DATA_MODEL.md), [TASKS.md](TASKS.md).
