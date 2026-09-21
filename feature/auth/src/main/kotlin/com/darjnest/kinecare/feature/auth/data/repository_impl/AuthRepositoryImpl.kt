@@ -4,6 +4,7 @@ package com.darjnest.kinecare.feature.auth.data.repository_impl
 
 import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.domain.model.Usuario
+import com.darjnest.kinecare.core.common.domain.util.RutUtils
 import com.darjnest.kinecare.core.common.result.Result
 import com.darjnest.kinecare.feature.auth.data.repository.AuthRepository
 import com.darjnest.kinecare.feature.auth.domain.AuthError
@@ -29,9 +30,9 @@ class AuthRepositoryImpl @Inject constructor(
     private val firestore: FirebaseFirestore,
 ) : AuthRepository {
 
-    override suspend fun iniciarSesion(email: String, password: String): Result<Usuario, AuthError> {
+    override suspend fun iniciarSesion(rut: String, password: String): Result<Usuario, AuthError> {
         return try {
-            val resultado = firebaseAuth.signInWithEmailAndPassword(email, password).await()
+            val resultado = firebaseAuth.signInWithEmailAndPassword(RutUtils.emailFirebase(rut), password).await()
             val uid = resultado.user?.uid ?: return Result.Error(AuthError.DESCONOCIDO)
             obtenerUsuario(uid)
         } catch (e: FirebaseAuthInvalidUserException) {
@@ -47,17 +48,19 @@ class AuthRepositoryImpl @Inject constructor(
 
     override suspend fun registrar(
         nombre: String,
-        email: String,
+        rut: String,
         password: String,
         rol: RolUsuario,
     ): Result<Usuario, AuthError> {
         return try {
-            val resultado = firebaseAuth.createUserWithEmailAndPassword(email, password).await()
+            val rutNormalizado = RutUtils.normalizar(rut)
+            val resultado = firebaseAuth.createUserWithEmailAndPassword(RutUtils.emailFirebase(rutNormalizado), password).await()
             val uid = resultado.user?.uid ?: return Result.Error(AuthError.DESCONOCIDO)
 
             val datosUsuario = mapOf(
                 "nombre" to nombre,
-                "email" to email,
+                "rut" to rutNormalizado,
+                "email" to RutUtils.emailFirebase(rutNormalizado),
                 "telefono" to null,
                 "rol" to rol.name,
                 "fotoUrl" to null,
@@ -67,7 +70,7 @@ class AuthRepositoryImpl @Inject constructor(
 
             obtenerUsuario(uid)
         } catch (e: FirebaseAuthUserCollisionException) {
-            Result.Error(AuthError.EMAIL_YA_REGISTRADO)
+            Result.Error(AuthError.RUT_YA_REGISTRADO)
         } catch (e: FirebaseNetworkException) {
             Result.Error(AuthError.SIN_INTERNET)
         } catch (e: Exception) {
@@ -109,6 +112,7 @@ class AuthRepositoryImpl @Inject constructor(
         return Usuario(
             id = uid,
             nombre = getString("nombre") ?: "",
+            rut = getString("rut") ?: "",
             email = getString("email") ?: "",
             telefono = getString("telefono"),
             rol = runCatching { RolUsuario.valueOf(getString("rol") ?: "") }.getOrDefault(RolUsuario.CLIENTE),

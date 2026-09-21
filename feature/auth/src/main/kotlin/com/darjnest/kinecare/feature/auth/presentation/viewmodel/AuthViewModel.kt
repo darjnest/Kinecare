@@ -4,7 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.domain.model.Usuario
+import com.darjnest.kinecare.core.common.domain.util.RutUtils
 import com.darjnest.kinecare.core.common.result.Result
+import com.darjnest.kinecare.feature.auth.data.local.LoginPreferences
 import com.darjnest.kinecare.feature.auth.data.repository.AuthRepository
 import com.darjnest.kinecare.feature.auth.domain.AuthError
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -19,31 +21,36 @@ enum class ModoAuth { LOGIN, REGISTRO }
 data class AuthState(
     val modo: ModoAuth = ModoAuth.LOGIN,
     val nombre: String = "",
-    val email: String = "",
+    val rut: String = "",
     val password: String = "",
     val rolSeleccionado: RolUsuario = RolUsuario.CLIENTE,
+    val recordarCuenta: Boolean = true,
     val cargando: Boolean = false,
     val mensajeError: String? = null,
     val usuarioAutenticado: Usuario? = null,
 ) {
+    val rutInvalido: Boolean
+        get() = rut.isNotBlank() && !RutUtils.esValido(rut)
+
     val puedeEnviar: Boolean
-        get() = email.isNotBlank() && password.isNotBlank() && (modo == ModoAuth.LOGIN || nombre.isNotBlank())
+        get() = RutUtils.esValido(rut) && password.isNotBlank() && (modo == ModoAuth.LOGIN || nombre.isNotBlank())
 }
 
 sealed interface AuthAction {
     data class CambiarModo(val modo: ModoAuth) : AuthAction
     data class CambiarNombre(val valor: String) : AuthAction
-    data class CambiarEmail(val valor: String) : AuthAction
+    data class CambiarRut(val valor: String) : AuthAction
     data class CambiarPassword(val valor: String) : AuthAction
     data class SeleccionarRol(val rol: RolUsuario) : AuthAction
+    data class CambiarRecordarCuenta(val valor: Boolean) : AuthAction
     data object Enviar : AuthAction
     data object CerrarSesion : AuthAction
 }
 
 private fun AuthError.aMensaje(): String = when (this) {
-    AuthError.CREDENCIALES_INVALIDAS -> "Email o contraseña incorrectos."
-    AuthError.USUARIO_NO_ENCONTRADO -> "No encontramos una cuenta con ese email."
-    AuthError.EMAIL_YA_REGISTRADO -> "Ya existe una cuenta con ese email."
+    AuthError.CREDENCIALES_INVALIDAS -> "RUT o contraseña incorrectos."
+    AuthError.USUARIO_NO_ENCONTRADO -> "No encontramos una cuenta con ese RUT."
+    AuthError.RUT_YA_REGISTRADO -> "Ya existe una cuenta con ese RUT."
     AuthError.SIN_INTERNET -> "Sin conexión a internet. Intenta de nuevo."
     AuthError.DESCONOCIDO -> "Algo salió mal. Intenta de nuevo."
 }
@@ -51,12 +58,18 @@ private fun AuthError.aMensaje(): String = when (this) {
 @HiltViewModel
 class AuthViewModel @Inject constructor(
     private val authRepository: AuthRepository,
+    private val loginPreferences: LoginPreferences,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(AuthState())
     val state: StateFlow<AuthState> = _state.asStateFlow()
 
     init {
+        viewModelScope.launch {
+            val recordarCuenta = loginPreferences.recordarCuenta()
+            val rutRecordado = if (recordarCuenta) loginPreferences.rutRecordado() else ""
+            _state.value = _state.value.copy(recordarCuenta = recordarCuenta, rut = rutRecordado)
+        }
         viewModelScope.launch {
             authRepository.observarUsuarioActual().collect { usuario ->
                 _state.value = _state.value.copy(usuarioAutenticado = usuario)
@@ -68,9 +81,10 @@ class AuthViewModel @Inject constructor(
         when (action) {
             is AuthAction.CambiarModo -> _state.value = _state.value.copy(modo = action.modo, mensajeError = null)
             is AuthAction.CambiarNombre -> _state.value = _state.value.copy(nombre = action.valor)
-            is AuthAction.CambiarEmail -> _state.value = _state.value.copy(email = action.valor)
+            is AuthAction.CambiarRut -> _state.value = _state.value.copy(rut = action.valor)
             is AuthAction.CambiarPassword -> _state.value = _state.value.copy(password = action.valor)
             is AuthAction.SeleccionarRol -> _state.value = _state.value.copy(rolSeleccionado = action.rol)
+            is AuthAction.CambiarRecordarCuenta -> _state.value = _state.value.copy(recordarCuenta = action.valor)
             AuthAction.Enviar -> enviar()
             AuthAction.CerrarSesion -> viewModelScope.launch { authRepository.cerrarSesion() }
         }
@@ -84,16 +98,19 @@ class AuthViewModel @Inject constructor(
             _state.value = actual.copy(cargando = true, mensajeError = null)
 
             val resultado = if (actual.modo == ModoAuth.LOGIN) {
-                authRepository.iniciarSesion(actual.email, actual.password)
+                authRepository.iniciarSesion(actual.rut, actual.password)
             } else {
-                authRepository.registrar(actual.nombre, actual.email, actual.password, actual.rolSeleccionado)
+                authRepository.registrar(actual.nombre, actual.rut, actual.password, actual.rolSeleccionado)
             }
 
             when (resultado) {
-                is Result.Success -> _state.value = _state.value.copy(
-                    cargando = false,
-                    usuarioAutenticado = resultado.data,
-                )
+                is Result.Success -> {
+                    loginPreferences.guardar(actual.recordarCuenta, actual.rut)
+                    _state.value = _state.value.copy(
+                        cargando = false,
+                        usuarioAutenticado = resultado.data,
+                    )
+                }
                 is Result.Error -> _state.value = _state.value.copy(
                     cargando = false,
                     mensajeError = resultado.error.aMensaje(),

@@ -7,11 +7,11 @@ import com.darjnest.kinecare.feature.auth.domain.AuthError
 import kotlinx.coroutines.flow.Flow
 
 interface AuthRepository {
-    suspend fun iniciarSesion(email: String, password: String): Result<Usuario, AuthError>
+    suspend fun iniciarSesion(rut: String, password: String): Result<Usuario, AuthError>
 
     suspend fun registrar(
         nombre: String,
-        email: String,
+        rut: String,
         password: String,
         rol: RolUsuario,
     ): Result<Usuario, AuthError>

@@ -210,14 +210,15 @@ private fun CamposFormulario(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        EtiquetaCampo(texto = "RUT o Correo Electrónico")
+        EtiquetaCampo(texto = "RUT")
         Text(text = "Chile", style = MaterialTheme.typography.bodyMedium, color = LoginGrisTexto)
     }
     OutlinedTextField(
-        value = state.email,
-        onValueChange = { onAction(AuthAction.CambiarEmail(it)) },
-        placeholder = { Text("ej. 12.345.678-k o juan@email.com") },
+        value = state.rut,
+        onValueChange = { onAction(AuthAction.CambiarRut(it)) },
+        placeholder = { Text("ej. 12.345.678-9") },
         singleLine = true,
+        isError = state.rutInvalido,
         leadingIcon = { Icon(Icons.Filled.Badge, contentDescription = null, tint = LoginGrisTexto) },
         shape = RoundedCornerShape(16.dp),
         colors = coloresCampo(),
@@ -225,6 +226,14 @@ private fun CamposFormulario(
             .fillMaxWidth()
             .padding(top = 8.dp),
     )
+    if (state.rutInvalido) {
+        Text(
+            text = "RUT inválido",
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+    }
 
     Spacer(modifier = Modifier.height(20.dp))
     Row(
@@ -274,7 +283,6 @@ private fun CamposFormulario(
         )
     }
 
-    var recordarCuenta by remember { mutableStateOf(true) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -282,8 +290,8 @@ private fun CamposFormulario(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Switch(
-            checked = recordarCuenta,
-            onCheckedChange = { recordarCuenta = it },
+            checked = state.recordarCuenta,
+            onCheckedChange = { onAction(AuthAction.CambiarRecordarCuenta(it)) },
             colors = SwitchDefaults.colors(checkedTrackColor = LoginPrimarioOscuro),
         )
         Spacer(modifier = Modifier.width(12.dp))

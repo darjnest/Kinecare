@@ -10,6 +10,7 @@ enum class RolUsuario {
 data class Usuario(
     val id: String,
     val nombre: String,
+    val rut: String,
     val email: String,
     val telefono: String?,
     val rol: RolUsuario,
