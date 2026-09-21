@@ -24,3 +24,16 @@ val Gris95 = Color(0xFFEFF1EC)
 
 val RojoError40 = Color(0xFFBA1A1A)
 val RojoError90 = Color(0xFFFFDAD6)
+
+// Paleta de marca usada especificamente en la pantalla de login para
+// calzar con el mockup de producto (no reemplaza el ColorScheme global).
+val LoginPrimario = Color(0xFF4E876C)
+val LoginPrimarioOscuro = Color(0xFF1B4332)
+val LoginSecundario = Color(0xFF1A3E54)
+val LoginTerciario = Color(0xFF2E7D32)
+val LoginFondo = Color(0xFFFBFDFB)
+val LoginMenta = Color(0xFFE3F0E7)
+val LoginMentaSuave = Color(0xFFDCEEE3)
+val LoginAzulSuave = Color(0xFFE2ECF4)
+val LoginGrisTexto = Color(0xFF5B6B63)
+val LoginGrisClaro = Color(0xFFEFF3F0)
