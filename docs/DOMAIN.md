@@ -15,6 +15,8 @@ Identidad base compartida por ambos roles.
 - `email: String` (correo interno derivado del RUT para Firebase Auth —
   ver `RutUtils.emailFirebase` en `:core:common` — nunca se muestra al
   usuario ni se usa fuera del SDK de Auth)
+- `correoContacto: String?` (correo real ingresado por el usuario al
+  registrarse, solo para contacto/notificaciones — no se usa para Auth)
 - `telefono: String?`
 - `rol: RolUsuario` (`CLIENTE` | `PROFESIONAL`)
 - `fotoUrl: String?`

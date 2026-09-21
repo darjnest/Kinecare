@@ -12,6 +12,7 @@ data class Usuario(
     val nombre: String,
     val rut: String,
     val email: String,
+    val correoContacto: String?,
     val telefono: String?,
     val rol: RolUsuario,
     val fotoUrl: String?,

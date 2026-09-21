@@ -14,6 +14,8 @@ interface AuthRepository {
         rut: String,
         password: String,
         rol: RolUsuario,
+        telefono: String,
+        correoContacto: String,
     ): Result<Usuario, AuthError>
 
     fun observarUsuarioActual(): Flow<Usuario?>

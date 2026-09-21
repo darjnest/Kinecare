@@ -22,7 +22,10 @@ data class AuthState(
     val modo: ModoAuth = ModoAuth.LOGIN,
     val nombre: String = "",
     val rut: String = "",
+    val telefono: String = "",
+    val correo: String = "",
     val password: String = "",
+    val aceptaTerminos: Boolean = false,
     val rolSeleccionado: RolUsuario = RolUsuario.CLIENTE,
     val recordarCuenta: Boolean = true,
     val cargando: Boolean = false,
@@ -32,15 +35,34 @@ data class AuthState(
     val rutInvalido: Boolean
         get() = rut.isNotBlank() && !RutUtils.esValido(rut)
 
+    val passwordDebil: Boolean
+        get() = modo == ModoAuth.REGISTRO && password.isNotEmpty() && password.length < LARGO_MINIMO_PASSWORD
+
     val puedeEnviar: Boolean
-        get() = RutUtils.esValido(rut) && password.isNotBlank() && (modo == ModoAuth.LOGIN || nombre.isNotBlank())
+        get() = RutUtils.esValido(rut) && password.isNotBlank() && (
+            modo == ModoAuth.LOGIN ||
+                (
+                    nombre.isNotBlank() &&
+                        telefono.isNotBlank() &&
+                        correo.isNotBlank() &&
+                        aceptaTerminos &&
+                        password.length >= LARGO_MINIMO_PASSWORD
+                    )
+            )
+
+    private companion object {
+        const val LARGO_MINIMO_PASSWORD = 6
+    }
 }
 
 sealed interface AuthAction {
     data class CambiarModo(val modo: ModoAuth) : AuthAction
     data class CambiarNombre(val valor: String) : AuthAction
     data class CambiarRut(val valor: String) : AuthAction
+    data class CambiarTelefono(val valor: String) : AuthAction
+    data class CambiarCorreo(val valor: String) : AuthAction
     data class CambiarPassword(val valor: String) : AuthAction
+    data class CambiarAceptaTerminos(val valor: Boolean) : AuthAction
     data class SeleccionarRol(val rol: RolUsuario) : AuthAction
     data class CambiarRecordarCuenta(val valor: Boolean) : AuthAction
     data object Enviar : AuthAction
@@ -51,6 +73,7 @@ private fun AuthError.aMensaje(): String = when (this) {
     AuthError.CREDENCIALES_INVALIDAS -> "RUT o contraseña incorrectos."
     AuthError.USUARIO_NO_ENCONTRADO -> "No encontramos una cuenta con ese RUT."
     AuthError.RUT_YA_REGISTRADO -> "Ya existe una cuenta con ese RUT."
+    AuthError.PASSWORD_DEBIL -> "La contraseña debe tener al menos 6 caracteres."
     AuthError.SIN_INTERNET -> "Sin conexión a internet. Intenta de nuevo."
     AuthError.DESCONOCIDO -> "Algo salió mal. Intenta de nuevo."
 }
@@ -82,7 +105,10 @@ class AuthViewModel @Inject constructor(
             is AuthAction.CambiarModo -> _state.value = _state.value.copy(modo = action.modo, mensajeError = null)
             is AuthAction.CambiarNombre -> _state.value = _state.value.copy(nombre = action.valor)
             is AuthAction.CambiarRut -> _state.value = _state.value.copy(rut = action.valor)
+            is AuthAction.CambiarTelefono -> _state.value = _state.value.copy(telefono = action.valor)
+            is AuthAction.CambiarCorreo -> _state.value = _state.value.copy(correo = action.valor)
             is AuthAction.CambiarPassword -> _state.value = _state.value.copy(password = action.valor)
+            is AuthAction.CambiarAceptaTerminos -> _state.value = _state.value.copy(aceptaTerminos = action.valor)
             is AuthAction.SeleccionarRol -> _state.value = _state.value.copy(rolSeleccionado = action.rol)
             is AuthAction.CambiarRecordarCuenta -> _state.value = _state.value.copy(recordarCuenta = action.valor)
             AuthAction.Enviar -> enviar()
@@ -100,7 +126,14 @@ class AuthViewModel @Inject constructor(
             val resultado = if (actual.modo == ModoAuth.LOGIN) {
                 authRepository.iniciarSesion(actual.rut, actual.password)
             } else {
-                authRepository.registrar(actual.nombre, actual.rut, actual.password, actual.rolSeleccionado)
+                authRepository.registrar(
+                    actual.nombre,
+                    actual.rut,
+                    actual.password,
+                    actual.rolSeleccionado,
+                    actual.telefono,
+                    actual.correo,
+                )
             }
 
             when (resultado) {

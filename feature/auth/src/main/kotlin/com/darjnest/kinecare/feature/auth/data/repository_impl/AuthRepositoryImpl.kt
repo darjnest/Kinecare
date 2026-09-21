@@ -13,6 +13,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
+import com.google.firebase.auth.FirebaseAuthWeakPasswordException
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.channels.awaitClose
@@ -51,6 +52,8 @@ class AuthRepositoryImpl @Inject constructor(
         rut: String,
         password: String,
         rol: RolUsuario,
+        telefono: String,
+        correoContacto: String,
     ): Result<Usuario, AuthError> {
         return try {
             val rutNormalizado = RutUtils.normalizar(rut)
@@ -61,7 +64,8 @@ class AuthRepositoryImpl @Inject constructor(
                 "nombre" to nombre,
                 "rut" to rutNormalizado,
                 "email" to RutUtils.emailFirebase(rutNormalizado),
-                "telefono" to null,
+                "correoContacto" to correoContacto,
+                "telefono" to telefono,
                 "rol" to rol.name,
                 "fotoUrl" to null,
                 "fechaRegistro" to FieldValue.serverTimestamp(),
@@ -71,6 +75,8 @@ class AuthRepositoryImpl @Inject constructor(
             obtenerUsuario(uid)
         } catch (e: FirebaseAuthUserCollisionException) {
             Result.Error(AuthError.RUT_YA_REGISTRADO)
+        } catch (e: FirebaseAuthWeakPasswordException) {
+            Result.Error(AuthError.PASSWORD_DEBIL)
         } catch (e: FirebaseNetworkException) {
             Result.Error(AuthError.SIN_INTERNET)
         } catch (e: Exception) {
@@ -114,6 +120,7 @@ class AuthRepositoryImpl @Inject constructor(
             nombre = getString("nombre") ?: "",
             rut = getString("rut") ?: "",
             email = getString("email") ?: "",
+            correoContacto = getString("correoContacto"),
             telefono = getString("telefono"),
             rol = runCatching { RolUsuario.valueOf(getString("rol") ?: "") }.getOrDefault(RolUsuario.CLIENTE),
             fotoUrl = getString("fotoUrl"),
