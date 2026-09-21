@@ -11,11 +11,19 @@ ocurre en la capa `data` de cada feature.
 Identidad base compartida por ambos roles.
 - `id: String` (uid de Firebase Auth)
 - `nombre: String`
-- `email: String`
+- `rut: String` (normalizado, sin puntos ni guion; identificador de login)
+- `email: String` (correo interno derivado del RUT para Firebase Auth —
+  ver `RutUtils.emailFirebase` en `:core:common` — nunca se muestra al
+  usuario ni se usa fuera del SDK de Auth)
 - `telefono: String?`
 - `rol: RolUsuario` (`CLIENTE` | `PROFESIONAL`)
 - `fotoUrl: String?`
 - `fechaRegistro: Instant`
+
+El login usa **solo RUT + contraseña** (sin email real): Firebase Auth
+exige un correo, así que se deriva uno sintético y estable a partir del
+RUT normalizado. `RutUtils` (en `:core:common`) valida el dígito
+verificador (módulo 11) antes de intentar autenticar.
 
 ### Cliente
 Extiende `Usuario`. Datos propios del rol cliente.

@@ -13,15 +13,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Badge
-import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Visibility
@@ -64,12 +63,10 @@ import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.designsystem.components.button.KineCarePrimaryButton
 import com.darjnest.kinecare.core.designsystem.components.card.KineCareCard
 import com.darjnest.kinecare.core.designsystem.theme.KineCareTheme
-import com.darjnest.kinecare.core.designsystem.theme.LoginAzulSuave
 import com.darjnest.kinecare.core.designsystem.theme.LoginFondo
 import com.darjnest.kinecare.core.designsystem.theme.LoginGrisClaro
 import com.darjnest.kinecare.core.designsystem.theme.LoginGrisTexto
 import com.darjnest.kinecare.core.designsystem.theme.LoginMenta
-import com.darjnest.kinecare.core.designsystem.theme.LoginMentaSuave
 import com.darjnest.kinecare.core.designsystem.theme.LoginPrimario
 import com.darjnest.kinecare.core.designsystem.theme.LoginPrimarioOscuro
 import com.darjnest.kinecare.core.designsystem.theme.LoginSecundario
@@ -98,6 +95,7 @@ fun AuthScreen(
         modifier = modifier
             .fillMaxSize()
             .background(LoginFondo)
+            .statusBarsPadding()
             .verticalScroll(rememberScrollState()),
     ) {
         if (usuario != null) {
@@ -132,6 +130,33 @@ private fun FormularioAuthContenido(
     state: AuthState,
     onAction: (AuthAction) -> Unit,
 ) {
+    EncabezadoAuth()
+
+    Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+        Spacer(modifier = Modifier.height(20.dp))
+        SelectorRolPildora(seleccionado = state.rolSeleccionado, onAction = onAction)
+
+        CamposFormulario(state = state, onAction = onAction)
+
+        Spacer(modifier = Modifier.height(20.dp))
+        BotonEnviar(state = state, onAction = onAction)
+
+        Spacer(modifier = Modifier.height(20.dp))
+        DivisorOIngresaCon()
+
+        Spacer(modifier = Modifier.height(20.dp))
+        BotonGoogle()
+
+        Spacer(modifier = Modifier.height(24.dp))
+        FooterRegistro(state = state, onAction = onAction)
+
+        Spacer(modifier = Modifier.height(20.dp))
+        FooterSeguridad()
+    }
+}
+
+@Composable
+private fun EncabezadoAuth() {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -157,247 +182,233 @@ private fun FormularioAuthContenido(
         )
         Spacer(modifier = Modifier.height(20.dp))
     }
+}
 
-    Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+@Composable
+private fun CamposFormulario(
+    state: AuthState,
+    onAction: (AuthAction) -> Unit,
+) {
+    if (state.modo == ModoAuth.REGISTRO) {
         Spacer(modifier = Modifier.height(20.dp))
-
-        SelectorRolPildora(seleccionado = state.rolSeleccionado, onAction = onAction)
-
-        if (state.modo == ModoAuth.REGISTRO) {
-            Spacer(modifier = Modifier.height(20.dp))
-            EtiquetaCampo(texto = "Nombre")
-            OutlinedTextField(
-                value = state.nombre,
-                onValueChange = { onAction(AuthAction.CambiarNombre(it)) },
-                placeholder = { Text("Tu nombre completo") },
-                singleLine = true,
-                shape = RoundedCornerShape(16.dp),
-                colors = coloresCampo(),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-            )
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            EtiquetaCampo(texto = "RUT o Correo Electrónico")
-            Text(text = "Chile", style = MaterialTheme.typography.bodyMedium, color = LoginGrisTexto)
-        }
+        EtiquetaCampo(texto = "Nombre")
         OutlinedTextField(
-            value = state.email,
-            onValueChange = { onAction(AuthAction.CambiarEmail(it)) },
-            placeholder = { Text("ej. 12.345.678-k o juan@email.com") },
+            value = state.nombre,
+            onValueChange = { onAction(AuthAction.CambiarNombre(it)) },
+            placeholder = { Text("Tu nombre completo") },
             singleLine = true,
-            leadingIcon = { Icon(Icons.Filled.Badge, contentDescription = null, tint = LoginGrisTexto) },
             shape = RoundedCornerShape(16.dp),
             colors = coloresCampo(),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 8.dp),
         )
+    }
 
-        Spacer(modifier = Modifier.height(20.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            EtiquetaCampo(texto = "Contraseña")
-            Text(
-                text = "¿Olvidaste tu contraseña?",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
-                color = LoginPrimario,
-                modifier = Modifier.clickable {},
-            )
+    Spacer(modifier = Modifier.height(20.dp))
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        EtiquetaCampo(texto = "RUT")
+        Text(text = "Chile", style = MaterialTheme.typography.bodyMedium, color = LoginGrisTexto)
+    }
+    OutlinedTextField(
+        value = state.rut,
+        onValueChange = { onAction(AuthAction.CambiarRut(it)) },
+        placeholder = { Text("ej. 12.345.678-9") },
+        singleLine = true,
+        isError = state.rutInvalido,
+        leadingIcon = { Icon(Icons.Filled.Badge, contentDescription = null, tint = LoginGrisTexto) },
+        shape = RoundedCornerShape(16.dp),
+        colors = coloresCampo(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp),
+    )
+    if (state.rutInvalido) {
+        Text(
+            text = "RUT inválido",
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+    }
+
+    Spacer(modifier = Modifier.height(20.dp))
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        EtiquetaCampo(texto = "Contraseña")
+        Text(
+            text = "¿Olvidaste tu contraseña?",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            color = LoginPrimario,
+            modifier = Modifier.clickable {},
+        )
+    }
+    var passwordVisible by remember { mutableStateOf(false) }
+    OutlinedTextField(
+        value = state.password,
+        onValueChange = { onAction(AuthAction.CambiarPassword(it)) },
+        placeholder = { Text("••••••••••") },
+        singleLine = true,
+        leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null, tint = LoginGrisTexto) },
+        trailingIcon = {
+            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                Icon(
+                    imageVector = if (passwordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                    contentDescription = if (passwordVisible) "Ocultar contraseña" else "Mostrar contraseña",
+                    tint = LoginGrisTexto,
+                )
+            }
+        },
+        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+        shape = RoundedCornerShape(16.dp),
+        colors = coloresCampo(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp),
+    )
+
+    if (state.mensajeError != null) {
+        Text(
+            text = state.mensajeError,
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Switch(
+            checked = state.recordarCuenta,
+            onCheckedChange = { onAction(AuthAction.CambiarRecordarCuenta(it)) },
+            colors = SwitchDefaults.colors(checkedTrackColor = LoginPrimarioOscuro),
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = "Recordar mi cuenta en este dispositivo",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+}
+
+@Composable
+private fun BotonEnviar(
+    state: AuthState,
+    onAction: (AuthAction) -> Unit,
+) {
+    if (state.cargando) {
+        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
         }
-        var passwordVisible by remember { mutableStateOf(false) }
-        OutlinedTextField(
-            value = state.password,
-            onValueChange = { onAction(AuthAction.CambiarPassword(it)) },
-            placeholder = { Text("••••••••••") },
-            singleLine = true,
-            leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null, tint = LoginGrisTexto) },
-            trailingIcon = {
-                IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                    Icon(
-                        imageVector = if (passwordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                        contentDescription = if (passwordVisible) "Ocultar contraseña" else "Mostrar contraseña",
-                        tint = LoginGrisTexto,
-                    )
+    } else {
+        Button(
+            onClick = { onAction(AuthAction.Enviar) },
+            enabled = state.puedeEnviar,
+            shape = RoundedCornerShape(28.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = LoginPrimarioOscuro, contentColor = Color.White),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+        ) {
+            Text(
+                text = (if (state.modo == ModoAuth.LOGIN) "Iniciar sesión" else "Crear cuenta").uppercase(),
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
+        }
+    }
+}
+
+@Composable
+private fun DivisorOIngresaCon() {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        HorizontalDivider(modifier = Modifier.weight(1f))
+        Text(
+            text = "O INGRESA CON",
+            style = MaterialTheme.typography.labelSmall,
+            color = LoginGrisTexto,
+            modifier = Modifier.padding(horizontal = 12.dp),
+        )
+        HorizontalDivider(modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun BotonGoogle() {
+    Button(
+        onClick = {},
+        shape = RoundedCornerShape(28.dp),
+        border = BorderStroke(1.dp, LoginGrisClaro),
+        colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color(0xFF1A1C1B)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp),
+    ) {
+        Text(text = "G", color = Color(0xFF4285F4), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(text = "Continuar con Google", fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun FooterRegistro(
+    state: AuthState,
+    onAction: (AuthAction) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        val textoPregunta = if (state.modo == ModoAuth.LOGIN) "¿Aún no tienes cuenta? " else "¿Ya tienes cuenta? "
+        val textoAccion = if (state.modo == ModoAuth.LOGIN) "Regístrate aquí" else "Inicia sesión"
+        Text(
+            text = buildAnnotatedString {
+                append(textoPregunta)
+                withStyle(SpanStyle(color = LoginPrimario, fontWeight = FontWeight.Bold)) {
+                    append(textoAccion)
                 }
             },
-            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-            shape = RoundedCornerShape(16.dp),
-            colors = coloresCampo(),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp),
+            modifier = Modifier.clickable {
+                val nuevoModo = if (state.modo == ModoAuth.LOGIN) ModoAuth.REGISTRO else ModoAuth.LOGIN
+                onAction(AuthAction.CambiarModo(nuevoModo))
+            },
         )
+    }
+}
 
-        if (state.mensajeError != null) {
-            Text(
-                text = state.mensajeError,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        }
-
-        var recordarCuenta by remember { mutableStateOf(true) }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Switch(
-                checked = recordarCuenta,
-                onCheckedChange = { recordarCuenta = it },
-                colors = SwitchDefaults.colors(checkedTrackColor = LoginPrimarioOscuro),
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Text(
-                text = "Recordar mi cuenta en este dispositivo",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-        if (state.cargando) {
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        } else {
-            Button(
-                onClick = { onAction(AuthAction.Enviar) },
-                enabled = state.puedeEnviar,
-                shape = RoundedCornerShape(28.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = LoginPrimarioOscuro, contentColor = Color.White),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-            ) {
-                Text(
-                    text = (if (state.modo == ModoAuth.LOGIN) "Iniciar sesión" else "Crear cuenta").uppercase(),
-                    fontWeight = FontWeight.Bold,
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
-            }
-        }
-
-        if (state.modo == ModoAuth.LOGIN) {
-            Spacer(modifier = Modifier.height(12.dp))
-            Button(
-                onClick = {},
-                shape = RoundedCornerShape(28.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = LoginMentaSuave, contentColor = LoginPrimarioOscuro),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-            ) {
-                Icon(Icons.Filled.Fingerprint, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(text = "Ingresar con Biometría / Huella", fontWeight = FontWeight.Medium)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            HorizontalDivider(modifier = Modifier.weight(1f))
-            Text(
-                text = "O INGRESA CON",
-                style = MaterialTheme.typography.labelSmall,
-                color = LoginGrisTexto,
-                modifier = Modifier.padding(horizontal = 12.dp),
-            )
-            HorizontalDivider(modifier = Modifier.weight(1f))
-        }
-        Spacer(modifier = Modifier.height(20.dp))
-
-        Button(
-            onClick = {},
-            shape = RoundedCornerShape(28.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = LoginAzulSuave, contentColor = LoginSecundario),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .clip(CircleShape)
-                    .background(LoginSecundario),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(text = "CU", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(text = "Continuar con ClaveÚnica", fontWeight = FontWeight.Medium)
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-        Button(
-            onClick = {},
-            shape = RoundedCornerShape(28.dp),
-            border = BorderStroke(1.dp, LoginGrisClaro),
-            colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color(0xFF1A1C1B)),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-        ) {
-            Text(text = "G", color = Color(0xFF4285F4), fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(text = "Continuar con Google", fontWeight = FontWeight.Medium)
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-        ) {
-            val textoPregunta = if (state.modo == ModoAuth.LOGIN) "¿Aún no tienes cuenta? " else "¿Ya tienes cuenta? "
-            val textoAccion = if (state.modo == ModoAuth.LOGIN) "Regístrate aquí" else "Inicia sesión"
-            Text(
-                text = buildAnnotatedString {
-                    append(textoPregunta)
-                    withStyle(SpanStyle(color = LoginPrimario, fontWeight = FontWeight.Bold)) {
-                        append(textoAccion)
-                    }
-                },
-                modifier = Modifier.clickable {
-                    val nuevoModo = if (state.modo == ModoAuth.LOGIN) ModoAuth.REGISTRO else ModoAuth.LOGIN
-                    onAction(AuthAction.CambiarModo(nuevoModo))
-                },
-            )
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 20.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                Icons.Filled.Lock,
-                contentDescription = null,
-                tint = LoginGrisTexto,
-                modifier = Modifier.size(14.dp),
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = "Conexión cifrada de grado médico TLS 256 bits",
-                style = MaterialTheme.typography.labelSmall,
-                color = LoginGrisTexto,
-            )
-        }
+@Composable
+private fun FooterSeguridad() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 20.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Filled.Lock,
+            contentDescription = null,
+            tint = LoginGrisTexto,
+            modifier = Modifier.size(14.dp),
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = "Conexión cifrada de grado médico TLS 256 bits",
+            style = MaterialTheme.typography.labelSmall,
+            color = LoginGrisTexto,
+        )
     }
 }
 
