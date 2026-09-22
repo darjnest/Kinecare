@@ -72,7 +72,11 @@ class AuthRepositoryImpl @Inject constructor(
             )
             firestore.collection(COLECCION_USUARIOS).document(uid).set(datosUsuario).await()
 
-            obtenerUsuario(uid)
+            val usuarioCreado = obtenerUsuario(uid)
+            // createUserWithEmailAndPassword deja la sesión iniciada automáticamente;
+            // se cierra para que el usuario inicie sesión explícitamente después de registrarse.
+            firebaseAuth.signOut()
+            usuarioCreado
         } catch (e: FirebaseAuthUserCollisionException) {
             Result.Error(AuthError.RUT_YA_REGISTRADO)
         } catch (e: FirebaseAuthWeakPasswordException) {
