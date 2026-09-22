@@ -8,12 +8,14 @@ import com.darjnest.kinecare.core.common.domain.util.RutUtils
 import com.darjnest.kinecare.core.common.result.Result
 import com.darjnest.kinecare.feature.auth.data.repository.AuthRepository
 import com.darjnest.kinecare.feature.auth.domain.AuthError
+import com.darjnest.kinecare.feature.auth.domain.ResultadoGoogle
 import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.FirebaseAuthWeakPasswordException
+import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.channels.awaitClose
@@ -81,6 +83,70 @@ class AuthRepositoryImpl @Inject constructor(
             Result.Error(AuthError.RUT_YA_REGISTRADO)
         } catch (e: FirebaseAuthWeakPasswordException) {
             Result.Error(AuthError.PASSWORD_DEBIL)
+        } catch (e: FirebaseNetworkException) {
+            Result.Error(AuthError.SIN_INTERNET)
+        } catch (e: Exception) {
+            Result.Error(AuthError.DESCONOCIDO)
+        }
+    }
+
+    override suspend fun iniciarSesionConGoogle(idToken: String): Result<ResultadoGoogle, AuthError> {
+        return try {
+            val credencial = GoogleAuthProvider.getCredential(idToken, null)
+            val resultado = firebaseAuth.signInWithCredential(credencial).await()
+            val user = resultado.user ?: return Result.Error(AuthError.DESCONOCIDO)
+
+            val doc = firestore.collection(COLECCION_USUARIOS).document(user.uid).get().await()
+            val usuarioExistente = doc.aUsuarioONull(user.uid)
+            if (usuarioExistente != null) {
+                Result.Success(ResultadoGoogle.SesionIniciada(usuarioExistente))
+            } else {
+                Result.Success(
+                    ResultadoGoogle.RequiereCompletarPerfil(
+                        uid = user.uid,
+                        nombreSugerido = user.displayName.orEmpty(),
+                        correoGoogle = user.email.orEmpty(),
+                        fotoUrl = user.photoUrl?.toString(),
+                    ),
+                )
+            }
+        } catch (e: FirebaseNetworkException) {
+            Result.Error(AuthError.SIN_INTERNET)
+        } catch (e: Exception) {
+            Result.Error(AuthError.DESCONOCIDO)
+        }
+    }
+
+    override suspend fun completarRegistroGoogle(
+        uid: String,
+        nombre: String,
+        rut: String,
+        telefono: String,
+        correoContacto: String,
+        rol: RolUsuario,
+        fotoUrl: String?,
+    ): Result<Usuario, AuthError> {
+        return try {
+            val rutNormalizado = RutUtils.normalizar(rut)
+            val rutEnUso = firestore.collection(COLECCION_USUARIOS)
+                .whereEqualTo("rut", rutNormalizado)
+                .limit(1)
+                .get()
+                .await()
+            if (!rutEnUso.isEmpty) return Result.Error(AuthError.RUT_YA_REGISTRADO)
+
+            val datosUsuario = mapOf(
+                "nombre" to nombre,
+                "rut" to rutNormalizado,
+                "email" to (firebaseAuth.currentUser?.email ?: ""),
+                "correoContacto" to correoContacto,
+                "telefono" to telefono,
+                "rol" to rol.name,
+                "fotoUrl" to fotoUrl,
+                "fechaRegistro" to FieldValue.serverTimestamp(),
+            )
+            firestore.collection(COLECCION_USUARIOS).document(uid).set(datosUsuario).await()
+            obtenerUsuario(uid)
         } catch (e: FirebaseNetworkException) {
             Result.Error(AuthError.SIN_INTERNET)
         } catch (e: Exception) {

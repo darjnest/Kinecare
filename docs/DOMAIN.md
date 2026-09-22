@@ -12,9 +12,11 @@ Identidad base compartida por ambos roles.
 - `id: String` (uid de Firebase Auth)
 - `nombre: String`
 - `rut: String` (normalizado, sin puntos ni guion; identificador de login)
-- `email: String` (correo interno derivado del RUT para Firebase Auth —
-  ver `RutUtils.emailFirebase` en `:core:common` — nunca se muestra al
-  usuario ni se usa fuera del SDK de Auth)
+- `email: String` (el correo de Firebase Auth: para login por RUT es un
+  correo interno sintético derivado del RUT — ver `RutUtils.emailFirebase`
+  en `:core:common`, nunca se muestra al usuario ni se usa fuera del SDK de
+  Auth —; para cuentas creadas con Google Sign-In es el correo real de la
+  cuenta de Google)
 - `correoContacto: String?` (correo real ingresado por el usuario al
   registrarse, solo para contacto/notificaciones — no se usa para Auth)
 - `telefono: String?`
@@ -22,10 +24,16 @@ Identidad base compartida por ambos roles.
 - `fotoUrl: String?`
 - `fechaRegistro: Instant`
 
-El login usa **solo RUT + contraseña** (sin email real): Firebase Auth
-exige un correo, así que se deriva uno sintético y estable a partir del
-RUT normalizado. `RutUtils` (en `:core:common`) valida el dígito
-verificador (módulo 11) antes de intentar autenticar.
+El login usa **RUT + contraseña** (Firebase Auth exige un correo, así que
+se deriva uno sintético y estable a partir del RUT normalizado —
+`RutUtils`, en `:core:common`, valida el dígito verificador módulo 11 antes
+de intentar autenticar) **o Google Sign-In**. El RUT sigue siendo
+obligatorio y único como identificador de negocio (verificación,
+facturación) aunque la cuenta se haya creado con Google: si
+`GoogleAuthProvider` autentica un `uid` que todavía no tiene documento en
+`usuarios/{uid}`, la UI pide RUT, teléfono y rol antes de crearlo
+(`AuthRepository.completarRegistroGoogle`), validando que el RUT no esté
+ya en uso por otra cuenta.
 
 ### Cliente
 Extiende `Usuario`. Datos propios del rol cliente.

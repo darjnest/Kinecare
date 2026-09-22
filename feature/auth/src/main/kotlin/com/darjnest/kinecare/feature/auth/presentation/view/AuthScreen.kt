@@ -54,9 +54,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -72,6 +74,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.darjnest.kinecare.core.common.domain.model.RolUsuario
@@ -86,10 +89,13 @@ import com.darjnest.kinecare.core.designsystem.theme.LoginMentaSuave
 import com.darjnest.kinecare.core.designsystem.theme.LoginPrimario
 import com.darjnest.kinecare.core.designsystem.theme.LoginPrimarioOscuro
 import com.darjnest.kinecare.core.designsystem.theme.LoginSecundario
+import com.darjnest.kinecare.feature.auth.data.google.GoogleAuthManager
 import com.darjnest.kinecare.feature.auth.presentation.viewmodel.AuthAction
 import com.darjnest.kinecare.feature.auth.presentation.viewmodel.AuthState
 import com.darjnest.kinecare.feature.auth.presentation.viewmodel.AuthViewModel
 import com.darjnest.kinecare.feature.auth.presentation.viewmodel.ModoAuth
+import com.darjnest.kinecare.feature.auth.presentation.viewmodel.PerfilGooglePendiente
+import kotlinx.coroutines.launch
 
 @Composable
 fun AuthRoot(
@@ -118,6 +124,8 @@ fun AuthScreen(
             Column(modifier = Modifier.padding(24.dp)) {
                 SesionIniciadaContenido(nombre = usuario.nombre, rol = usuario.rol, onCerrarSesion = { onAction(AuthAction.CerrarSesion) })
             }
+        } else if (state.perfilGooglePendiente != null) {
+            FormularioCompletarPerfilGoogle(state = state, onAction = onAction)
         } else {
             FormularioAuthContenido(state = state, onAction = onAction)
         }
@@ -146,6 +154,10 @@ private fun FormularioAuthContenido(
     state: AuthState,
     onAction: (AuthAction) -> Unit,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val googleAuthManager = remember { GoogleAuthManager() }
+
     EncabezadoAuth(modo = state.modo, onAction = onAction)
 
     Column(modifier = Modifier.padding(horizontal = 20.dp)) {
@@ -161,7 +173,23 @@ private fun FormularioAuthContenido(
         DivisorOIngresaCon(modo = state.modo)
 
         Spacer(modifier = Modifier.height(20.dp))
-        BotonGoogle(modo = state.modo)
+        BotonGoogle(
+            modo = state.modo,
+            habilitado = !state.cargando,
+            onClick = {
+                onAction(AuthAction.IniciandoGoogle)
+                scope.launch {
+                    try {
+                        val idToken = googleAuthManager.obtenerIdToken(context)
+                        onAction(AuthAction.IniciarSesionConGoogle(idToken))
+                    } catch (e: GetCredentialCancellationException) {
+                        onAction(AuthAction.ErrorGenerico(null))
+                    } catch (e: Exception) {
+                        onAction(AuthAction.ErrorGenerico("No pudimos continuar con Google. Intenta de nuevo."))
+                    }
+                }
+            },
+        )
 
         if (state.modo == ModoAuth.REGISTRO) {
             Spacer(modifier = Modifier.height(20.dp))
@@ -180,9 +208,126 @@ private fun FormularioAuthContenido(
 }
 
 @Composable
+private fun FormularioCompletarPerfilGoogle(
+    state: AuthState,
+    onAction: (AuthAction) -> Unit,
+) {
+    val correoGoogle = state.perfilGooglePendiente?.correoGoogle.orEmpty()
+
+    EncabezadoRegistro(
+        titulo = "Completa tu perfil",
+        subtitulo = "Ya validamos tu cuenta de Google ($correoGoogle). Solo nos faltan estos datos.",
+        onVolver = { onAction(AuthAction.CancelarPerfilGoogle) },
+    )
+
+    Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+        Spacer(modifier = Modifier.height(20.dp))
+        SelectorRolTarjetas(seleccionado = state.rolSeleccionado, onAction = onAction)
+
+        Spacer(modifier = Modifier.height(20.dp))
+        EtiquetaCampo(texto = "Nombre y Apellido")
+        OutlinedTextField(
+            value = state.nombre,
+            onValueChange = { onAction(AuthAction.CambiarNombre(it)) },
+            placeholder = { Text("Ej. Francisca Silva Méndez") },
+            singleLine = true,
+            leadingIcon = { Icon(Icons.Filled.Person, contentDescription = null, tint = LoginGrisTexto) },
+            shape = RoundedCornerShape(16.dp),
+            colors = coloresCampo(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+        EtiquetaCampo(texto = "RUT Chileno")
+        OutlinedTextField(
+            value = state.rut,
+            onValueChange = { onAction(AuthAction.CambiarRut(it)) },
+            placeholder = { Text("12.345.678-K") },
+            singleLine = true,
+            isError = state.rutInvalido,
+            leadingIcon = { Icon(Icons.Filled.Badge, contentDescription = null, tint = LoginGrisTexto) },
+            shape = RoundedCornerShape(16.dp),
+            colors = coloresCampo(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+        )
+        if (state.rutInvalido) {
+            Text(
+                text = "RUT inválido",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+        EtiquetaCampo(texto = "Teléfono / WhatsApp")
+        OutlinedTextField(
+            value = state.telefono,
+            onValueChange = { onAction(AuthAction.CambiarTelefono(it)) },
+            placeholder = { Text("8765 4321") },
+            singleLine = true,
+            leadingIcon = { PrefijoTelefono() },
+            shape = RoundedCornerShape(16.dp),
+            colors = coloresCampo(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+        )
+
+        if (state.mensajeError != null) {
+            Text(
+                text = state.mensajeError,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        FilaTerminos(
+            aceptado = state.aceptaTerminos,
+            onCambiar = { onAction(AuthAction.CambiarAceptaTerminos(it)) },
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+        BannerLey20584()
+
+        Spacer(modifier = Modifier.height(20.dp))
+        if (state.cargando) {
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        } else {
+            Button(
+                onClick = { onAction(AuthAction.ConfirmarPerfilGoogle) },
+                enabled = state.puedeConfirmarPerfilGoogle,
+                shape = RoundedCornerShape(28.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = LoginPrimarioOscuro, contentColor = Color.White),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+            ) {
+                Text(text = "CREAR MI CUENTA", fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.width(8.dp))
+                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
+            }
+        }
+        Spacer(modifier = Modifier.height(20.dp))
+    }
+}
+
+@Composable
 private fun EncabezadoAuth(modo: ModoAuth, onAction: (AuthAction) -> Unit) {
     if (modo == ModoAuth.REGISTRO) {
-        EncabezadoRegistro(onAction = onAction)
+        EncabezadoRegistro(
+            titulo = "Crea tu cuenta",
+            subtitulo = "Tu salud y bienestar en manos de kinesiólogos certificados",
+            onVolver = { onAction(AuthAction.CambiarModo(ModoAuth.LOGIN)) },
+        )
         return
     }
 
@@ -214,7 +359,7 @@ private fun EncabezadoAuth(modo: ModoAuth, onAction: (AuthAction) -> Unit) {
 }
 
 @Composable
-private fun EncabezadoRegistro(onAction: (AuthAction) -> Unit) {
+private fun EncabezadoRegistro(titulo: String, subtitulo: String, onVolver: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -228,7 +373,7 @@ private fun EncabezadoRegistro(onAction: (AuthAction) -> Unit) {
                 .padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = { onAction(AuthAction.CambiarModo(ModoAuth.LOGIN)) }) {
+            IconButton(onClick = onVolver) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = Color(0xFF1A1C1B))
             }
             Spacer(modifier = Modifier.weight(1f))
@@ -277,14 +422,14 @@ private fun EncabezadoRegistro(onAction: (AuthAction) -> Unit) {
 
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "Crea tu cuenta",
+            text = titulo,
             fontSize = 26.sp,
             fontWeight = FontWeight.Bold,
             color = Color(0xFF16241C),
             textAlign = TextAlign.Center,
         )
         Text(
-            text = "Tu salud y bienestar en manos de kinesiólogos certificados",
+            text = subtitulo,
             style = MaterialTheme.typography.bodyMedium,
             color = LoginGrisTexto,
             textAlign = TextAlign.Center,
@@ -677,9 +822,10 @@ private fun DivisorOIngresaCon(modo: ModoAuth) {
 }
 
 @Composable
-private fun BotonGoogle(modo: ModoAuth) {
+private fun BotonGoogle(modo: ModoAuth, habilitado: Boolean, onClick: () -> Unit) {
     Button(
-        onClick = {},
+        onClick = onClick,
+        enabled = habilitado,
         shape = RoundedCornerShape(28.dp),
         border = BorderStroke(1.dp, LoginGrisClaro),
         colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color(0xFF1A1C1B)),
@@ -980,5 +1126,24 @@ private fun AuthScreenLoginPreview() {
 private fun AuthScreenRegistroPreview() {
     KineCareTheme {
         AuthScreen(state = AuthState(modo = ModoAuth.REGISTRO), onAction = {})
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun AuthScreenCompletarPerfilGooglePreview() {
+    KineCareTheme {
+        AuthScreen(
+            state = AuthState(
+                modo = ModoAuth.REGISTRO,
+                nombre = "Francisca Silva",
+                perfilGooglePendiente = PerfilGooglePendiente(
+                    uid = "uid-preview",
+                    correoGoogle = "francisca.silva@gmail.com",
+                    fotoUrl = null,
+                ),
+            ),
+            onAction = {},
+        )
     }
 }

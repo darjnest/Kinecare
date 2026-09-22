@@ -9,6 +9,7 @@ import com.darjnest.kinecare.core.common.result.Result
 import com.darjnest.kinecare.feature.auth.data.local.LoginPreferences
 import com.darjnest.kinecare.feature.auth.data.repository.AuthRepository
 import com.darjnest.kinecare.feature.auth.domain.AuthError
+import com.darjnest.kinecare.feature.auth.domain.ResultadoGoogle
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,6 +18,13 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 enum class ModoAuth { LOGIN, REGISTRO }
+
+/** Datos de Google pendientes de RUT/teléfono/rol antes de crear `usuarios/{uid}`. */
+data class PerfilGooglePendiente(
+    val uid: String,
+    val correoGoogle: String,
+    val fotoUrl: String?,
+)
 
 data class AuthState(
     val modo: ModoAuth = ModoAuth.LOGIN,
@@ -31,6 +39,7 @@ data class AuthState(
     val cargando: Boolean = false,
     val mensajeError: String? = null,
     val usuarioAutenticado: Usuario? = null,
+    val perfilGooglePendiente: PerfilGooglePendiente? = null,
 ) {
     val rutInvalido: Boolean
         get() = rut.isNotBlank() && !RutUtils.esValido(rut)
@@ -50,6 +59,9 @@ data class AuthState(
                     )
             )
 
+    val puedeConfirmarPerfilGoogle: Boolean
+        get() = RutUtils.esValido(rut) && nombre.isNotBlank() && telefono.isNotBlank() && aceptaTerminos
+
     private companion object {
         const val LARGO_MINIMO_PASSWORD = 6
     }
@@ -67,6 +79,11 @@ sealed interface AuthAction {
     data class CambiarRecordarCuenta(val valor: Boolean) : AuthAction
     data object Enviar : AuthAction
     data object CerrarSesion : AuthAction
+    data object IniciandoGoogle : AuthAction
+    data class IniciarSesionConGoogle(val idToken: String) : AuthAction
+    data object ConfirmarPerfilGoogle : AuthAction
+    data object CancelarPerfilGoogle : AuthAction
+    data class ErrorGenerico(val mensaje: String?) : AuthAction
 }
 
 private fun AuthError.aMensaje(): String = when (this) {
@@ -113,6 +130,73 @@ class AuthViewModel @Inject constructor(
             is AuthAction.CambiarRecordarCuenta -> _state.value = _state.value.copy(recordarCuenta = action.valor)
             AuthAction.Enviar -> enviar()
             AuthAction.CerrarSesion -> viewModelScope.launch { authRepository.cerrarSesion() }
+            AuthAction.IniciandoGoogle -> _state.value = _state.value.copy(cargando = true, mensajeError = null)
+            is AuthAction.IniciarSesionConGoogle -> iniciarSesionConGoogle(action.idToken)
+            AuthAction.ConfirmarPerfilGoogle -> confirmarPerfilGoogle()
+            AuthAction.CancelarPerfilGoogle -> cancelarPerfilGoogle()
+            is AuthAction.ErrorGenerico -> _state.value = _state.value.copy(cargando = false, mensajeError = action.mensaje)
+        }
+    }
+
+    private fun iniciarSesionConGoogle(idToken: String) {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(cargando = true, mensajeError = null)
+            when (val resultado = authRepository.iniciarSesionConGoogle(idToken)) {
+                is Result.Success -> when (val datos = resultado.data) {
+                    is ResultadoGoogle.SesionIniciada -> {
+                        _state.value = _state.value.copy(cargando = false, usuarioAutenticado = datos.usuario)
+                    }
+                    is ResultadoGoogle.RequiereCompletarPerfil -> {
+                        _state.value = AuthState(
+                            modo = ModoAuth.REGISTRO,
+                            nombre = datos.nombreSugerido,
+                            perfilGooglePendiente = PerfilGooglePendiente(
+                                uid = datos.uid,
+                                correoGoogle = datos.correoGoogle,
+                                fotoUrl = datos.fotoUrl,
+                            ),
+                        )
+                    }
+                }
+                is Result.Error -> _state.value = _state.value.copy(cargando = false, mensajeError = resultado.error.aMensaje())
+            }
+        }
+    }
+
+    private fun confirmarPerfilGoogle() {
+        val actual = _state.value
+        val pendiente = actual.perfilGooglePendiente ?: return
+        if (!actual.puedeConfirmarPerfilGoogle || actual.cargando) return
+
+        viewModelScope.launch {
+            _state.value = actual.copy(cargando = true, mensajeError = null)
+            val resultado = authRepository.completarRegistroGoogle(
+                uid = pendiente.uid,
+                nombre = actual.nombre,
+                rut = actual.rut,
+                telefono = actual.telefono,
+                correoContacto = pendiente.correoGoogle,
+                rol = actual.rolSeleccionado,
+                fotoUrl = pendiente.fotoUrl,
+            )
+            when (resultado) {
+                is Result.Success -> _state.value = _state.value.copy(
+                    cargando = false,
+                    usuarioAutenticado = resultado.data,
+                    perfilGooglePendiente = null,
+                )
+                is Result.Error -> _state.value = _state.value.copy(
+                    cargando = false,
+                    mensajeError = resultado.error.aMensaje(),
+                )
+            }
+        }
+    }
+
+    private fun cancelarPerfilGoogle() {
+        viewModelScope.launch {
+            authRepository.cerrarSesion()
+            _state.value = AuthState()
         }
     }
 

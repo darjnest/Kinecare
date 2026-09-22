@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Web client ID (tipo 3) del proyecto Firebase kinecare-cl, usado por
+         Credential Manager para pedir el ID token de Google. No es secreto:
+         viaja en el APK igual que en app/google-services.json. -->
+    <string name="default_web_client_id" translatable="false">105411472154-99ddrnqbcaq20bm5c5l3fcevrkhg34qo.apps.googleusercontent.com</string>
+</resources>
