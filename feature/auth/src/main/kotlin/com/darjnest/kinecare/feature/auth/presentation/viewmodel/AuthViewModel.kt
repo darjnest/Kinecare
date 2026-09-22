@@ -138,11 +138,21 @@ class AuthViewModel @Inject constructor(
 
             when (resultado) {
                 is Result.Success -> {
-                    loginPreferences.guardar(actual.recordarCuenta, actual.rut)
-                    _state.value = _state.value.copy(
-                        cargando = false,
-                        usuarioAutenticado = resultado.data,
-                    )
+                    if (actual.modo == ModoAuth.LOGIN) {
+                        loginPreferences.guardar(actual.recordarCuenta, actual.rut)
+                        _state.value = _state.value.copy(
+                            cargando = false,
+                            usuarioAutenticado = resultado.data,
+                        )
+                    } else {
+                        // El registro no deja la sesión iniciada: vuelve al login con el RUT
+                        // ya cargado para que el usuario inicie sesión explícitamente.
+                        _state.value = AuthState(
+                            modo = ModoAuth.LOGIN,
+                            rut = actual.rut,
+                            recordarCuenta = actual.recordarCuenta,
+                        )
+                    }
                 }
                 is Result.Error -> _state.value = _state.value.copy(
                     cargando = false,
