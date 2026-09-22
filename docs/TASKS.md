@@ -94,8 +94,15 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       del día, próxima cita, banner de verificación y accesos de gestión
       parten vacíos/nulos en `ProfessionalPanelViewModel` (cada sección se
       oculta con gracia sin datos) — sin conexión a Firestore todavía
-- [ ] `:feature:professional-panel`: servicios, calendario/disponibilidad,
-      reservas, pagos/ingresos, verificaciones, configuración
+- [x] `:feature:professional-panel`: pantallas de servicios y tarifas,
+      disponibilidad/horarios, solicitudes de atención, liquidaciones y
+      finanzas, documentos y validación, y mi perfil profesional — fieles a
+      los mockups de producto; cada una con su propio `State`/`Action`/
+      `ViewModel` (datos parten vacíos/nulos, sin conexión a Firestore
+      todavía) y ruta registrada en `professional_panelGraph()`. Pendiente:
+      conectar cada pantalla a Firestore/Cloud Functions y enlazar la
+      navegación desde los accesos de gestión y la barra inferior del
+      dashboard hacia estas rutas.
 
 ## Fase 8 — QA, pulido y publicación
 - [ ] Cobertura de tests (JUnit5, MockK, Turbine, Compose UI Testing)
