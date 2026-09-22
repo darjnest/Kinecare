@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Work
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
@@ -50,6 +51,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -487,6 +489,7 @@ private fun CamposLogin(
     }
 
     Spacer(modifier = Modifier.height(20.dp))
+    var mostrarDialogoOlvidoPassword by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -498,8 +501,11 @@ private fun CamposLogin(
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Bold,
             color = LoginPrimario,
-            modifier = Modifier.clickable {},
+            modifier = Modifier.clickable { mostrarDialogoOlvidoPassword = true },
         )
+    }
+    if (mostrarDialogoOlvidoPassword) {
+        DialogoOlvidoPassword(onCerrar = { mostrarDialogoOlvidoPassword = false })
     }
     var passwordVisible by remember { mutableStateOf(false) }
     OutlinedTextField(
@@ -551,6 +557,23 @@ private fun CamposLogin(
             style = MaterialTheme.typography.bodyMedium,
         )
     }
+}
+
+@Composable
+private fun DialogoOlvidoPassword(onCerrar: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onCerrar,
+        title = { Text("Recupera tu cuenta") },
+        text = {
+            Text(
+                "Por ahora no podemos restablecer tu contraseña automáticamente. " +
+                    "Contáctanos y te ayudamos a recuperar el acceso a tu cuenta.",
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onCerrar) { Text("Entendido") }
+        },
+    )
 }
 
 @Composable
