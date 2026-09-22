@@ -37,3 +37,16 @@ val LoginMentaSuave = Color(0xFFDCEEE3)
 val LoginAzulSuave = Color(0xFFE2ECF4)
 val LoginGrisTexto = Color(0xFF5B6B63)
 val LoginGrisClaro = Color(0xFFEFF3F0)
+
+// Paleta usada especificamente en la pantalla de inicio/busqueda del rol
+// Cliente para calzar con el mockup de producto (no reemplaza el
+// ColorScheme global). Reutiliza tonos de Login* donde el verde coincide;
+// solo se agregan los pasteles de categoria y el dorado de calificacion,
+// que no tienen equivalente todavia.
+val InicioPastelVerde = Color(0xFFD8ECDC)
+val InicioDorado = Color(0xFFF2A93B)
+
+// Texto principal oscuro (casi negro con matiz verdoso) usado en titulos y
+// valores destacados de las pantallas de Inicio (Cliente) y Panel
+// Profesional, para no hardcodear Color(0xFF...) en cada feature.
+val TextoPrincipal = Color(0xFF16241C)

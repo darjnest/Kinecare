@@ -50,18 +50,22 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       de "completar perfil" (RUT/teléfono/rol) antes de crear `usuarios/{uid}`
 - [ ] Registrar SHA-1/SHA-256 del **keystore de release** en Firebase antes
       de publicar (Fase 5) — hoy solo está el del debug keystore local
-- [ ] `:feature:search`: pantalla inicio con filtros, resultados
+- [x] `:feature:search`: pantalla inicio con filtros, resultados (UI fiel
+      al mockup de producto con datos de ejemplo en el `ViewModel`; sin
+      conexión a Firestore todavía — ver ítem siguiente)
 - [ ] Firestore: colección `profesionales` real con datos (hoy no hay
       ningún profesional cargado, ni pantalla que los liste)
 - [ ] Storage: **bloqueado** — Firebase Storage ya no se puede inicializar
       en proyectos nuevos con plan Spark (Google lo restringió a Blaze).
       Hay que subir a Blaze antes de la Fase 6 (fotos de perfil,
       credenciales de verificación)
-- [ ] Decisión pendiente: cómo el `NavHost` de `:app` pasa de `AuthRoute`
-      a las pantallas de cliente/profesional una vez hay sesión iniciada
-      (hoy `AuthScreen` solo muestra una confirmación de sesión, no
-      navega a ningún lado — ver comentario en
-      `app/.../navigation/KineCareNavHost.kt`)
+- [x] Cliente: al iniciar sesión o registrarse (rol `CLIENTE`), el `NavHost`
+      de `:app` navega automáticamente a `SearchRoute` y saca `AuthRoute`
+      del back stack (`KineCareNavHost.kt`, callback
+      `onSesionIniciada` expuesto por `authGraph`)
+- [x] Profesional: al iniciar sesión o registrarse (rol `PROFESIONAL`), el
+      mismo `NavHost` navega automáticamente a `ProfessionalPanelRoute` y
+      saca `AuthRoute` del back stack (`KineCareNavHost.kt`)
 
 ## Fase 3 — Perfil profesional + reseñas
 - [ ] `:feature:professional-profile`: perfil con insignias expandibles
@@ -85,9 +89,12 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
 - [ ] Cloud Functions `solicitarVerificacion`, `estadoVerificacion`
 
 ## Fase 7 — Panel profesional
-- [ ] `:feature:professional-panel`: dashboard, servicios, calendario/
-      disponibilidad, reservas, pagos/ingresos, verificaciones,
-      configuración
+- [x] `:feature:professional-panel`: dashboard/home fiel al mockup, con
+      datos de ejemplo precargados en `ProfessionalPanelViewModel` (sin
+      Firestore conectado todavía: resumen del día, próxima cita, banner de
+      verificación y accesos de gestión)
+- [ ] `:feature:professional-panel`: servicios, calendario/disponibilidad,
+      reservas, pagos/ingresos, verificaciones, configuración
 
 ## Fase 8 — QA, pulido y publicación
 - [ ] Cobertura de tests (JUnit5, MockK, Turbine, Compose UI Testing)

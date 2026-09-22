@@ -108,7 +108,12 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             val recordarCuenta = loginPreferences.recordarCuenta()
             val rutRecordado = if (recordarCuenta) loginPreferences.rutRecordado() else ""
-            _state.value = _state.value.copy(recordarCuenta = recordarCuenta, rut = rutRecordado)
+            // La carga es asincrónica (DataStore): si el usuario ya empezó a escribir
+            // su RUT antes de que esto resuelva, no lo pisamos con el recordado.
+            _state.value = _state.value.copy(
+                recordarCuenta = recordarCuenta,
+                rut = if (_state.value.rut.isBlank()) rutRecordado else _state.value.rut,
+            )
         }
         viewModelScope.launch {
             authRepository.observarUsuarioActual().collect { usuario ->

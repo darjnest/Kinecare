@@ -53,6 +53,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -80,6 +81,7 @@ import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.darjnest.kinecare.core.common.domain.model.RolUsuario
+import com.darjnest.kinecare.core.common.domain.model.Usuario
 import com.darjnest.kinecare.core.designsystem.components.button.KineCarePrimaryButton
 import com.darjnest.kinecare.core.designsystem.components.card.KineCareCard
 import com.darjnest.kinecare.core.designsystem.theme.KineCareTheme
@@ -103,8 +105,14 @@ import kotlinx.coroutines.launch
 fun AuthRoot(
     modifier: Modifier = Modifier,
     viewModel: AuthViewModel = hiltViewModel(),
+    onSesionIniciada: (Usuario) -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+
+    LaunchedEffect(state.usuarioAutenticado) {
+        state.usuarioAutenticado?.let(onSesionIniciada)
+    }
+
     AuthScreen(state = state, onAction = viewModel::onAction, modifier = modifier)
 }
 
