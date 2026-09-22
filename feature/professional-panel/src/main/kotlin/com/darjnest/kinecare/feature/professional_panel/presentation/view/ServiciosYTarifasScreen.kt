@@ -80,9 +80,22 @@ import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.S
 fun ServiciosYTarifasRoot(
     modifier: Modifier = Modifier,
     viewModel: ServiciosYTarifasViewModel = hiltViewModel(),
+    onVolver: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    ServiciosYTarifasScreen(state = state, onAction = viewModel::onAction, modifier = modifier)
+    ServiciosYTarifasScreen(
+        state = state,
+        onAction = { accion ->
+            // Volver atras es navegacion, no estado del ViewModel: el Root la
+            // resuelve directo contra el NavGraph (ver ProfessionalPanelNavGraph).
+            if (accion is ServiciosYTarifasAction.VolverAtras) {
+                onVolver()
+            } else {
+                viewModel.onAction(accion)
+            }
+        },
+        modifier = modifier,
+    )
 }
 
 @Composable

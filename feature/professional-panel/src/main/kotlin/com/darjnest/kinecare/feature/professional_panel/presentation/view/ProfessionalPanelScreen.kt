@@ -85,21 +85,46 @@ import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.V
 fun ProfessionalPanelRoot(
     modifier: Modifier = Modifier,
     viewModel: ProfessionalPanelViewModel = hiltViewModel(),
+    onAbrirAccesoGestion: (String) -> Unit = {},
+    onAbrirSolicitudes: () -> Unit = {},
+    onAbrirMiPerfil: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    ProfessionalPanelScreen(state = state, onAction = viewModel::onAction, modifier = modifier)
+    ProfessionalPanelScreen(
+        state = state,
+        onAction = { accion ->
+            // La navegacion entre pantallas del panel no es responsabilidad
+            // del ViewModel: el Root la resuelve directo contra el NavGraph
+            // (ver ProfessionalPanelNavGraph) e intercepta solo esta accion.
+            if (accion is ProfessionalPanelAction.SeleccionarAccesoGestion) {
+                onAbrirAccesoGestion(accion.accesoId)
+            } else {
+                viewModel.onAction(accion)
+            }
+        },
+        onAbrirSolicitudes = onAbrirSolicitudes,
+        onAbrirMiPerfil = onAbrirMiPerfil,
+        modifier = modifier,
+    )
 }
 
 @Composable
 fun ProfessionalPanelScreen(
     state: ProfessionalPanelState,
     onAction: (ProfessionalPanelAction) -> Unit = {},
+    onAbrirSolicitudes: () -> Unit = {},
+    onAbrirMiPerfil: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
         modifier = modifier,
         containerColor = LoginFondo,
-        bottomBar = { BarraNavegacionInferiorProfesional() },
+        bottomBar = {
+            BarraNavegacionInferiorProfesional(
+                onAbrirSolicitudes = onAbrirSolicitudes,
+                onAbrirMiPerfil = onAbrirMiPerfil,
+            )
+        },
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -805,7 +830,10 @@ private fun TarjetaConfiguracionCuenta(onClick: () -> Unit) {
 }
 
 @Composable
-private fun BarraNavegacionInferiorProfesional() {
+private fun BarraNavegacionInferiorProfesional(
+    onAbrirSolicitudes: () -> Unit,
+    onAbrirMiPerfil: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -814,10 +842,10 @@ private fun BarraNavegacionInferiorProfesional() {
         horizontalArrangement = Arrangement.SpaceEvenly,
     ) {
         ItemNavegacionInferior(texto = "Inicio", icono = Icons.Filled.Dashboard, activo = true)
-        // Reservas, Pacientes y Perfil se conectan cuando existan sus subpantallas (Fase 7).
-        ItemNavegacionInferior(texto = "Reservas", icono = Icons.Filled.CalendarMonth, activo = false)
+        ItemNavegacionInferior(texto = "Reservas", icono = Icons.Filled.CalendarMonth, activo = false, onClick = onAbrirSolicitudes)
+        // Pacientes todavia no tiene subpantalla (Fase 7).
         ItemNavegacionInferior(texto = "Pacientes", icono = Icons.Filled.HowToReg, activo = false)
-        ItemNavegacionInferior(texto = "Perfil", icono = Icons.Filled.Folder, activo = false)
+        ItemNavegacionInferior(texto = "Perfil", icono = Icons.Filled.Folder, activo = false, onClick = onAbrirMiPerfil)
     }
 }
 
@@ -826,9 +854,13 @@ private fun ItemNavegacionInferior(
     texto: String,
     icono: ImageVector,
     activo: Boolean,
+    onClick: (() -> Unit)? = null,
 ) {
     val color = if (activo) LoginPrimarioOscuro else LoginGrisTexto
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        modifier = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Icon(icono, contentDescription = texto, tint = color, modifier = Modifier.size(22.dp))
         Spacer(modifier = Modifier.height(2.dp))
         Text(text = texto, style = MaterialTheme.typography.labelSmall, color = color, fontWeight = if (activo) FontWeight.Bold else FontWeight.Normal)

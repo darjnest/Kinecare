@@ -88,15 +88,17 @@ private val OPCIONES_TRASLADO_MINUTOS = listOf(15, 30, 45, 60)
 fun DisponibilidadYHorariosRoot(
     modifier: Modifier = Modifier,
     viewModel: DisponibilidadYHorariosViewModel = hiltViewModel(),
+    onVolver: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    DisponibilidadYHorariosScreen(state = state, onAction = viewModel::onAction, modifier = modifier)
+    DisponibilidadYHorariosScreen(state = state, onAction = viewModel::onAction, onVolver = onVolver, modifier = modifier)
 }
 
 @Composable
 fun DisponibilidadYHorariosScreen(
     state: DisponibilidadYHorariosState,
     onAction: (DisponibilidadYHorariosAction) -> Unit = {},
+    onVolver: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -115,7 +117,7 @@ fun DisponibilidadYHorariosScreen(
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState()),
         ) {
-            EncabezadoDisponibilidad()
+            EncabezadoDisponibilidad(onVolver = onVolver)
 
             Column(modifier = Modifier.padding(horizontal = 20.dp)) {
                 Spacer(modifier = Modifier.height(12.dp))
@@ -148,14 +150,19 @@ fun DisponibilidadYHorariosScreen(
 }
 
 @Composable
-private fun EncabezadoDisponibilidad() {
+private fun EncabezadoDisponibilidad(onVolver: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = TextoPrincipal)
+        Icon(
+            Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = "Volver",
+            tint = TextoPrincipal,
+            modifier = Modifier.clickable(onClick = onVolver),
+        )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = "Disponibilidad y Horarios",
