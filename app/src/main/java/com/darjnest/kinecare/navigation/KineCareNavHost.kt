@@ -60,7 +60,7 @@ fun KineCareNavHost(modifier: Modifier = Modifier) {
         bookingGraph()
         paymentGraph()
         verificationGraph()
-        professional_panelGraph()
+        professional_panelGraph(navController)
         reviewsGraph()
     }
 }

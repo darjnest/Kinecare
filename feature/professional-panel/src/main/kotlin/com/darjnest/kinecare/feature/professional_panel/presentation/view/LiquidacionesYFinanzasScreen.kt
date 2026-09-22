@@ -83,21 +83,23 @@ import java.util.Locale
 fun LiquidacionesYFinanzasRoot(
     modifier: Modifier = Modifier,
     viewModel: LiquidacionesYFinanzasViewModel = hiltViewModel(),
+    onVolver: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    LiquidacionesYFinanzasScreen(state = state, onAction = viewModel::onAction, modifier = modifier)
+    LiquidacionesYFinanzasScreen(state = state, onAction = viewModel::onAction, onVolver = onVolver, modifier = modifier)
 }
 
 @Composable
 fun LiquidacionesYFinanzasScreen(
     state: LiquidacionesYFinanzasState,
     onAction: (LiquidacionesYFinanzasAction) -> Unit = {},
+    onVolver: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
         modifier = modifier,
         containerColor = LoginFondo,
-        topBar = { EncabezadoFinanzas() },
+        topBar = { EncabezadoFinanzas(onVolver = onVolver) },
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -139,7 +141,7 @@ fun LiquidacionesYFinanzasScreen(
 }
 
 @Composable
-private fun EncabezadoFinanzas() {
+private fun EncabezadoFinanzas(onVolver: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -150,7 +152,8 @@ private fun EncabezadoFinanzas() {
         Box(
             modifier = Modifier
                 .size(44.dp)
-                .clip(CircleShape),
+                .clip(CircleShape)
+                .clickable(onClick = onVolver),
             contentAlignment = Alignment.Center,
         ) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = TextoPrincipal)

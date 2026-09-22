@@ -81,21 +81,23 @@ import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.R
 fun DocumentosYValidacionRoot(
     modifier: Modifier = Modifier,
     viewModel: DocumentosYValidacionViewModel = hiltViewModel(),
+    onVolver: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    DocumentosYValidacionScreen(state = state, onAction = viewModel::onAction, modifier = modifier)
+    DocumentosYValidacionScreen(state = state, onAction = viewModel::onAction, onVolver = onVolver, modifier = modifier)
 }
 
 @Composable
 fun DocumentosYValidacionScreen(
     state: DocumentosYValidacionState,
     onAction: (DocumentosYValidacionAction) -> Unit = {},
+    onVolver: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
         modifier = modifier,
         containerColor = LoginFondo,
-        topBar = { EncabezadoDocumentos() },
+        topBar = { EncabezadoDocumentos(onVolver = onVolver) },
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -145,7 +147,7 @@ fun DocumentosYValidacionScreen(
 }
 
 @Composable
-private fun EncabezadoDocumentos() {
+private fun EncabezadoDocumentos(onVolver: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -156,7 +158,8 @@ private fun EncabezadoDocumentos() {
         Box(
             modifier = Modifier
                 .size(44.dp)
-                .clip(CircleShape),
+                .clip(CircleShape)
+                .clickable(onClick = onVolver),
             contentAlignment = Alignment.Center,
         ) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = TextoPrincipal)
