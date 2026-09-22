@@ -4,8 +4,8 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import com.darjnest.kinecare.feature.search.presentation.view.SearchRoot
 
-fun NavGraphBuilder.searchGraph() {
+fun NavGraphBuilder.searchGraph(onCerrarSesion: () -> Unit = {}) {
     composable<SearchRoute> {
-        SearchRoot()
+        SearchRoot(onCerrarSesion = onCerrarSesion)
     }
 }

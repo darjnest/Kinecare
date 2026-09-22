@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.automirrored.filled.DirectionsRun
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
@@ -37,6 +38,8 @@ import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -45,6 +48,9 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -81,15 +87,17 @@ import com.darjnest.kinecare.feature.search.presentation.viewmodel.TipoAtencion
 fun SearchRoot(
     modifier: Modifier = Modifier,
     viewModel: SearchViewModel = hiltViewModel(),
+    onCerrarSesion: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    SearchScreen(state = state, onAction = viewModel::onAction, modifier = modifier)
+    SearchScreen(state = state, onAction = viewModel::onAction, onCerrarSesion = onCerrarSesion, modifier = modifier)
 }
 
 @Composable
 fun SearchScreen(
     state: SearchState,
     onAction: (SearchAction) -> Unit = {},
+    onCerrarSesion: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -104,7 +112,7 @@ fun SearchScreen(
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState()),
         ) {
-            EncabezadoInicio()
+            EncabezadoInicio(onCerrarSesion = onCerrarSesion)
 
             Column(modifier = Modifier.padding(horizontal = 20.dp)) {
                 Spacer(modifier = Modifier.height(16.dp))
@@ -152,7 +160,7 @@ fun SearchScreen(
 }
 
 @Composable
-private fun EncabezadoInicio() {
+private fun EncabezadoInicio(onCerrarSesion: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -185,15 +193,34 @@ private fun EncabezadoInicio() {
                 tint = Color(0xFF16241C),
             )
             Spacer(modifier = Modifier.width(12.dp))
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(LoginGrisClaro),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Filled.Person, contentDescription = "Mi perfil", tint = LoginGrisTexto, modifier = Modifier.size(20.dp))
-            }
+            MenuPerfil(onCerrarSesion = onCerrarSesion)
+        }
+    }
+}
+
+@Composable
+private fun MenuPerfil(onCerrarSesion: () -> Unit) {
+    var menuExpandido by remember { mutableStateOf(false) }
+    Box {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(LoginGrisClaro)
+                .clickable { menuExpandido = true },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Filled.Person, contentDescription = "Mi perfil", tint = LoginGrisTexto, modifier = Modifier.size(20.dp))
+        }
+        DropdownMenu(expanded = menuExpandido, onDismissRequest = { menuExpandido = false }) {
+            DropdownMenuItem(
+                text = { Text("Cerrar sesión") },
+                leadingIcon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null) },
+                onClick = {
+                    menuExpandido = false
+                    onCerrarSesion()
+                },
+            )
         }
     }
 }
