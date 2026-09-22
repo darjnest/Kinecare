@@ -118,17 +118,23 @@ fun ProfessionalPanelScreen(
                     onAction = onAction,
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
-                TarjetaVerificacion(verificacion = state.verificacion)
+                state.verificacion?.let { verificacion ->
+                    Spacer(modifier = Modifier.height(16.dp))
+                    TarjetaVerificacion(verificacion = verificacion)
+                }
 
-                Spacer(modifier = Modifier.height(24.dp))
-                FilaResumenHoyTitulo(actualizadoHaceTexto = state.resumenHoy.actualizadoHaceTexto)
+                state.resumenHoy?.let { resumenHoy ->
+                    Spacer(modifier = Modifier.height(24.dp))
+                    FilaResumenHoyTitulo(actualizadoHaceTexto = resumenHoy.actualizadoHaceTexto)
 
-                Spacer(modifier = Modifier.height(12.dp))
-                FilaTarjetasResumen(resumenHoy = state.resumenHoy)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    FilaTarjetasResumen(resumenHoy = resumenHoy)
+                }
 
-                Spacer(modifier = Modifier.height(16.dp))
-                TarjetaProximaCita(proximaCita = state.proximaCita, onAction = onAction)
+                state.proximaCita?.let { proximaCita ->
+                    Spacer(modifier = Modifier.height(16.dp))
+                    TarjetaProximaCita(proximaCita = proximaCita, onAction = onAction)
+                }
 
                 Spacer(modifier = Modifier.height(24.dp))
                 FilaGestionTitulo()
@@ -213,7 +219,7 @@ private fun FilaSaludoDisponibilidad(
     ) {
         Column {
             Text(
-                text = "Hola, $nombreProfesional👋",
+                text = if (nombreProfesional.isNotBlank()) "Hola, $nombreProfesional👋" else "Hola👋",
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 color = TextoPrincipal,

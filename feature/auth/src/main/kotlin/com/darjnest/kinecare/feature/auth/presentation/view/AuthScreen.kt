@@ -84,6 +84,7 @@ import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.domain.model.Usuario
 import com.darjnest.kinecare.core.designsystem.components.button.KineCarePrimaryButton
 import com.darjnest.kinecare.core.designsystem.components.card.KineCareCard
+import com.darjnest.kinecare.core.designsystem.components.loading.KineCareFullScreenLoading
 import com.darjnest.kinecare.core.designsystem.theme.KineCareTheme
 import com.darjnest.kinecare.core.designsystem.theme.LoginFondo
 import com.darjnest.kinecare.core.designsystem.theme.LoginGrisClaro
@@ -122,6 +123,15 @@ fun AuthScreen(
     onAction: (AuthAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    if (state.verificandoSesion) {
+        // Evita el flash del formulario de login mientras se resuelve si ya
+        // hay una sesion activa (la carga del Usuario via Firestore no es
+        // instantanea) — el Cliente/Profesional autenticado nunca deberia
+        // ver este formulario, solo pasar directo a su pantalla.
+        KineCareFullScreenLoading(modifier = modifier.background(LoginFondo))
+        return
+    }
+
     val usuario = state.usuarioAutenticado
     Column(
         modifier = modifier
@@ -1148,7 +1158,7 @@ private fun TarjetaRol(
 @Composable
 private fun AuthScreenLoginPreview() {
     KineCareTheme {
-        AuthScreen(state = AuthState(), onAction = {})
+        AuthScreen(state = AuthState(verificandoSesion = false), onAction = {})
     }
 }
 
@@ -1156,7 +1166,7 @@ private fun AuthScreenLoginPreview() {
 @Composable
 private fun AuthScreenRegistroPreview() {
     KineCareTheme {
-        AuthScreen(state = AuthState(modo = ModoAuth.REGISTRO), onAction = {})
+        AuthScreen(state = AuthState(modo = ModoAuth.REGISTRO, verificandoSesion = false), onAction = {})
     }
 }
 
@@ -1168,6 +1178,7 @@ private fun AuthScreenCompletarPerfilGooglePreview() {
             state = AuthState(
                 modo = ModoAuth.REGISTRO,
                 nombre = "Francisca Silva",
+                verificandoSesion = false,
                 perfilGooglePendiente = PerfilGooglePendiente(
                     uid = "uid-preview",
                     correoGoogle = "francisca.silva@gmail.com",

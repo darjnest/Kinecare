@@ -51,8 +51,9 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
 - [ ] Registrar SHA-1/SHA-256 del **keystore de release** en Firebase antes
       de publicar (Fase 5) — hoy solo está el del debug keystore local
 - [x] `:feature:search`: pantalla inicio con filtros, resultados (UI fiel
-      al mockup de producto con datos de ejemplo en el `ViewModel`; sin
-      conexión a Firestore todavía — ver ítem siguiente)
+      al mockup de producto; categorías y profesionales destacados parten
+      vacíos en el `ViewModel` — sin conexión a Firestore todavía, ver
+      ítem siguiente)
 - [ ] Firestore: colección `profesionales` real con datos (hoy no hay
       ningún profesional cargado, ni pantalla que los liste)
 - [ ] Storage: **bloqueado** — Firebase Storage ya no se puede inicializar
@@ -89,10 +90,10 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
 - [ ] Cloud Functions `solicitarVerificacion`, `estadoVerificacion`
 
 ## Fase 7 — Panel profesional
-- [x] `:feature:professional-panel`: dashboard/home fiel al mockup, con
-      datos de ejemplo precargados en `ProfessionalPanelViewModel` (sin
-      Firestore conectado todavía: resumen del día, próxima cita, banner de
-      verificación y accesos de gestión)
+- [x] `:feature:professional-panel`: dashboard/home fiel al mockup; resumen
+      del día, próxima cita, banner de verificación y accesos de gestión
+      parten vacíos/nulos en `ProfessionalPanelViewModel` (cada sección se
+      oculta con gracia sin datos) — sin conexión a Firestore todavía
 - [ ] `:feature:professional-panel`: servicios, calendario/disponibilidad,
       reservas, pagos/ingresos, verificaciones, configuración
 

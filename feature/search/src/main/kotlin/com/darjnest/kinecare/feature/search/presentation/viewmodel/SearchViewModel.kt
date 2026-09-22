@@ -1,17 +1,8 @@
 package com.darjnest.kinecare.feature.search.presentation.viewmodel
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Accessible
-import androidx.compose.material.icons.filled.BackHand
-import androidx.compose.material.icons.filled.Elderly
-import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.ViewModel
-import com.darjnest.kinecare.core.designsystem.theme.AzulPetroleo95
-import com.darjnest.kinecare.core.designsystem.theme.InicioPastelVerde
-import com.darjnest.kinecare.core.designsystem.theme.LoginMenta
-import com.darjnest.kinecare.core.designsystem.theme.VerdeSalvia95
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -57,76 +48,14 @@ data class ProfesionalDestacado(
     val verificado: Boolean,
 )
 
-private val categoriasDeEjemplo = listOf(
-    CategoriaServicio(
-        id = "kine-deportiva",
-        nombre = "Kinesiología Deportiva",
-        descripcion = "Lesiones, readaptación y vuelta al entrenamiento...",
-        profesionalesActivos = 14,
-        precioDesde = 32_000,
-        icono = Icons.Filled.OpenInFull,
-        colorFondo = LoginMenta,
-    ),
-    CategoriaServicio(
-        id = "rehab-columna",
-        nombre = "Rehabilitación Columna",
-        descripcion = "Hernias, lumbalgias, postura y alivio del dolor...",
-        profesionalesActivos = 9,
-        precioDesde = 35_000,
-        icono = Icons.AutoMirrored.Filled.Accessible,
-        colorFondo = AzulPetroleo95,
-    ),
-    CategoriaServicio(
-        id = "adulto-mayor",
-        nombre = "Adulto Mayor",
-        descripcion = "Movilidad, equilibrio y prevención integral de...",
-        profesionalesActivos = 11,
-        precioDesde = 30_000,
-        icono = Icons.Filled.Elderly,
-        colorFondo = InicioPastelVerde,
-    ),
-    CategoriaServicio(
-        id = "descontracturante",
-        nombre = "Descontracturante",
-        descripcion = "Liberación miofascial profunda y alivio de nudo...",
-        profesionalesActivos = 8,
-        precioDesde = 28_000,
-        icono = Icons.Filled.BackHand,
-        colorFondo = VerdeSalvia95,
-    ),
-)
-
-private val profesionalesDeEjemplo = listOf(
-    ProfesionalDestacado(
-        id = "prof-matias",
-        nombre = "Klgo. Matías Fernández",
-        rnpi = "RNPI N° 48102",
-        especialidad = "Especialista en Columna & Deportivo",
-        calificacion = 4.9,
-        totalResenas = 124,
-        precioDesde = 35_000,
-        verificado = true,
-    ),
-    ProfesionalDestacado(
-        id = "prof-camila",
-        nombre = "Klga. Camila Muñoz",
-        rnpi = "RNPI N° 62391",
-        especialidad = "Neuro-rehabilitación & Adulto Mayor",
-        calificacion = 5.0,
-        totalResenas = 98,
-        precioDesde = 32_000,
-        verificado = true,
-    ),
-)
-
 data class SearchState(
     val cargando: Boolean = false,
     val tipoAtencion: TipoAtencion = TipoAtencion.KINESIOLOGIA,
     val modalidad: ModalidadAtencion = ModalidadAtencion.A_DOMICILIO,
     val soloVerificados: Boolean = true,
     val ubicacion: String = "Providencia, Región Metropolitana",
-    val categorias: List<CategoriaServicio> = categoriasDeEjemplo,
-    val profesionalesDestacados: List<ProfesionalDestacado> = profesionalesDeEjemplo,
+    val categorias: List<CategoriaServicio> = emptyList(),
+    val profesionalesDestacados: List<ProfesionalDestacado> = emptyList(),
 )
 
 sealed interface SearchAction {
