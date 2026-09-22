@@ -50,3 +50,14 @@ val InicioDorado = Color(0xFFF2A93B)
 // valores destacados de las pantallas de Inicio (Cliente) y Panel
 // Profesional, para no hardcodear Color(0xFF...) en cada feature.
 val TextoPrincipal = Color(0xFF16241C)
+
+// Paleta usada especificamente en "Liquidaciones y Finanzas" del Panel
+// Profesional para calzar con el mockup de producto (no reemplaza el
+// ColorScheme global). Los tonos Login*/Inicio* son solidos y no cubren
+// estos dos casos: el degradado verde oscuro de la tarjeta "Monto
+// acumulado por liquidar" (dos tonos, no un color plano) y el celeste de
+// la tarjeta "Operación Renta 2025" (mas saturado que LoginAzulSuave).
+val LiquidacionesVerdeDegradadoInicio = Color(0xFF1B4332)
+val LiquidacionesVerdeDegradadoFin = Color(0xFF3D7A5C)
+val LiquidacionesCelesteRenta = Color(0xFFC8E6FF)
+val LiquidacionesCelesteRentaTexto = Color(0xFF284A61)
