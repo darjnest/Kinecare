@@ -62,10 +62,10 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
 - [x] Cliente: al iniciar sesión o registrarse (rol `CLIENTE`), el `NavHost`
       de `:app` navega automáticamente a `SearchRoute` y saca `AuthRoute`
       del back stack (`KineCareNavHost.kt`, callback
-      `onSesionIniciadaCliente` expuesto por `authGraph`)
-- [ ] Profesional: sigue mostrando la confirmación de sesión de
-      `AuthScreen` — falta el home de profesional (Fase 7) para decidir
-      a qué pantalla navegar
+      `onSesionIniciada` expuesto por `authGraph`)
+- [x] Profesional: al iniciar sesión o registrarse (rol `PROFESIONAL`), el
+      mismo `NavHost` navega automáticamente a `ProfessionalPanelRoute` y
+      saca `AuthRoute` del back stack (`KineCareNavHost.kt`)
 
 ## Fase 3 — Perfil profesional + reseñas
 - [ ] `:feature:professional-profile`: perfil con insignias expandibles
@@ -89,9 +89,12 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
 - [ ] Cloud Functions `solicitarVerificacion`, `estadoVerificacion`
 
 ## Fase 7 — Panel profesional
-- [ ] `:feature:professional-panel`: dashboard, servicios, calendario/
-      disponibilidad, reservas, pagos/ingresos, verificaciones,
-      configuración
+- [x] `:feature:professional-panel`: dashboard/home fiel al mockup, con
+      datos de ejemplo precargados en `ProfessionalPanelViewModel` (sin
+      Firestore conectado todavía: resumen del día, próxima cita, banner de
+      verificación y accesos de gestión)
+- [ ] `:feature:professional-panel`: servicios, calendario/disponibilidad,
+      reservas, pagos/ingresos, verificaciones, configuración
 
 ## Fase 8 — QA, pulido y publicación
 - [ ] Cobertura de tests (JUnit5, MockK, Turbine, Compose UI Testing)

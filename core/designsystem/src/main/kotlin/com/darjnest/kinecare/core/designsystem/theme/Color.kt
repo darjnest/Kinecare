@@ -45,3 +45,8 @@ val LoginGrisClaro = Color(0xFFEFF3F0)
 // que no tienen equivalente todavia.
 val InicioPastelVerde = Color(0xFFD8ECDC)
 val InicioDorado = Color(0xFFF2A93B)
+
+// Texto principal oscuro (casi negro con matiz verdoso) usado en titulos y
+// valores destacados de las pantallas de Inicio (Cliente) y Panel
+// Profesional, para no hardcodear Color(0xFF...) en cada feature.
+val TextoPrincipal = Color(0xFF16241C)
