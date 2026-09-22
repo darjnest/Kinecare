@@ -11,14 +11,16 @@ import com.darjnest.kinecare.feature.payment.presentation.navigation.paymentGrap
 import com.darjnest.kinecare.feature.professional_panel.presentation.navigation.professional_panelGraph
 import com.darjnest.kinecare.feature.professional_profile.presentation.navigation.professional_profileGraph
 import com.darjnest.kinecare.feature.reviews.presentation.navigation.reviewsGraph
+import com.darjnest.kinecare.feature.search.presentation.navigation.SearchRoute
 import com.darjnest.kinecare.feature.search.presentation.navigation.searchGraph
 import com.darjnest.kinecare.feature.verification.presentation.navigation.verificationGraph
 
 /**
  * Grafo raiz. Hoy es plano (todas las features cuelgan directo de Auth)
  * porque ninguna feature tiene logica real todavia (docs/TASKS.md Fase 1).
- * La separacion clienteGraph/profesionalGraph segun el rol del Usuario
- * autenticado se arma en Fase 2, cuando exista el estado de sesion real.
+ * Cliente: al iniciar sesion o registrarse entra directo a SearchRoute
+ * (AuthRoute sale del back stack). Profesional: sigue en la pantalla de
+ * confirmacion de Auth hasta que exista un home de profesional (Fase 7).
  */
 @Composable
 fun KineCareNavHost(modifier: Modifier = Modifier) {
@@ -29,7 +31,13 @@ fun KineCareNavHost(modifier: Modifier = Modifier) {
         startDestination = AuthRoute,
         modifier = modifier,
     ) {
-        authGraph()
+        authGraph(
+            onSesionIniciadaCliente = {
+                navController.navigate(SearchRoute) {
+                    popUpTo(AuthRoute) { inclusive = true }
+                }
+            },
+        )
         searchGraph()
         professional_profileGraph()
         bookingGraph()

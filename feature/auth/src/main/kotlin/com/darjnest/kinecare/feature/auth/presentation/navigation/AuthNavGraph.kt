@@ -4,8 +4,8 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import com.darjnest.kinecare.feature.auth.presentation.view.AuthRoot
 
-fun NavGraphBuilder.authGraph() {
+fun NavGraphBuilder.authGraph(onSesionIniciadaCliente: () -> Unit = {}) {
     composable<AuthRoute> {
-        AuthRoot()
+        AuthRoot(onSesionIniciadaCliente = onSesionIniciadaCliente)
     }
 }

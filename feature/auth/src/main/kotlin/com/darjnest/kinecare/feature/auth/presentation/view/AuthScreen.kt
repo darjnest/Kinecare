@@ -53,6 +53,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -103,8 +104,17 @@ import kotlinx.coroutines.launch
 fun AuthRoot(
     modifier: Modifier = Modifier,
     viewModel: AuthViewModel = hiltViewModel(),
+    onSesionIniciadaCliente: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+
+    LaunchedEffect(state.usuarioAutenticado) {
+        val usuario = state.usuarioAutenticado
+        if (usuario != null && usuario.rol == RolUsuario.CLIENTE) {
+            onSesionIniciadaCliente()
+        }
+    }
+
     AuthScreen(state = state, onAction = viewModel::onAction, modifier = modifier)
 }
 
