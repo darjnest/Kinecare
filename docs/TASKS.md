@@ -38,9 +38,18 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       reseñas solo sobre reservas completadas) + índices compuestos
       (`firestore.rules`, `firestore.indexes.json`) — desplegados
 - [x] Firebase Authentication (email/password) habilitado
+- [x] Firebase Authentication: Google Sign-In habilitado (`firebase.json`
+      `auth.providers.googleSignIn`, SHA-1/SHA-256 del debug keystore
+      registrados, `app/google-services.json` regenerado con el Web Client
+      ID real)
 - [x] `:feature:auth`: `AuthRepository`/`AuthRepositoryImpl` reales contra
       Firebase Auth + Firestore (`usuarios/{uid}`), pantalla de
       login/registro con selección de rol, `AuthViewModel` con estado real
+- [x] Login/registro real con Google (Credential Manager +
+      `GoogleAuthProvider`); cuentas nuevas sin RUT pasan por una pantalla
+      de "completar perfil" (RUT/teléfono/rol) antes de crear `usuarios/{uid}`
+- [ ] Registrar SHA-1/SHA-256 del **keystore de release** en Firebase antes
+      de publicar (Fase 5) — hoy solo está el del debug keystore local
 - [ ] `:feature:search`: pantalla inicio con filtros, resultados
 - [ ] Firestore: colección `profesionales` real con datos (hoy no hay
       ningún profesional cargado, ni pantalla que los liste)

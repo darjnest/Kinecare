@@ -13,9 +13,10 @@ describe las colecciones de Firestore y las entidades Room de caché.
 ### `usuarios/{usuarioId}`
 ```
 nombre: string
-rut: string          // normalizado (sin puntos ni guion), identificador de login
-email: string        // correo interno derivado del RUT para Firebase Auth, no es real
-correoContacto: string?  // correo real ingresado en el registro, solo para contacto
+rut: string          // normalizado (sin puntos ni guion), único; identificador de negocio
+email: string        // correo de Firebase Auth: sintético (derivado del RUT) si el login es
+                     // RUT+contraseña, o el correo real si la cuenta es de Google Sign-In
+correoContacto: string?  // correo real de contacto (= correo de Google cuando aplica)
 telefono: string?
 rol: "CLIENTE" | "PROFESIONAL"
 fotoUrl: string?

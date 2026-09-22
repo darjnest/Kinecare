@@ -69,7 +69,13 @@ ahora — ver [TASKS.md](TASKS.md#fase-2--auth--búsqueda)).
 
 - **Firestore**: base de datos principal (usuarios, profesionales, servicios,
   reservas, reseñas). Security Rules reales desplegadas (`firestore.rules`).
-- **Firebase Authentication**: login (email/password), habilitado.
+- **Firebase Authentication**: login email/password (RUT sintético) y Google
+  Sign-In, ambos habilitados. Google Sign-In usa Credential Manager
+  (`androidx.credentials` + `googleid`) en el cliente; el ID token se
+  intercambia por credencial de Firebase con `GoogleAuthProvider`. Una cuenta
+  de Google sin RUT/teléfono/rol todavía no tiene `usuarios/{uid}`: la UI pide
+  esos datos antes de crear el documento (ver `AuthViewModel`/`AuthScreen` en
+  `:feature:auth`).
 - **Cloud Functions**: toda la lógica sensible — pagos, cálculo de comisión,
   verificación de identidad. El cliente Android **nunca** resuelve estos
   estados localmente, solo los lee tras la respuesta de la función. Todavía
