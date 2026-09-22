@@ -64,8 +64,28 @@ duplicada entre módulos.
   `NavGraphBuilder.xxxGraph(...)` que `:app` ensambla.
 
 ## Backend: Firebase
-Proyecto real: **`kinecare-cl`** (cuenta crasd69@gmail.com, plan Spark por
-ahora — ver [TASKS.md](TASKS.md#fase-2--auth--búsqueda)).
+Dos proyectos Firebase separados (cuenta crasd69@gmail.com, plan Spark por
+ahora — ver [TASKS.md](TASKS.md#fase-2--auth--búsqueda)), cada uno con su
+propio Auth/Firestore/Storage/Cloud Functions — aislamiento total, nunca se
+comparten usuarios ni datos entre ambos:
+
+- **`kinecare-cl`** — producción (PRD).
+- **`kinecare-cl-qa`** — QA, para pruebas manuales/datos de ejemplo sin tocar
+  datos reales.
+
+La app Android usa **product flavors** de Gradle (`flavorDimensions +=
+"environment"`, definidos en `app/build.gradle.kts`) para elegir el backend:
+- `qa` → `applicationId` con sufijo `.qa` (`com.darjnest.kinecare.qa`),
+  `google-services.json` propio en `app/src/qa/`. Al tener un
+  `applicationId` distinto se puede instalar **junto** a la build de
+  producción en el mismo dispositivo para comparar.
+- `prod` → `applicationId` `com.darjnest.kinecare`,
+  `google-services.json` propio en `app/src/prod/`.
+
+Cada flavor registra su propia app Android en Firebase (con el mismo
+certificado SHA-1 de debug) y su propio cliente OAuth para Google Sign-In.
+`.firebaserc` define los alias `qa` y `prod`/`default` para apuntar el CLI
+de Firebase (`firebase use qa` / `firebase use prod`) al proyecto correcto.
 
 - **Firestore**: base de datos principal (usuarios, profesionales, servicios,
   reservas, reseñas). Security Rules reales desplegadas (`firestore.rules`).
