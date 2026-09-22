@@ -23,6 +23,20 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    flavorDimensions += "environment"
+    productFlavors {
+        create("qa") {
+            dimension = "environment"
+            applicationIdSuffix = ".qa"
+            versionNameSuffix = "-qa"
+            resValue("string", "app_name", "KineCare QA")
+        }
+        create("prod") {
+            dimension = "environment"
+            resValue("string", "app_name", "KineCare")
+        }
+    }
+
     buildTypes {
         release {
             optimization {
@@ -36,6 +50,7 @@ android {
     }
     buildFeatures {
         compose = true
+        resValues = true
     }
 }
 

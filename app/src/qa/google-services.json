@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "232115019380",
+    "project_id": "kinecare-cl-qa",
+    "storage_bucket": "kinecare-cl-qa.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:232115019380:android:eeac0ef86b922325ca3b21",
+        "android_client_info": {
+          "package_name": "com.darjnest.kinecare.qa"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "232115019380-nq7l1c17gs5v970amqqijfm5ac5i199o.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.darjnest.kinecare.qa",
+            "certificate_hash": "c9f75ea1963dfcb2fb1b2b4d209e267cd1224bc0"
+          }
+        },
+        {
+          "client_id": "232115019380-v7vm218an36lfnkm93rili54fso6e770.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBqB7HTT5srJiVdNhJ5GIdzKBlQJXTHYBg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "232115019380-v7vm218an36lfnkm93rili54fso6e770.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

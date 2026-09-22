@@ -1,5 +1,9 @@
 {
-  "projects": {},
+  "projects": {
+    "default": "kinecare-cl",
+    "prod": "kinecare-cl",
+    "qa": "kinecare-cl-qa"
+  },
   "targets": {},
   "etags": {}
 }
