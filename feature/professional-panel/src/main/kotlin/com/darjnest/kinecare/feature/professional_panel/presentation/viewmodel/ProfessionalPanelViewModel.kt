@@ -1,12 +1,5 @@
 package com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.Sell
-import androidx.compose.material.icons.filled.Work
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.ViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -71,86 +64,14 @@ data class AccesoGestion(
     val mostrarChevron: Boolean = false,
 )
 
-private val accesosDeEjemplo = listOf(
-    AccesoGestion(
-        id = "mi-perfil",
-        titulo = "Mi Perfil",
-        subtitulo = "Foto, bio y títulos",
-        icono = Icons.Filled.Work,
-        color = ColorAcceso.AZUL,
-        mostrarChevron = true,
-    ),
-    AccesoGestion(
-        id = "servicios-tarifas",
-        titulo = "Servicios y Tarifas",
-        subtitulo = "4 terapias activas",
-        icono = Icons.Filled.Sell,
-        color = ColorAcceso.VERDE,
-        badgeTexto = "CLP $25k",
-    ),
-    AccesoGestion(
-        id = "disponibilidad",
-        titulo = "Disponibilidad",
-        subtitulo = "Zonas y bloques",
-        icono = Icons.Filled.CalendarMonth,
-        color = ColorAcceso.GRIS,
-        mostrarChevron = true,
-    ),
-    AccesoGestion(
-        id = "solicitudes",
-        titulo = "Solicitudes",
-        subtitulo = "2 pendientes",
-        icono = Icons.Filled.NotificationsActive,
-        color = ColorAcceso.ROJO,
-        badgeNumero = 2,
-        subtituloEnAlerta = true,
-    ),
-    AccesoGestion(
-        id = "liquidaciones",
-        titulo = "Liquidaciones",
-        subtitulo = "Cuenta bancaria",
-        icono = Icons.Filled.AccountBalanceWallet,
-        color = ColorAcceso.VERDE,
-    ),
-    AccesoGestion(
-        id = "documentos",
-        titulo = "Documentos",
-        subtitulo = "SIS y Biometría",
-        icono = Icons.Filled.Folder,
-        color = ColorAcceso.AZUL,
-        badgeCheck = true,
-    ),
-)
-
 data class ProfessionalPanelState(
     val cargando: Boolean = false,
-    val nombreProfesional: String = "Camila",
+    val nombreProfesional: String = "",
     val disponible: Boolean = true,
-    val verificacion: VerificacionPanel = VerificacionPanel(
-        numeroSis = "481923",
-        entidad = "Superintendencia de Salud",
-        credencialesAlDia = true,
-    ),
-    val resumenHoy: ResumenHoy = ResumenHoy(
-        proximasCitas = 3,
-        citasHoyEnAgenda = 2,
-        porLiquidar = 320_000,
-        calificacion = 4.9,
-        totalResenas = 28,
-        actualizadoHaceTexto = "Actualizado hace 5m",
-    ),
-    val proximaCita: ProximaCita = ProximaCita(
-        pacienteNombre = "Matías Morales",
-        servicio = "Kinesiología Deportiva y Reintegro",
-        minutosRestantes = 45,
-        modalidad = "A domicilio",
-        horaTexto = "Hoy, 15:30 hrs",
-        distanciaKm = 3.2,
-        comuna = "Providencia",
-        direccion = "Av. Providencia 1200, Depto 301",
-        piso = "PISO 3",
-    ),
-    val accesosGestion: List<AccesoGestion> = accesosDeEjemplo,
+    val verificacion: VerificacionPanel? = null,
+    val resumenHoy: ResumenHoy? = null,
+    val proximaCita: ProximaCita? = null,
+    val accesosGestion: List<AccesoGestion> = emptyList(),
 )
 
 sealed interface ProfessionalPanelAction {

@@ -37,6 +37,7 @@ data class AuthState(
     val rolSeleccionado: RolUsuario = RolUsuario.CLIENTE,
     val recordarCuenta: Boolean = true,
     val cargando: Boolean = false,
+    val verificandoSesion: Boolean = true,
     val mensajeError: String? = null,
     val usuarioAutenticado: Usuario? = null,
     val perfilGooglePendiente: PerfilGooglePendiente? = null,
@@ -117,7 +118,7 @@ class AuthViewModel @Inject constructor(
         }
         viewModelScope.launch {
             authRepository.observarUsuarioActual().collect { usuario ->
-                _state.value = _state.value.copy(usuarioAutenticado = usuario)
+                _state.value = _state.value.copy(usuarioAutenticado = usuario, verificandoSesion = false)
             }
         }
     }
