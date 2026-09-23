@@ -22,8 +22,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocalHospital
@@ -63,6 +61,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.darjnest.kinecare.core.designsystem.components.bar.KineCareBottomNavBar
+import com.darjnest.kinecare.core.designsystem.components.bar.PestanaClienteInferior
 import com.darjnest.kinecare.core.designsystem.components.label.BadgeTono
 import com.darjnest.kinecare.core.designsystem.components.label.KineCareBadge
 import com.darjnest.kinecare.core.designsystem.theme.InicioDorado
@@ -88,9 +88,20 @@ fun SearchRoot(
     modifier: Modifier = Modifier,
     viewModel: SearchViewModel = hiltViewModel(),
     onCerrarSesion: () -> Unit = {},
+    onIrAMisCitas: () -> Unit = {},
+    onIrAFavoritos: () -> Unit = {},
+    onIrAMiPerfil: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    SearchScreen(state = state, onAction = viewModel::onAction, onCerrarSesion = onCerrarSesion, modifier = modifier)
+    SearchScreen(
+        state = state,
+        onAction = viewModel::onAction,
+        onCerrarSesion = onCerrarSesion,
+        onIrAMisCitas = onIrAMisCitas,
+        onIrAFavoritos = onIrAFavoritos,
+        onIrAMiPerfil = onIrAMiPerfil,
+        modifier = modifier,
+    )
 }
 
 @Composable
@@ -98,12 +109,23 @@ fun SearchScreen(
     state: SearchState,
     onAction: (SearchAction) -> Unit = {},
     onCerrarSesion: () -> Unit = {},
+    onIrAMisCitas: () -> Unit = {},
+    onIrAFavoritos: () -> Unit = {},
+    onIrAMiPerfil: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
         modifier = modifier,
         containerColor = LoginFondo,
-        bottomBar = { BarraNavegacionInferior() },
+        bottomBar = {
+            KineCareBottomNavBar(
+                pestanaActiva = PestanaClienteInferior.EXPLORAR,
+                onExplorar = {},
+                onMisCitas = onIrAMisCitas,
+                onFavoritos = onIrAFavoritos,
+                onMiPerfil = onIrAMiPerfil,
+            )
+        },
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -818,37 +840,6 @@ private fun BannerCompromisoClinico() {
                 modifier = Modifier.padding(top = 4.dp),
             )
         }
-    }
-}
-
-@Composable
-private fun BarraNavegacionInferior() {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color.White)
-            .padding(vertical = 10.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-    ) {
-        ItemNavegacionInferior(texto = "Buscar", icono = Icons.Filled.Search, activo = true)
-        // Mis Citas, Favoritos y Mi Perfil se conectan cuando exista el NavGraph por rol.
-        ItemNavegacionInferior(texto = "Mis Citas", icono = Icons.Filled.CalendarMonth, activo = false)
-        ItemNavegacionInferior(texto = "Favoritos", icono = Icons.Filled.Bookmark, activo = false)
-        ItemNavegacionInferior(texto = "Mi Perfil", icono = Icons.Filled.Person, activo = false)
-    }
-}
-
-@Composable
-private fun ItemNavegacionInferior(
-    texto: String,
-    icono: ImageVector,
-    activo: Boolean,
-) {
-    val color = if (activo) LoginPrimarioOscuro else LoginGrisTexto
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(icono, contentDescription = texto, tint = color, modifier = Modifier.size(22.dp))
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(text = texto, style = MaterialTheme.typography.labelSmall, color = color, fontWeight = if (activo) FontWeight.Bold else FontWeight.Normal)
     }
 }
 

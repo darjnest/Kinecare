@@ -11,6 +11,10 @@ import com.darjnest.kinecare.feature.auth.presentation.navigation.authGraph
 import com.darjnest.kinecare.feature.auth.presentation.viewmodel.AuthAction
 import com.darjnest.kinecare.feature.auth.presentation.viewmodel.AuthViewModel
 import com.darjnest.kinecare.feature.booking.presentation.navigation.bookingGraph
+import com.darjnest.kinecare.feature.client_panel.presentation.navigation.FavoritosRoute
+import com.darjnest.kinecare.feature.client_panel.presentation.navigation.MiPerfilClienteRoute
+import com.darjnest.kinecare.feature.client_panel.presentation.navigation.MisCitasRoute
+import com.darjnest.kinecare.feature.client_panel.presentation.navigation.client_panelGraph
 import com.darjnest.kinecare.feature.payment.presentation.navigation.paymentGraph
 import com.darjnest.kinecare.feature.professional_panel.presentation.navigation.ProfessionalPanelRoute
 import com.darjnest.kinecare.feature.professional_panel.presentation.navigation.professional_panelGraph
@@ -48,13 +52,24 @@ fun KineCareNavHost(modifier: Modifier = Modifier) {
                 }
             },
         )
+        val onCerrarSesionCliente: () -> Unit = {
+            authViewModel.onAction(AuthAction.CerrarSesion)
+            navController.navigate(AuthRoute) {
+                popUpTo(SearchRoute) { inclusive = true }
+            }
+        }
         searchGraph(
-            onCerrarSesion = {
-                authViewModel.onAction(AuthAction.CerrarSesion)
-                navController.navigate(AuthRoute) {
-                    popUpTo(SearchRoute) { inclusive = true }
-                }
-            },
+            onCerrarSesion = onCerrarSesionCliente,
+            onIrAMisCitas = { navController.navigate(MisCitasRoute) { launchSingleTop = true } },
+            onIrAFavoritos = { navController.navigate(FavoritosRoute) { launchSingleTop = true } },
+            onIrAMiPerfil = { navController.navigate(MiPerfilClienteRoute) { launchSingleTop = true } },
+        )
+        client_panelGraph(
+            onIrAExplorar = { navController.navigate(SearchRoute) { launchSingleTop = true } },
+            onIrAMisCitas = { navController.navigate(MisCitasRoute) { launchSingleTop = true } },
+            onIrAFavoritos = { navController.navigate(FavoritosRoute) { launchSingleTop = true } },
+            onIrAMiPerfil = { navController.navigate(MiPerfilClienteRoute) { launchSingleTop = true } },
+            onCerrarSesion = onCerrarSesionCliente,
         )
         professional_profileGraph()
         bookingGraph()

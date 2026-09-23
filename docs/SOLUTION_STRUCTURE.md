@@ -18,7 +18,8 @@ Kinecare/
 │   ├── payment/
 │   ├── verification/
 │   ├── professional-panel/
-│   └── reviews/
+│   ├── reviews/
+│   └── client-panel/
 └── docs/                              # Este set de documentos de contexto
 ```
 
@@ -76,6 +77,18 @@ core/designsystem/src/main/kotlin/com/darjnest/kinecare/core/designsystem/
 tiene UI). `:core:network` sigue `di/` (y sumará `service/`,
 `dto/`, `firebase/` cuando existan endpoints reales — ver
 docs/TASKS.md Fase 2 en adelante).
+
+`:feature:client-panel` agrupa las pantallas de cuenta del rol Cliente
+(Mis Citas, Favoritos, Mi Perfil) bajo un solo módulo, igual que
+`:feature:professional-panel` agrupa las del rol Profesional — no son
+`:feature:*` separados porque comparten la misma barra de navegación
+inferior y no tienen entidad propia fuera de "cuenta del cliente".
+`:feature:search` sigue siendo el módulo de "Explorar" (home del rol
+Cliente); las 4 pestañas de la barra inferior viven repartidas entre
+`:feature:search` y `:feature:client-panel`, conectadas por callbacks
+desde el `NavHost` de `:app` (nunca entre sí, por la regla de
+dependencia de abajo). El componente `KineCareBottomNavBar` compartido
+por ambos vive en `:core:designsystem/components/bar/`.
 
 ## Reglas de dependencia (sin cambios respecto a antes)
 
