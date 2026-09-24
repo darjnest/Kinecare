@@ -12,7 +12,10 @@ import com.darjnest.kinecare.feature.professional_panel.presentation.view.Servic
 import com.darjnest.kinecare.feature.professional_panel.presentation.view.SolicitudesDeAtencionRoot
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.AccesoGestionId
 
-fun NavGraphBuilder.professional_panelGraph(navController: NavController) {
+fun NavGraphBuilder.professional_panelGraph(
+    navController: NavController,
+    onCerrarSesion: () -> Unit = {},
+) {
     composable<ProfessionalPanelRoute> {
         ProfessionalPanelRoot(
             onAbrirAccesoGestion = { accesoId ->
@@ -23,7 +26,7 @@ fun NavGraphBuilder.professional_panelGraph(navController: NavController) {
         )
     }
     composable<MiPerfilProfesionalRoute> {
-        MiPerfilProfesionalRoot(onVolver = navController::popBackStack)
+        MiPerfilProfesionalRoot(onVolver = navController::popBackStack, onCerrarSesion = onCerrarSesion)
     }
     composable<ServiciosYTarifasRoute> {
         ServiciosYTarifasRoot(onVolver = navController::popBackStack)

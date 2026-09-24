@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -77,6 +78,8 @@ import com.darjnest.kinecare.core.designsystem.theme.LoginGrisTexto
 import com.darjnest.kinecare.core.designsystem.theme.LoginMenta
 import com.darjnest.kinecare.core.designsystem.theme.LoginPrimario
 import com.darjnest.kinecare.core.designsystem.theme.LoginPrimarioOscuro
+import com.darjnest.kinecare.core.designsystem.theme.RojoError40
+import com.darjnest.kinecare.core.designsystem.theme.RojoError90
 import com.darjnest.kinecare.core.designsystem.theme.TextoPrincipal
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.Especialidad
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.IdentidadProfesional
@@ -92,6 +95,7 @@ fun MiPerfilProfesionalRoot(
     modifier: Modifier = Modifier,
     viewModel: MiPerfilProfesionalViewModel = hiltViewModel(),
     onVolver: () -> Unit = {},
+    onCerrarSesion: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     MiPerfilProfesionalScreen(
@@ -105,6 +109,7 @@ fun MiPerfilProfesionalRoot(
                 viewModel.onAction(accion)
             }
         },
+        onCerrarSesion = onCerrarSesion,
         modifier = modifier,
     )
 }
@@ -113,6 +118,7 @@ fun MiPerfilProfesionalRoot(
 fun MiPerfilProfesionalScreen(
     state: MiPerfilProfesionalState,
     onAction: (MiPerfilProfesionalAction) -> Unit = {},
+    onCerrarSesion: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -173,7 +179,7 @@ fun MiPerfilProfesionalScreen(
                     )
                 }
 
-                BotonesAccionPerfil(onAction = onAction)
+                BotonesAccionPerfil(onAction = onAction, onCerrarSesion = onCerrarSesion)
 
                 Spacer(modifier = Modifier.height(8.dp))
             }
@@ -858,7 +864,10 @@ private fun TarjetaUltimasEvaluaciones(
 }
 
 @Composable
-private fun BotonesAccionPerfil(onAction: (MiPerfilProfesionalAction) -> Unit) {
+private fun BotonesAccionPerfil(
+    onAction: (MiPerfilProfesionalAction) -> Unit,
+    onCerrarSesion: () -> Unit,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(
             modifier = Modifier
@@ -887,6 +896,20 @@ private fun BotonesAccionPerfil(onAction: (MiPerfilProfesionalAction) -> Unit) {
             Icon(Icons.Filled.RemoveRedEye, contentDescription = null, tint = AzulPetroleo30, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(8.dp))
             Text(text = "Previsualizar Perfil Público", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = AzulPetroleo30)
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(50))
+                .background(RojoError90)
+                .clickable(onClick = onCerrarSesion)
+                .padding(vertical = 14.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, tint = RojoError40, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(text = "Cerrar Sesión", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = RojoError40)
         }
     }
 }
