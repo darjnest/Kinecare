@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -90,9 +91,22 @@ import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.Z
 fun MiPerfilProfesionalRoot(
     modifier: Modifier = Modifier,
     viewModel: MiPerfilProfesionalViewModel = hiltViewModel(),
+    onVolver: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    MiPerfilProfesionalScreen(state = state, onAction = viewModel::onAction, modifier = modifier)
+    MiPerfilProfesionalScreen(
+        state = state,
+        onAction = { accion ->
+            // Volver atras es navegacion, no estado del ViewModel: el Root la
+            // resuelve directo contra el NavGraph (ver ProfessionalPanelNavGraph).
+            if (accion is MiPerfilProfesionalAction.VolverAtras) {
+                onVolver()
+            } else {
+                viewModel.onAction(accion)
+            }
+        },
+        modifier = modifier,
+    )
 }
 
 @Composable
@@ -113,7 +127,7 @@ fun MiPerfilProfesionalScreen(
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState()),
         ) {
-            EncabezadoMiPerfil()
+            EncabezadoMiPerfil(onAction = onAction)
 
             Column(
                 modifier = Modifier.padding(horizontal = 20.dp),
@@ -168,15 +182,25 @@ fun MiPerfilProfesionalScreen(
 }
 
 @Composable
-private fun EncabezadoMiPerfil() {
+private fun EncabezadoMiPerfil(onAction: (MiPerfilProfesionalAction) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .padding(horizontal = 12.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .clickable { onAction(MiPerfilProfesionalAction.VolverAtras) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = TextoPrincipal)
+            }
+            Spacer(modifier = Modifier.width(4.dp))
             Box(
                 modifier = Modifier
                     .size(36.dp)

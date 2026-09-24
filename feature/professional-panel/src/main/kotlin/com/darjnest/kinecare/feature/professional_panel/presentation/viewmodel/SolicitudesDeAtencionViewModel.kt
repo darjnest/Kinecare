@@ -51,6 +51,7 @@ data class SolicitudesDeAtencionState(
 )
 
 sealed interface SolicitudesDeAtencionAction {
+    data object VolverAtras : SolicitudesDeAtencionAction
     data class CambiarPestana(val pestana: PestanaSolicitudes) : SolicitudesDeAtencionAction
     data class AceptarSolicitud(val solicitudId: String) : SolicitudesDeAtencionAction
     data class RechazarSolicitud(val solicitudId: String) : SolicitudesDeAtencionAction
@@ -67,10 +68,14 @@ class SolicitudesDeAtencionViewModel @Inject constructor() : ViewModel() {
             is SolicitudesDeAtencionAction.CambiarPestana ->
                 _state.update { it.copy(pestanaSeleccionada = action.pestana) }
 
-            // Aceptar y rechazar una solicitud requieren el repositorio de
-            // reservas del profesional en Firestore (y su Cloud Function de
-            // liberacion de custodia de pago), que todavia no esta conectado
-            // a esta pantalla (docs/TASKS.md, Fase 7).
+            // Volver atras es navegacion, no estado del ViewModel: el Root la
+            // resuelve directo contra el NavGraph (ver
+            // ProfessionalPanelNavGraph). Aceptar y rechazar una solicitud
+            // requieren el repositorio de reservas del profesional en
+            // Firestore (y su Cloud Function de liberacion de custodia de
+            // pago), que todavia no esta conectado a esta pantalla
+            // (docs/TASKS.md, Fase 7).
+            SolicitudesDeAtencionAction.VolverAtras,
             is SolicitudesDeAtencionAction.AceptarSolicitud,
             is SolicitudesDeAtencionAction.RechazarSolicitud,
             -> Unit
