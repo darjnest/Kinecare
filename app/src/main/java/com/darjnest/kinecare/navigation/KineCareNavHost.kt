@@ -71,11 +71,17 @@ fun KineCareNavHost(modifier: Modifier = Modifier) {
             onIrAMiPerfil = { navController.navigate(MiPerfilClienteRoute) { launchSingleTop = true } },
             onCerrarSesion = onCerrarSesionCliente,
         )
+        val onCerrarSesionProfesional: () -> Unit = {
+            authViewModel.onAction(AuthAction.CerrarSesion)
+            navController.navigate(AuthRoute) {
+                popUpTo(ProfessionalPanelRoute) { inclusive = true }
+            }
+        }
         professional_profileGraph()
         bookingGraph()
         paymentGraph()
         verificationGraph()
-        professional_panelGraph(navController)
+        professional_panelGraph(navController, onCerrarSesion = onCerrarSesionProfesional)
         reviewsGraph()
     }
 }
