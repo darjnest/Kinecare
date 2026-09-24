@@ -65,6 +65,7 @@ fun KineCareNavHost(modifier: Modifier = Modifier) {
             onIrAMiPerfil = { navController.navigate(MiPerfilClienteRoute) { launchSingleTop = true } },
         )
         client_panelGraph(
+            navController = navController,
             onIrAExplorar = { navController.navigate(SearchRoute) { launchSingleTop = true } },
             onIrAMisCitas = { navController.navigate(MisCitasRoute) { launchSingleTop = true } },
             onIrAFavoritos = { navController.navigate(FavoritosRoute) { launchSingleTop = true } },
