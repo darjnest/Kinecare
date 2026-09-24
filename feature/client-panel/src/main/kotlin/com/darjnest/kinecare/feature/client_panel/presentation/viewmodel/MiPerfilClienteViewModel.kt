@@ -114,15 +114,18 @@ class MiPerfilClienteViewModel @Inject constructor() : ViewModel() {
                 _state.update { it.copy(ajustes = it.ajustes.copy(avisosWhatsApp = action.activo)) }
             is MiPerfilClienteAction.CambiarIngresoBiometrico ->
                 _state.update { it.copy(ajustes = it.ajustes.copy(ingresoBiometrico = action.activo)) }
-            // Editar informacion personal/facturacion, gestionar prevision y
-            // boletas SII, ver pauta activa/historial de evoluciones,
-            // agregar una direccion y ver los derechos del paciente:
-            // requieren escritura sobre el `Cliente` real y navegacion hacia
-            // otras features, ninguno conectado todavia (no hay Firestore de
-            // perfil cliente conectado a esta pantalla) — se conectan
-            // cuando la feature salga de esta fase (docs/TASKS.md). Cerrar
-            // sesion no es una accion de este ViewModel: `MiPerfilClienteRoot`
-            // invoca directo el `onCerrarSesion` real recibido de `:app`.
+            // Editar facturacion, gestionar prevision y boletas SII, ver
+            // pauta activa/historial de evoluciones, agregar una direccion
+            // y ver los derechos del paciente: requieren escritura sobre el
+            // `Cliente` real y navegacion hacia otras features, ninguno
+            // conectado todavia (no hay Firestore de perfil cliente
+            // conectado a esta pantalla) — se conectan cuando la feature
+            // salga de esta fase (docs/TASKS.md). Cerrar sesion no es una
+            // accion de este ViewModel: `MiPerfilClienteRoot` invoca directo
+            // el `onCerrarSesion` real recibido de `:app`. Editar informacion
+            // personal tampoco llega normalmente hasta aca: `MiPerfilClienteRoot`
+            // la intercepta como navegacion hacia `InformacionPersonalClienteRoute`;
+            // se mantiene como no-op aca solo para que el `when` siga exhaustivo.
             MiPerfilClienteAction.EditarInformacionPersonal,
             MiPerfilClienteAction.GestionarPrevisionYBoletas,
             MiPerfilClienteAction.VerPautaActivaEnCasa,

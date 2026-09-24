@@ -96,12 +96,22 @@ fun MiPerfilClienteRoot(
     onIrAExplorar: () -> Unit = {},
     onIrAMisCitas: () -> Unit = {},
     onIrAFavoritos: () -> Unit = {},
+    onEditarInformacionPersonal: () -> Unit = {},
     onCerrarSesion: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     MiPerfilClienteScreen(
         state = state,
-        onAction = viewModel::onAction,
+        onAction = { accion ->
+            // Editar informacion personal es navegacion, no estado del
+            // ViewModel: el Root la resuelve directo contra el NavGraph
+            // (ver ClientPanelNavGraph).
+            if (accion is MiPerfilClienteAction.EditarInformacionPersonal) {
+                onEditarInformacionPersonal()
+            } else {
+                viewModel.onAction(accion)
+            }
+        },
         onIrAExplorar = onIrAExplorar,
         onIrAMisCitas = onIrAMisCitas,
         onIrAFavoritos = onIrAFavoritos,
