@@ -67,6 +67,18 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
 - [x] Profesional: al iniciar sesión o registrarse (rol `PROFESIONAL`), el
       mismo `NavHost` navega automáticamente a `ProfessionalPanelRoute` y
       saca `AuthRoute` del back stack (`KineCareNavHost.kt`)
+- [x] `:feature:client-panel` (módulo nuevo, agrupa la cuenta del rol
+      Cliente igual que `:feature:professional-panel` agrupa la del rol
+      Profesional): pantallas Mis Citas, Favoritos y Mi Perfil fieles a
+      los mockups de producto — cada una con su propio `State`/`Action`/
+      `ViewModel` (datos parten vacíos/nulos, sin conexión a Firestore
+      todavía) y estado vacío propio cuando no hay datos. Barra de
+      navegación inferior extraída a `KineCareBottomNavBar`
+      (`:core:designsystem/components/bar/`), compartida entre
+      `:feature:search` y `:feature:client-panel` y conectada de verdad
+      en el `NavHost` de `:app`. Pendiente: conectar cada pantalla a
+      Firestore/Cloud Functions (favoritos, historial de reservas, datos
+      de perfil/previsión/direcciones/pagos del cliente).
 
 ## Fase 3 — Perfil profesional + reseñas
 - [ ] `:feature:professional-profile`: perfil con insignias expandibles

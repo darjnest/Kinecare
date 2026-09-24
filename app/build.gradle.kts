@@ -68,6 +68,7 @@ dependencies {
     implementation(project(":feature:verification"))
     implementation(project(":feature:professional-panel"))
     implementation(project(":feature:reviews"))
+    implementation(project(":feature:client-panel"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
