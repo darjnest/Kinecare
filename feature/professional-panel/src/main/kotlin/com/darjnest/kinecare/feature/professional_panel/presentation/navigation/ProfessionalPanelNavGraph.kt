@@ -23,7 +23,7 @@ fun NavGraphBuilder.professional_panelGraph(navController: NavController) {
         )
     }
     composable<MiPerfilProfesionalRoute> {
-        MiPerfilProfesionalRoot()
+        MiPerfilProfesionalRoot(onVolver = navController::popBackStack)
     }
     composable<ServiciosYTarifasRoute> {
         ServiciosYTarifasRoot(onVolver = navController::popBackStack)
@@ -32,7 +32,7 @@ fun NavGraphBuilder.professional_panelGraph(navController: NavController) {
         DisponibilidadYHorariosRoot(onVolver = navController::popBackStack)
     }
     composable<SolicitudesDeAtencionRoute> {
-        SolicitudesDeAtencionRoot()
+        SolicitudesDeAtencionRoot(onVolver = navController::popBackStack)
     }
     composable<DocumentosYValidacionRoute> {
         DocumentosYValidacionRoot(onVolver = navController::popBackStack)

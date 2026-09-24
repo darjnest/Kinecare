@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Apartment
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -83,9 +84,22 @@ import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.S
 fun SolicitudesDeAtencionRoot(
     modifier: Modifier = Modifier,
     viewModel: SolicitudesDeAtencionViewModel = hiltViewModel(),
+    onVolver: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    SolicitudesDeAtencionScreen(state = state, onAction = viewModel::onAction, modifier = modifier)
+    SolicitudesDeAtencionScreen(
+        state = state,
+        onAction = { accion ->
+            // Volver atras es navegacion, no estado del ViewModel: el Root la
+            // resuelve directo contra el NavGraph (ver ProfessionalPanelNavGraph).
+            if (accion is SolicitudesDeAtencionAction.VolverAtras) {
+                onVolver()
+            } else {
+                viewModel.onAction(accion)
+            }
+        },
+        modifier = modifier,
+    )
 }
 
 @Composable
@@ -106,7 +120,7 @@ fun SolicitudesDeAtencionScreen(
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState()),
         ) {
-            EncabezadoSolicitudes()
+            EncabezadoSolicitudes(onAction = onAction)
 
             Column(modifier = Modifier.padding(horizontal = 20.dp)) {
                 Spacer(modifier = Modifier.height(12.dp))
@@ -150,15 +164,25 @@ fun SolicitudesDeAtencionScreen(
 }
 
 @Composable
-private fun EncabezadoSolicitudes() {
+private fun EncabezadoSolicitudes(onAction: (SolicitudesDeAtencionAction) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .padding(horizontal = 12.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .clickable { onAction(SolicitudesDeAtencionAction.VolverAtras) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = TextoPrincipal)
+            }
+            Spacer(modifier = Modifier.width(4.dp))
             Box(
                 modifier = Modifier
                     .size(36.dp)

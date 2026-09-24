@@ -72,6 +72,7 @@ data class MiPerfilProfesionalState(
 )
 
 sealed interface MiPerfilProfesionalAction {
+    data object VolverAtras : MiPerfilProfesionalAction
     data class CambiarPerfilPublico(val activo: Boolean) : MiPerfilProfesionalAction
     data object EditarBiografia : MiPerfilProfesionalAction
     data object EditarPerfilYCredenciales : MiPerfilProfesionalAction
@@ -89,12 +90,14 @@ class MiPerfilProfesionalViewModel @Inject constructor() : ViewModel() {
         when (action) {
             is MiPerfilProfesionalAction.CambiarPerfilPublico ->
                 _state.update { it.copy(perfilPublicoActivo = action.activo) }
-            // Editar biografia/credenciales, previsualizar el perfil publico y
-            // ver todas las resenas: requieren escritura sobre el Profesional
-            // real y navegacion hacia la feature de Resenas, ninguna conectada
-            // todavia (no hay Firestore de perfil profesional ni resenas
-            // conectado a esta pantalla) — se conectan cuando la feature
-            // salga de esta fase (docs/TASKS.md, Fase 7).
+            // Volver atras, editar biografia/credenciales, previsualizar el
+            // perfil publico y ver todas las resenas: requieren navegacion o
+            // escritura sobre el Profesional real y la feature de Resenas,
+            // ninguna conectada todavia (no hay Firestore de perfil
+            // profesional ni resenas conectado a esta pantalla) — se
+            // conectan cuando la feature salga de esta fase (docs/TASKS.md,
+            // Fase 7).
+            MiPerfilProfesionalAction.VolverAtras,
             MiPerfilProfesionalAction.EditarBiografia,
             MiPerfilProfesionalAction.EditarPerfilYCredenciales,
             MiPerfilProfesionalAction.PrevisualizarPerfilPublico,
