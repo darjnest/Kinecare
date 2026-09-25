@@ -51,9 +51,16 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
 - [ ] Registrar SHA-1/SHA-256 del **keystore de release** en Firebase antes
       de publicar (Fase 5) — hoy solo está el del debug keystore local
 - [x] `:feature:search`: pantalla inicio con filtros, resultados (UI fiel
-      al mockup de producto; categorías y profesionales destacados parten
-      vacíos en el `ViewModel` — sin conexión a Firestore todavía, ver
-      ítem siguiente)
+      al mockup de producto). Selector Kinesiología/Masoterapia filtra de
+      verdad categorías y profesionales destacados (datos de muestra
+      locales en el `ViewModel`, agrupados por `TipoAtencion` — sin
+      conexión a Firestore todavía, ver ítem siguiente). Ubicación real:
+      botón "usar mi ubicación" pide permiso runtime
+      (`ACCESS_FINE_LOCATION`/`ACCESS_COARSE_LOCATION`, primer precedente
+      de permisos en tiempo de ejecución del proyecto) y resuelve
+      comuna/región con Fused Location Provider + `Geocoder` de Android
+      (`UbicacionRepository`/`UbicacionRepositoryImpl`, sin Google Maps
+      SDK — ver nota de la Fase 1 sobre Maps Compose)
 - [ ] Firestore: colección `profesionales` real con datos (hoy no hay
       ningún profesional cargado, ni pantalla que los liste)
 - [ ] Storage: **bloqueado** — Firebase Storage ya no se puede inicializar

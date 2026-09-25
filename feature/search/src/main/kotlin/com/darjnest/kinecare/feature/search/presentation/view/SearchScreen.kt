@@ -1,5 +1,9 @@
 package com.darjnest.kinecare.feature.search.presentation.view
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -36,6 +40,7 @@ import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -54,11 +59,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.darjnest.kinecare.core.designsystem.components.bar.KineCareBottomNavBar
@@ -154,7 +161,7 @@ fun SearchScreen(
                 TarjetaFiltros(state = state, onAction = onAction)
 
                 Spacer(modifier = Modifier.height(28.dp))
-                FilaServiciosCercaDeTi(onAction = onAction)
+                FilaServiciosCercaDeTi(ubicacion = state.ubicacion, onAction = onAction)
 
                 Spacer(modifier = Modifier.height(16.dp))
                 FilaModalidad(modalidad = state.modalidad, onAction = onAction)
@@ -309,6 +316,24 @@ private fun TarjetaFiltros(
     state: SearchState,
     onAction: (SearchAction) -> Unit,
 ) {
+    val context = LocalContext.current
+    val lanzadorPermisoUbicacion = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { concedido ->
+        if (concedido) onAction(SearchAction.ObtenerUbicacionActual)
+    }
+    val solicitarUbicacionActual = {
+        val tienePermiso = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (tienePermiso) {
+            onAction(SearchAction.ObtenerUbicacionActual)
+        } else {
+            lanzadorPermisoUbicacion.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
@@ -385,11 +410,28 @@ private fun TarjetaFiltros(
                     modifier = Modifier
                         .size(48.dp)
                         .clip(CircleShape)
-                        .background(LoginAzulSuave),
+                        .background(LoginAzulSuave)
+                        .clickable(enabled = !state.obteniendoUbicacion) { solicitarUbicacionActual() },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.MyLocation, contentDescription = "Usar mi ubicación", tint = LoginPrimarioOscuro)
+                    if (state.obteniendoUbicacion) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = LoginPrimarioOscuro,
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Icon(Icons.Filled.MyLocation, contentDescription = "Usar mi ubicación", tint = LoginPrimarioOscuro)
+                    }
                 }
+            }
+            if (state.errorUbicacion != null) {
+                Text(
+                    text = state.errorUbicacion,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
             }
 
             Spacer(modifier = Modifier.height(18.dp))
@@ -480,7 +522,7 @@ private fun OpcionTipoAtencion(
 }
 
 @Composable
-private fun FilaServiciosCercaDeTi(onAction: (SearchAction) -> Unit) {
+private fun FilaServiciosCercaDeTi(ubicacion: String, onAction: (SearchAction) -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -494,7 +536,7 @@ private fun FilaServiciosCercaDeTi(onAction: (SearchAction) -> Unit) {
                 color = Color(0xFF16241C),
             )
             Text(
-                text = "Disponibilidad en Providencia y alrededores",
+                text = "Disponibilidad en ${ubicacion.substringBefore(",")} y alrededores",
                 style = MaterialTheme.typography.bodyMedium,
                 color = LoginGrisTexto,
             )
