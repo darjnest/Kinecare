@@ -121,6 +121,19 @@ de Firebase (`firebase use qa` / `firebase use prod`) al proyecto correcto.
   nunca confiar en el rol que declara el cliente sin validarlo contra el
   documento de usuario.
 
+## Permisos en tiempo de ejecución
+- Cada permiso runtime se declara y solicita desde la feature que lo
+  necesita (no en `:app`), siguiendo la regla de "cada módulo declara solo
+  lo que usa de verdad".
+- Primer precedente: `:feature:search` declara
+  `ACCESS_FINE_LOCATION`/`ACCESS_COARSE_LOCATION` en su propio
+  `AndroidManifest.xml` y los solicita con
+  `rememberLauncherForActivityResult` desde el composable que los usa. La
+  ubicación se resuelve con Fused Location Provider (`play-services-location`)
+  + `Geocoder` de Android — no se agregó el SDK de Google Maps (ver
+  [TASKS.md](TASKS.md#fase-1--arquitectura-base) sobre Maps Compose, que
+  sigue diferido hasta que se necesite mostrar un mapa real).
+
 ## Persistencia local
 - **Room** (`:core:database`) solo para: caché offline de resultados de
   búsqueda, favoritos, borrador de reserva en progreso. No es la fuente de
