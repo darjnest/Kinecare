@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
@@ -58,6 +59,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -403,12 +405,13 @@ private fun TarjetaFiltros(
                 ) {
                     Icon(Icons.Filled.LocationOn, contentDescription = null, tint = LoginGrisTexto, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = state.ubicacion,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFF16241C),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                    BasicTextField(
+                        value = state.ubicacion,
+                        onValueChange = { onAction(SearchAction.CambiarUbicacionManual(it)) },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = Color(0xFF16241C)),
+                        cursorBrush = SolidColor(LoginPrimarioOscuro),
+                        modifier = Modifier.weight(1f),
                     )
                 }
                 Spacer(modifier = Modifier.width(10.dp))
@@ -534,7 +537,7 @@ private fun FilaServiciosCercaDeTi(ubicacion: String, onAction: (SearchAction) -
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = "Servicios cerca de ti",
                 style = MaterialTheme.typography.titleMedium,
@@ -545,8 +548,11 @@ private fun FilaServiciosCercaDeTi(ubicacion: String, onAction: (SearchAction) -
                 text = "Disponibilidad en ${ubicacion.substringBefore(",")} y alrededores",
                 style = MaterialTheme.typography.bodyMedium,
                 color = LoginGrisTexto,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
+        Spacer(modifier = Modifier.width(12.dp))
         Text(
             text = "Ver todos",
             style = MaterialTheme.typography.bodyMedium,
