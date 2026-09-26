@@ -37,9 +37,6 @@ dependencies {
     implementation(project(":core:designsystem"))
     implementation(project(":core:network"))
 
-    implementation(platform(libs.firebase.bom))
-    implementation(libs.firebase.firestore)
-
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)

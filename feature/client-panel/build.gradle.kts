@@ -24,11 +24,30 @@ android {
     buildFeatures {
         compose = true
     }
+
+    testOptions {
+        unitTests {
+            isReturnDefaultValues = true
+        }
+    }
 }
 
 dependencies {
     implementation(project(":core:common"))
     implementation(project(":core:designsystem"))
+    // `UsuarioRepository`/`ClienteRepository`/`ProfesionalRepository`/
+    // `ReservaRepository` son interfaces de `:core:common`; sus
+    // implementaciones Firestore viven en `:core:network`
+    // (`FirestoreRepositoryModule`) y Hilt las agrega al grafo final de
+    // `:app` sin que esta feature defina su propio binding (ver
+    // docs/ARCHITECTURE.md). Esta dependencia solo habilita inyectar
+    // `FirebaseAuth` directo (resolver el uid del usuario autenticado; no
+    // hay `AuthRepository` compartido: las features nunca se dependen
+    // entre si) para los `ViewModel` que se conecten a estos repositorios.
+    implementation(project(":core:network"))
+
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.auth)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
@@ -47,4 +66,14 @@ dependencies {
     implementation(libs.hilt.android)
     implementation(libs.androidx.hilt.navigation.compose)
     ksp(libs.hilt.compiler)
+
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly(libs.junit.platform.launcher)
+    testImplementation(libs.mockk)
+    testImplementation(libs.turbine)
+    testImplementation(libs.kotlinx.coroutines.test)
+}
+
+tasks.withType<Test> {
+    useJUnitPlatform()
 }

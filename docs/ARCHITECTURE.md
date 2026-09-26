@@ -34,6 +34,7 @@ disponibilidad, reservas, pagos, verificación).
 :feature:payment
 :feature:verification
 :feature:professional-panel
+:feature:client-panel
 :feature:reviews
 ```
 
@@ -107,6 +108,20 @@ de Firebase (`firebase use qa` / `firebase use prod`) al proyecto correcto.
   nuevos sin plan Blaze. Subir a Blaze antes de la Fase 6.
 - Acceso a Firestore/Storage/Auth vía SDK directo; acceso a Cloud Functions
   HTTP vía Retrofit (`:core:network`).
+- **Repositorios de Firestore compartidos por 2+ features**: interfaz en
+  `:core:common` (`data/repository`, junto a su enum de error en
+  `data/error`) + implementación con el SDK de Firebase en `:core:network`
+  (`firebase/repository`), bindeados en `FirestoreRepositoryModule`
+  (`firebase/di`). Primer precedente: `UsuarioRepository` (`usuarios/{uid}`),
+  `ClienteRepository` (`clientes/{uid}`: direcciones/favoritos),
+  `ProfesionalRepository` (`profesionales/{uid}`, movido desde
+  `:feature:search` cuando `:feature:client-panel` también necesitó
+  resolver un profesional por id) y `ReservaRepository` (lectura de
+  `reservas` por cliente). Un repositorio que solo usa **una** feature
+  (ej. `UbicacionRepository` de `:feature:search`, que no toca Firestore)
+  se queda dentro de esa feature — no todo repositorio sube a `:core:*`,
+  solo el que 2+ features necesitan de verdad (sin abstracciones para
+  casos hipotéticos que no existen hoy).
 
 ## Seguridad
 - Pagos y cambios de estado de verificación se resuelven **siempre** en una

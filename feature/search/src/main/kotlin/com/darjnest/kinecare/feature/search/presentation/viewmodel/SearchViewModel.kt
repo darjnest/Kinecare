@@ -12,13 +12,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.darjnest.kinecare.core.common.data.repository.ProfesionalRepository
 import com.darjnest.kinecare.core.common.domain.model.EstadoVerificacion
 import com.darjnest.kinecare.core.common.domain.model.Profesional
 import com.darjnest.kinecare.core.common.result.Result
 import com.darjnest.kinecare.core.designsystem.theme.LoginAzulSuave
 import com.darjnest.kinecare.core.designsystem.theme.LoginMenta
 import com.darjnest.kinecare.core.designsystem.theme.LoginMentaSuave
-import com.darjnest.kinecare.feature.search.data.repository.ProfesionalRepository
 import com.darjnest.kinecare.feature.search.data.repository.UbicacionRepository
 import com.darjnest.kinecare.feature.search.domain.UbicacionError
 import dagger.hilt.android.lifecycle.HiltViewModel

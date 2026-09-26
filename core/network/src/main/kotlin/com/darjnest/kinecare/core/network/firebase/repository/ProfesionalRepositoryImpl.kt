@@ -1,19 +1,18 @@
 @file:OptIn(kotlin.time.ExperimentalTime::class)
 
-package com.darjnest.kinecare.feature.search.data.repository_impl
+package com.darjnest.kinecare.core.network.firebase.repository
 
+import com.darjnest.kinecare.core.common.data.error.ProfesionalError
+import com.darjnest.kinecare.core.common.data.repository.ProfesionalRepository
+import com.darjnest.kinecare.core.common.data.repository.UsuarioRepository
 import com.darjnest.kinecare.core.common.domain.model.Disponibilidad
 import com.darjnest.kinecare.core.common.domain.model.EstadoVerificacion
 import com.darjnest.kinecare.core.common.domain.model.Insignia
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
 import com.darjnest.kinecare.core.common.domain.model.Profesional
-import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.domain.model.Servicio
 import com.darjnest.kinecare.core.common.domain.model.TipoInsignia
-import com.darjnest.kinecare.core.common.domain.model.Usuario
 import com.darjnest.kinecare.core.common.result.Result
-import com.darjnest.kinecare.feature.search.data.repository.ProfesionalRepository
-import com.darjnest.kinecare.feature.search.domain.ProfesionalError
 import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
@@ -26,11 +25,19 @@ import javax.inject.Inject
 import kotlin.time.Clock
 
 private const val COLECCION_PROFESIONALES = "profesionales"
-private const val COLECCION_USUARIOS = "usuarios"
 private const val SUBCOLECCION_SERVICIOS = "servicios"
 
+/**
+ * Implementacion Firestore de `profesionales/{usuarioId}` (docs/DATA_MODEL.md).
+ * Movida desde `:feature:search` a `:core:network` (ver docs/ARCHITECTURE.md):
+ * `:feature:client-panel` tambien necesita resolver un profesional por id
+ * (pantalla de Favoritos) y las features nunca se dependen entre si.
+ * Reusa [UsuarioRepository] para el `Usuario` 1:1 en vez de repetir el
+ * mapeo de `usuarios/{id}`.
+ */
 class ProfesionalRepositoryImpl @Inject constructor(
     private val firestore: FirebaseFirestore,
+    private val usuarioRepository: UsuarioRepository,
 ) : ProfesionalRepository {
 
     override suspend fun buscarPorEspecialidad(especialidad: String): Result<List<Profesional>, ProfesionalError> {
@@ -51,9 +58,25 @@ class ProfesionalRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun obtenerPorId(id: String): Result<Profesional, ProfesionalError> {
+        return try {
+            val doc = firestore.collection(COLECCION_PROFESIONALES).document(id).get().await()
+            val profesional = doc.aProfesionalONull() ?: return Result.Error(ProfesionalError.NO_ENCONTRADO)
+            Result.Success(profesional)
+        } catch (e: FirebaseNetworkException) {
+            Result.Error(ProfesionalError.SIN_INTERNET)
+        } catch (e: Exception) {
+            Result.Error(ProfesionalError.DESCONOCIDO)
+        }
+    }
+
     private suspend fun DocumentSnapshot.aProfesionalONull(): Profesional? {
         if (!exists()) return null
-        val usuario = obtenerUsuario(id) ?: return null
+        // Si `usuarios/{id}` no se puede resolver (borrado, red caida al
+        // resolverlo puntualmente), se descarta este profesional en vez de
+        // abortar todo el listado — degradacion elegante, igual criterio
+        // que una insignia/disponibilidad con datos corruptos mas abajo.
+        val usuario = (usuarioRepository.obtenerPorId(id) as? Result.Success)?.data ?: return null
 
         @Suppress("UNCHECKED_CAST")
         val especialidades = (get("especialidades") as? List<Any?>)
@@ -83,23 +106,6 @@ class ProfesionalRepositoryImpl @Inject constructor(
             estadoVerificacionGeneral = runCatching {
                 EstadoVerificacion.valueOf(getString("estadoVerificacionGeneral") ?: "")
             }.getOrDefault(EstadoVerificacion.NO_SOLICITADO),
-        )
-    }
-
-    private suspend fun obtenerUsuario(uid: String): Usuario? {
-        val doc = firestore.collection(COLECCION_USUARIOS).document(uid).get().await()
-        if (!doc.exists()) return null
-        return Usuario(
-            id = uid,
-            nombre = doc.getString("nombre") ?: "",
-            rut = doc.getString("rut") ?: "",
-            email = doc.getString("email") ?: "",
-            correoContacto = doc.getString("correoContacto"),
-            telefono = doc.getString("telefono"),
-            rol = runCatching { RolUsuario.valueOf(doc.getString("rol") ?: "") }.getOrDefault(RolUsuario.PROFESIONAL),
-            fotoUrl = doc.getString("fotoUrl"),
-            fechaRegistro = doc.getTimestamp("fechaRegistro")?.let { Instant.fromEpochMilliseconds(it.toDate().time) }
-                ?: Clock.System.now(),
         )
     }
 

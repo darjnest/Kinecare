@@ -21,6 +21,14 @@
       "collectionGroup": "reservas",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "clienteId", "order": "ASCENDING" },
+        { "fieldPath": "fechaHora", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reservas",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "profesionalId", "order": "ASCENDING" },
         { "fieldPath": "estado", "order": "ASCENDING" },
         { "fieldPath": "fechaHora", "order": "DESCENDING" }

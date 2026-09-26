@@ -3,6 +3,8 @@
 package com.darjnest.kinecare.feature.search.presentation.viewmodel
 
 import app.cash.turbine.test
+import com.darjnest.kinecare.core.common.data.error.ProfesionalError
+import com.darjnest.kinecare.core.common.data.repository.ProfesionalRepository
 import com.darjnest.kinecare.core.common.domain.model.EstadoVerificacion
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
 import com.darjnest.kinecare.core.common.domain.model.Profesional
@@ -10,9 +12,7 @@ import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.domain.model.Servicio
 import com.darjnest.kinecare.core.common.domain.model.Usuario
 import com.darjnest.kinecare.core.common.result.Result
-import com.darjnest.kinecare.feature.search.data.repository.ProfesionalRepository
 import com.darjnest.kinecare.feature.search.data.repository.UbicacionRepository
-import com.darjnest.kinecare.feature.search.domain.ProfesionalError
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk

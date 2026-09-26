@@ -71,7 +71,14 @@ creadoEn: timestamp
 actualizadoEn: timestamp
 ```
 Índices compuestos sugeridos: `clienteId` + `estado` + `fechaHora` (desc);
-`profesionalId` + `estado` + `fechaHora` (desc).
+`profesionalId` + `estado` + `fechaHora` (desc) — ya desplegados (Fase 2).
+Además `clienteId` (asc) + `fechaHora` (desc) sin filtro de `estado` — lo
+usa `ReservaRepository.obtenerPorCliente` (`:core:network`) para "Mis
+Citas" del Cliente, que hoy no filtra por estado en la consulta (la pestaña
+Próximas/Historial/Canceladas se resuelve en el `ViewModel` sobre la lista
+completa); declarado en `firestore.indexes.json` en este cambio pero
+**no confirmado como desplegado** — no se verificó contra el proyecto
+Firebase real (sin acceso a Firebase MCP en esta sesión).
 
 ### `pagos/{pagoId}`
 ```

@@ -34,6 +34,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,18 +64,28 @@ fun InformacionPersonalClienteRoot(
     onVolver: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+
+    // Guardar Cambios es asincronico (escribe en `usuarios/{uid}`): solo
+    // volvemos atras cuando el ViewModel confirma el guardado exitoso, en
+    // vez de navegar de inmediato. Mismo patron que ya usa `AuthViewModel`
+    // (expone el resultado en el estado y el Root reacciona con
+    // `LaunchedEffect`; no hay un `Flow<Event>` separado en el proyecto).
+    LaunchedEffect(state.guardadoExitoso) {
+        if (state.guardadoExitoso) onVolver()
+    }
+
     InformacionPersonalClienteScreen(
         state = state,
         onAction = { accion ->
-            // Volver atras y guardar cambios son navegacion, no estado del
-            // ViewModel: el Root las resuelve directo contra el NavGraph
-            // (ver ClientPanelNavGraph). Sin backend de perfil cliente
-            // conectado todavia, "guardar" simplemente vuelve a Mi Perfil.
-            when (accion) {
-                InformacionPersonalClienteAction.VolverAtras,
-                InformacionPersonalClienteAction.GuardarCambios,
-                -> onVolver()
-                else -> viewModel.onAction(accion)
+            // Volver atras es navegacion pura (nada que guardar): el Root
+            // la resuelve directo contra el NavGraph (ver
+            // ClientPanelNavGraph). Guardar Cambios si pasa por el
+            // ViewModel para escribir sobre el `Usuario` real antes de
+            // volver (ver el `LaunchedEffect` de arriba).
+            if (accion == InformacionPersonalClienteAction.VolverAtras) {
+                onVolver()
+            } else {
+                viewModel.onAction(accion)
             }
         },
         modifier = modifier,
