@@ -85,6 +85,7 @@ sealed interface SearchAction {
     data class CambiarModalidad(val modalidad: ModalidadAtencion) : SearchAction
     data class CambiarSoloVerificados(val activo: Boolean) : SearchAction
     data object ObtenerUbicacionActual : SearchAction
+    data class CambiarUbicacionManual(val texto: String) : SearchAction
     data object Buscar : SearchAction
     data object VerTodasLasCategorias : SearchAction
     data class SeleccionarCategoria(val categoriaId: String) : SearchAction
@@ -233,6 +234,9 @@ class SearchViewModel @Inject constructor(
             is SearchAction.CambiarModalidad -> _state.update { it.copy(modalidad = action.modalidad) }
             is SearchAction.CambiarSoloVerificados -> _state.update { it.copy(soloVerificados = action.activo) }
             SearchAction.ObtenerUbicacionActual -> obtenerUbicacionActual()
+            is SearchAction.CambiarUbicacionManual -> _state.update {
+                it.copy(ubicacion = action.texto, errorUbicacion = null)
+            }
             // Buscar, ver todos, seleccionar categoria/profesional: sin backend ni
             // navegacion todavia (no hay datos reales en Firestore) — se conectan
             // cuando la feature salga de esta fase.
