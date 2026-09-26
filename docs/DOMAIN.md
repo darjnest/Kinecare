@@ -44,6 +44,7 @@ Extiende `Usuario`. Datos propios del rol cliente.
 ### Profesional
 Extiende `Usuario`. Es la entidad más rica del dominio.
 - `especialidades: List<String>` (kinesiología, masoterapia, etc.)
+- `rnpi: String`
 - `servicios: List<Servicio>`
 - `insignias: List<Insignia>`
 - `disponibilidad: List<Disponibilidad>`

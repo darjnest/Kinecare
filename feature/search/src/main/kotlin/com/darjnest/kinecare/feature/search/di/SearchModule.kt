@@ -1,7 +1,9 @@
 package com.darjnest.kinecare.feature.search.di
 
 import android.content.Context
+import com.darjnest.kinecare.feature.search.data.repository.ProfesionalRepository
 import com.darjnest.kinecare.feature.search.data.repository.UbicacionRepository
+import com.darjnest.kinecare.feature.search.data.repository_impl.ProfesionalRepositoryImpl
 import com.darjnest.kinecare.feature.search.data.repository_impl.UbicacionRepositoryImpl
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
@@ -20,6 +22,10 @@ abstract class SearchModule {
     @Binds
     @Singleton
     abstract fun bindUbicacionRepository(impl: UbicacionRepositoryImpl): UbicacionRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindProfesionalRepository(impl: ProfesionalRepositoryImpl): ProfesionalRepository
 
     companion object {
         @Provides

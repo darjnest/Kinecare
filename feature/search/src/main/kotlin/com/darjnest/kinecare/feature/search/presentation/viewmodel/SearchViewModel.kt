@@ -12,10 +12,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.darjnest.kinecare.core.common.domain.model.EstadoVerificacion
+import com.darjnest.kinecare.core.common.domain.model.Profesional
 import com.darjnest.kinecare.core.common.result.Result
 import com.darjnest.kinecare.core.designsystem.theme.LoginAzulSuave
 import com.darjnest.kinecare.core.designsystem.theme.LoginMenta
 import com.darjnest.kinecare.core.designsystem.theme.LoginMentaSuave
+import com.darjnest.kinecare.feature.search.data.repository.ProfesionalRepository
 import com.darjnest.kinecare.feature.search.data.repository.UbicacionRepository
 import com.darjnest.kinecare.feature.search.domain.UbicacionError
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -73,7 +76,8 @@ data class SearchState(
     val obteniendoUbicacion: Boolean = false,
     val errorUbicacion: String? = null,
     val categorias: List<CategoriaServicio> = categoriasPara(TipoAtencion.KINESIOLOGIA),
-    val profesionalesDestacados: List<ProfesionalDestacado> = profesionalesPara(TipoAtencion.KINESIOLOGIA),
+    val profesionalesDestacados: List<ProfesionalDestacado> = emptyList(),
+    val cargandoProfesionales: Boolean = false,
 )
 
 sealed interface SearchAction {
@@ -88,10 +92,9 @@ sealed interface SearchAction {
 }
 
 /**
- * Categorias y profesionales de muestra (mock local, sin conexion a
- * Firestore todavia — ver docs/TASKS.md Fase 2), separadas por
- * [TipoAtencion] para que el selector segmentado de la tarjeta de filtros
- * cambie de verdad lo que se muestra.
+ * Categorias de vitrina de muestra (mock local, puramente de presentacion —
+ * no vive en Firestore), separadas por [TipoAtencion] para que el selector
+ * segmentado de la tarjeta de filtros cambie de verdad lo que se muestra.
  */
 private fun categoriasPara(tipo: TipoAtencion): List<CategoriaServicio> = when (tipo) {
     TipoAtencion.KINESIOLOGIA -> listOf(
@@ -172,72 +175,30 @@ private fun categoriasPara(tipo: TipoAtencion): List<CategoriaServicio> = when (
     )
 }
 
-private fun profesionalesPara(tipo: TipoAtencion): List<ProfesionalDestacado> = when (tipo) {
-    TipoAtencion.KINESIOLOGIA -> listOf(
-        ProfesionalDestacado(
-            id = "prof-javiera-munoz",
-            nombre = "Javiera Muñoz",
-            rnpi = "RNPI 24.881",
-            especialidad = "Kinesióloga deportiva",
-            calificacion = 4.9,
-            totalResenas = 128,
-            precioDesde = 18000,
-            verificado = true,
-        ),
-        ProfesionalDestacado(
-            id = "prof-tomas-reyes",
-            nombre = "Tomás Reyes",
-            rnpi = "RNPI 19.204",
-            especialidad = "Rehabilitación traumatológica",
-            calificacion = 4.8,
-            totalResenas = 94,
-            precioDesde = 20000,
-            verificado = true,
-        ),
-        ProfesionalDestacado(
-            id = "prof-camila-soto",
-            nombre = "Camila Soto",
-            rnpi = "RNPI 27.115",
-            especialidad = "Kinesióloga respiratoria",
-            calificacion = 4.7,
-            totalResenas = 61,
-            precioDesde = 17000,
-            verificado = false,
-        ),
-    )
-    TipoAtencion.MASOTERAPIA -> listOf(
-        ProfesionalDestacado(
-            id = "prof-valentina-rojas",
-            nombre = "Valentina Rojas",
-            rnpi = "RNPI 15.732",
-            especialidad = "Masoterapeuta deportiva",
-            calificacion = 4.9,
-            totalResenas = 142,
-            precioDesde = 16000,
-            verificado = true,
-        ),
-        ProfesionalDestacado(
-            id = "prof-ignacio-fuentes",
-            nombre = "Ignacio Fuentes",
-            rnpi = "RNPI 21.048",
-            especialidad = "Drenaje linfático",
-            calificacion = 4.6,
-            totalResenas = 53,
-            precioDesde = 15000,
-            verificado = true,
-        ),
-        ProfesionalDestacado(
-            id = "prof-daniela-contreras",
-            nombre = "Daniela Contreras",
-            rnpi = "RNPI 23.590",
-            especialidad = "Reflexología podal",
-            calificacion = 4.5,
-            totalResenas = 37,
-            precioDesde = 14000,
-            verificado = false,
-        ),
-    )
+/**
+ * Nombre de categoria legible para el segundo tag (no general) de
+ * [Profesional.especialidades] — busca el mismo catalogo de vitrina usado en
+ * [categoriasPara] para no duplicar textos. Si no hay match (dato sembrado
+ * fuera del catalogo), cae a la descripcion libre del profesional.
+ */
+private fun Profesional.especialidadLegible(): String {
+    val categoriasConocidas = categoriasPara(TipoAtencion.KINESIOLOGIA) + categoriasPara(TipoAtencion.MASOTERAPIA)
+    val tagCategoria = especialidades.firstOrNull { tag -> TipoAtencion.entries.none { it.name == tag } }
+    val nombreCategoria = categoriasConocidas.firstOrNull { it.id == tagCategoria }?.nombre
+    return nombreCategoria ?: descripcion.ifBlank { especialidades.firstOrNull().orEmpty() }
 }
+
+/** Mapea el `Profesional` de dominio al modelo reducido de la tarjeta de inicio. */
+private fun Profesional.aProfesionalDestacado(): ProfesionalDestacado = ProfesionalDestacado(
+    id = usuario.id,
+    nombre = usuario.nombre,
+    rnpi = rnpi,
+    especialidad = especialidadLegible(),
+    calificacion = calificacionPromedio,
+    totalResenas = totalResenas,
+    precioDesde = servicios.minOfOrNull { it.precio } ?: 0L,
+    verificado = estadoVerificacionGeneral == EstadoVerificacion.APROBADO,
+)
 
 private fun UbicacionError.aMensaje(): String = when (this) {
     UbicacionError.PERMISO_DENEGADO -> "Necesitamos el permiso de ubicación para mostrarte lo más cercano."
@@ -248,19 +209,26 @@ private fun UbicacionError.aMensaje(): String = when (this) {
 @HiltViewModel
 class SearchViewModel @Inject constructor(
     private val ubicacionRepository: UbicacionRepository,
+    private val profesionalRepository: ProfesionalRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SearchState())
     val state: StateFlow<SearchState> = _state.asStateFlow()
 
+    init {
+        cargarProfesionalesDestacados(SearchState().tipoAtencion)
+    }
+
     fun onAction(action: SearchAction) {
         when (action) {
-            is SearchAction.CambiarTipoAtencion -> _state.update {
-                it.copy(
-                    tipoAtencion = action.tipo,
-                    categorias = categoriasPara(action.tipo),
-                    profesionalesDestacados = profesionalesPara(action.tipo),
-                )
+            is SearchAction.CambiarTipoAtencion -> {
+                _state.update {
+                    it.copy(
+                        tipoAtencion = action.tipo,
+                        categorias = categoriasPara(action.tipo),
+                    )
+                }
+                cargarProfesionalesDestacados(action.tipo)
             }
             is SearchAction.CambiarModalidad -> _state.update { it.copy(modalidad = action.modalidad) }
             is SearchAction.CambiarSoloVerificados -> _state.update { it.copy(soloVerificados = action.activo) }
@@ -273,6 +241,23 @@ class SearchViewModel @Inject constructor(
             is SearchAction.SeleccionarCategoria,
             is SearchAction.SeleccionarProfesional,
             -> Unit
+        }
+    }
+
+    private fun cargarProfesionalesDestacados(tipo: TipoAtencion) {
+        viewModelScope.launch {
+            _state.update { it.copy(cargandoProfesionales = true) }
+            when (val resultado = profesionalRepository.buscarPorEspecialidad(tipo.name)) {
+                is Result.Success -> _state.update {
+                    it.copy(
+                        cargandoProfesionales = false,
+                        profesionalesDestacados = resultado.data.map { profesional -> profesional.aProfesionalDestacado() },
+                    )
+                }
+                is Result.Error -> _state.update {
+                    it.copy(cargandoProfesionales = false, profesionalesDestacados = emptyList())
+                }
+            }
         }
     }
 
