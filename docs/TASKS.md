@@ -61,8 +61,25 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       comuna/región con Fused Location Provider + `Geocoder` de Android
       (`UbicacionRepository`/`UbicacionRepositoryImpl`, sin Google Maps
       SDK — ver nota de la Fase 1 sobre Maps Compose)
-- [ ] Firestore: colección `profesionales` real con datos (hoy no hay
-      ningún profesional cargado, ni pantalla que los liste)
+- [x] Firestore: colección `profesionales` real con datos — 6 profesionales
+      de muestra sembrados en el proyecto QA (`kinecare-cl-qa`: 3
+      Kinesiología + 3 Masoterapia, con `usuarios/{id}` + `profesionales/{id}`
+      + subcolección `servicios`), usando los índices/Security Rules ya
+      desplegados. Nuevo campo de dominio `Profesional.rnpi` (Registro
+      Nacional de Prestadores Individuales de Salud, documentado en
+      [DATA_MODEL.md](DATA_MODEL.md) y [DOMAIN.md](DOMAIN.md)).
+      `:feature:search` ya no usa datos de muestra locales para
+      `profesionalesDestacados`: `ProfesionalRepository`/
+      `ProfesionalRepositoryImpl` (patrón igual a `AuthRepositoryImpl`,
+      sin capa DTO) consulta `profesionales` por `especialidades`
+      (array-contains) ordenado por `calificacionPromedio`, y
+      `SearchViewModel` carga los resultados de forma async al iniciar y al
+      cambiar el selector Kinesiología/Masoterapia (`cargandoProfesionales`
+      + spinner en `SearchScreen`). `categoriasPara()` (vitrina con
+      ícono/color) sigue siendo mock local — es un concepto de presentación
+      que no vive en Firestore. Primeros tests de repositorio y de
+      ViewModel del proyecto (JUnit5 + MockK + Turbine, precedente de
+      convención para el resto de `:feature:*`).
 - [ ] Storage: **bloqueado** — Firebase Storage ya no se puede inicializar
       en proyectos nuevos con plan Spark (Google lo restringió a Blaze).
       Hay que subir a Blaze antes de la Fase 6 (fotos de perfil,

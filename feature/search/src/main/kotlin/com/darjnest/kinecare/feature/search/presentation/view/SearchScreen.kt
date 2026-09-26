@@ -173,9 +173,15 @@ fun SearchScreen(
                 FilaDestacadosTitulo()
 
                 Spacer(modifier = Modifier.height(12.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    state.profesionalesDestacados.forEach { profesional ->
-                        TarjetaProfesionalDestacado(profesional = profesional, onAction = onAction)
+                if (state.cargandoProfesionales) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = LoginPrimarioOscuro)
+                    }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        state.profesionalesDestacados.forEach { profesional ->
+                            TarjetaProfesionalDestacado(profesional = profesional, onAction = onAction)
+                        }
                     }
                 }
 

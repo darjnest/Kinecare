@@ -33,6 +33,7 @@ favoritos: array<string>            // ids de profesionales
 ### `profesionales/{usuarioId}` (doc 1:1 con `usuarios`)
 ```
 especialidades: array<string>
+rnpi: string                         // Registro Nacional de Prestadores Individuales de Salud
 descripcion: string
 calificacionPromedio: number
 totalResenas: number
