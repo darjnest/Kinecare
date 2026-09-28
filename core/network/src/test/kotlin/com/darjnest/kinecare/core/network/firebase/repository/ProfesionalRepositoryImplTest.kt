@@ -334,6 +334,7 @@ class ProfesionalRepositoryImplTest {
         every { doc.getString(any()) } answers { data[firstArg()] as? String }
         every { doc.getDouble(any()) } answers { data[firstArg()] as? Double }
         every { doc.getLong(any()) } answers { data[firstArg()] as? Long }
+        every { doc.getBoolean(any()) } answers { data[firstArg()] as? Boolean }
         every { doc.getTimestamp(any()) } answers { data[firstArg()] as? Timestamp }
         return doc
     }

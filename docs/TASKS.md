@@ -200,10 +200,27 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       finanzas, documentos y validación, y mi perfil profesional — fieles a
       los mockups de producto; cada una con su propio `State`/`Action`/
       `ViewModel` (datos parten vacíos/nulos, sin conexión a Firestore
-      todavía) y ruta registrada en `professional_panelGraph()`. Pendiente:
-      conectar cada pantalla a Firestore/Cloud Functions y enlazar la
+      todavía) y ruta registrada en `professional_panelGraph()`. La
       navegación desde los accesos de gestión y la barra inferior del
-      dashboard hacia estas rutas.
+      dashboard hacia estas rutas ya está enlazada. Pendiente: conectar a
+      Firestore/Cloud Functions las pantallas de disponibilidad,
+      solicitudes, liquidaciones, documentos, mi perfil y el dashboard.
+- [x] `:feature:professional-panel` — **Servicios y tarifas** conectada a
+      Firestore (`profesionales/{uid}/servicios`): nuevo
+      `ServicioRepository` (`obtenerPorProfesional`, `actualizarActivo`;
+      interfaz en `:core:common`, impl en `:core:network`, 4 tests) y
+      `ServiciosYTarifasViewModel` que carga el catálogo real, calcula el
+      resumen (servicios activos y tarifa promedio, solo con los activos) y
+      persiste el interruptor activo/pausado con UI optimista que revierte
+      si falla (5 tests). `Servicio` de dominio gana `activo: Boolean =
+      true` (ya existía en Firestore, ver DATA_MODEL.md). Decisiones de
+      mapeo: `modalidades` con un solo elemento (el dominio tiene una
+      `modalidad`), `reembolsableIsapreFonasa`/`notaInferior` fijos en
+      `false`/`null` y `region` vacío (sin esos datos en Firestore). Fuera
+      de alcance: agregar/editar un servicio (falta el formulario en los
+      mockups). **Pendiente a decidir:** `ProfesionalRepository.obtenerPorId`
+      (vista del cliente) hoy incluye los servicios pausados; filtrarlos
+      pertenece al flujo de reserva (Fase 4).
 
 ## Fase 8 — QA, pulido y publicación
 - [ ] Cobertura de tests (JUnit5, MockK, Turbine, Compose UI Testing)

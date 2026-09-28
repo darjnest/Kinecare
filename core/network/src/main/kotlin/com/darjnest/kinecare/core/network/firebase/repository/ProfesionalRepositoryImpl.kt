@@ -129,6 +129,7 @@ class ProfesionalRepositoryImpl @Inject constructor(
             }.getOrDefault(ModalidadServicio.CONSULTA),
             duracionMinutos = getLong("duracionMinutos")?.toInt() ?: 0,
             precio = getLong("precio") ?: 0L,
+            activo = getBoolean("activo") ?: true,
         )
     }
 

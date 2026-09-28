@@ -74,6 +74,8 @@ Ofrecido por un `Profesional`.
 - `modalidad: ModalidadServicio` (`DOMICILIO`, `CONSULTA`, `ONLINE`)
 - `duracionMinutos: Int`
 - `precio: Long` (CLP, sin decimales)
+- `activo: Boolean` (el profesional puede pausar un servicio sin borrarlo; por
+  defecto `true`)
 
 ## Reserva
 Núcleo transaccional del marketplace.

@@ -24,11 +24,27 @@ android {
     buildFeatures {
         compose = true
     }
+
+    testOptions {
+        unitTests {
+            isReturnDefaultValues = true
+        }
+    }
 }
 
 dependencies {
     implementation(project(":core:common"))
     implementation(project(":core:designsystem"))
+    // `ServicioRepository` es una interfaz de `:core:common`; su
+    // implementacion Firestore vive en `:core:network`
+    // (`FirestoreRepositoryModule`) y Hilt la agrega al grafo de `:app`.
+    // Esta dependencia solo habilita inyectar `FirebaseAuth` para resolver
+    // el uid del profesional autenticado (mismo patron que
+    // `:feature:client-panel`).
+    implementation(project(":core:network"))
+
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.auth)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
@@ -47,4 +63,14 @@ dependencies {
     implementation(libs.hilt.android)
     implementation(libs.androidx.hilt.navigation.compose)
     ksp(libs.hilt.compiler)
+
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly(libs.junit.platform.launcher)
+    testImplementation(libs.mockk)
+    testImplementation(libs.turbine)
+    testImplementation(libs.kotlinx.coroutines.test)
+}
+
+tasks.withType<Test> {
+    useJUnitPlatform()
 }
