@@ -83,11 +83,20 @@ fun FavoritosRoot(
     onIrAExplorar: () -> Unit = {},
     onIrAMisCitas: () -> Unit = {},
     onIrAMiPerfil: () -> Unit = {},
+    onProfesionalClick: (String) -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     FavoritosScreen(
         state = state,
-        onAction = viewModel::onAction,
+        onAction = { accion ->
+            // Abrir el perfil es navegacion, no estado del ViewModel: el Root
+            // la resuelve contra el NavGraph.
+            if (accion is FavoritosAction.VerPerfil) {
+                onProfesionalClick(accion.profesionalId)
+            } else {
+                viewModel.onAction(accion)
+            }
+        },
         onIrAExplorar = onIrAExplorar,
         onIrAMisCitas = onIrAMisCitas,
         onIrAMiPerfil = onIrAMiPerfil,
@@ -379,7 +388,9 @@ private fun TarjetaFavoritoDestacado(
     onAction: (FavoritosAction) -> Unit,
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onAction(FavoritosAction.VerPerfil(favorito.id)) },
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
@@ -595,7 +606,9 @@ private fun TarjetaFavoritoSecundario(
     onAction: (FavoritosAction) -> Unit,
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onAction(FavoritosAction.VerPerfil(favorito.id)) },
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),

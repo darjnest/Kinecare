@@ -63,6 +63,13 @@ duplicada entre módulos.
 - Rutas tipadas (`@Serializable data class` por destino) definidas junto a
   cada feature; el grafo de cada feature se expone como una función
   `NavGraphBuilder.xxxGraph(...)` que `:app` ensambla.
+- Argumentos de navegación: van como propiedades de la ruta
+  (`ProfessionalProfileRoute(val profesionalId: String)`) y el `ViewModel`
+  los lee del `SavedStateHandle` por nombre de propiedad (constante junto a
+  la ruta), no con `toRoute`, para poder probarlo en tests JVM. Navegar
+  entre features nunca importa la ruta de otra feature desde una feature:
+  el `Root` expone un callback (`onProfesionalClick: (String) -> Unit`) y
+  `:app` hace el `navController.navigate(...)`.
 
 ## Backend: Firebase
 Dos proyectos Firebase separados (cuenta crasd69@gmail.com, plan Spark por

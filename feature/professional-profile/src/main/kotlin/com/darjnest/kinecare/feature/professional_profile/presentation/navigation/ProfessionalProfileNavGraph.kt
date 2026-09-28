@@ -4,8 +4,10 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import com.darjnest.kinecare.feature.professional_profile.presentation.view.ProfessionalProfileRoot
 
-fun NavGraphBuilder.professional_profileGraph() {
+fun NavGraphBuilder.professional_profileGraph(
+    onVolver: () -> Unit = {},
+) {
     composable<ProfessionalProfileRoute> {
-        ProfessionalProfileRoot()
+        ProfessionalProfileRoot(onVolver = onVolver)
     }
 }

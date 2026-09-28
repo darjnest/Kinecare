@@ -9,6 +9,7 @@ fun NavGraphBuilder.searchGraph(
     onIrAMisCitas: () -> Unit = {},
     onIrAFavoritos: () -> Unit = {},
     onIrAMiPerfil: () -> Unit = {},
+    onProfesionalClick: (String) -> Unit = {},
 ) {
     composable<SearchRoute> {
         SearchRoot(
@@ -16,6 +17,7 @@ fun NavGraphBuilder.searchGraph(
             onIrAMisCitas = onIrAMisCitas,
             onIrAFavoritos = onIrAFavoritos,
             onIrAMiPerfil = onIrAMiPerfil,
+            onProfesionalClick = onProfesionalClick,
         )
     }
 }

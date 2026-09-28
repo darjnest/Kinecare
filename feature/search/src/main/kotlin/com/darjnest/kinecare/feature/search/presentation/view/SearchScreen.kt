@@ -100,11 +100,20 @@ fun SearchRoot(
     onIrAMisCitas: () -> Unit = {},
     onIrAFavoritos: () -> Unit = {},
     onIrAMiPerfil: () -> Unit = {},
+    onProfesionalClick: (String) -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     SearchScreen(
         state = state,
-        onAction = viewModel::onAction,
+        onAction = { accion ->
+            // Abrir el perfil es navegacion, no estado del ViewModel: el Root
+            // la resuelve contra el NavGraph.
+            if (accion is SearchAction.SeleccionarProfesional) {
+                onProfesionalClick(accion.profesionalId)
+            } else {
+                viewModel.onAction(accion)
+            }
+        },
         onCerrarSesion = onCerrarSesion,
         onIrAMisCitas = onIrAMisCitas,
         onIrAFavoritos = onIrAFavoritos,

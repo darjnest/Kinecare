@@ -170,7 +170,35 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       las tenía todavía.
 
 ## Fase 3 — Perfil profesional + reseñas
-- [ ] `:feature:professional-profile`: perfil con insignias expandibles
+- [x] `:feature:professional-profile`: perfil público del profesional
+      (vista del Cliente) con insignias expandibles, conectado a
+      `ProfesionalRepository.obtenerPorId` (`:core:common`, impl Firestore
+      en `:core:network`; la feature solo depende de `:core:common` y
+      `:core:designsystem`). `ProfessionalProfileRoute(profesionalId)` es la
+      primera ruta con argumento del proyecto: el `ViewModel` lo lee del
+      `SavedStateHandle` (clave `ARG_PROFESIONAL_ID`, con un test que la
+      ata al nombre de la propiedad de la ruta) en vez de `toRoute`, que
+      necesita un `Bundle` real y no corre en tests JVM. Estados de
+      carga/error/contenido; los tres `ProfesionalError` tienen mensaje
+      propio y acción "Reintentar". Entradas: tocar una tarjeta de
+      profesional destacado en `:feature:search` y una tarjeta de favorito
+      en `:feature:client-panel` (nuevo `FavoritosAction.VerPerfil`),
+      ambas por callback `onProfesionalClick` resuelto en el `Root` y
+      cableado en el `NavHost` de `:app` (el corazón de favoritos sigue
+      funcionando). Decisiones de mapeo: solo se muestran servicios con
+      `activo == true`; los cuatro `TipoInsignia` siempre aparecen (los que
+      faltan en `Profesional.insignias` van como `NO_SOLICITADO`); si una
+      insignia no trae `detalle`, la fila expandida muestra una explicación
+      neutra según el estado; la fila de calificación se oculta con
+      `totalResenas == 0`; "Acerca de", "Servicios" y "Horario de atención"
+      se ocultan si no hay datos; el horario agrupa solo los turnos
+      `Disponibilidad.activo` por día (lunes a domingo). Avatar con
+      iniciales (Storage bloqueado). Nuevos tokens `KineCareSpacing` en
+      `:core:designsystem`. 11 tests JUnit5/MockK/Turbine. **Fuera de
+      alcance:** botón "Reservar" (Fase 4), listado de reseñas (siguiente
+      ítem), mapa/zonas de atención. **No verificado visualmente** (sin
+      emulador/dispositivo disponible en el cambio); compila y pasa
+      `:app:assembleDebug`.
 - [ ] `:feature:reviews`: listado y creación de reseñas
 
 ## Fase 4 — Flujo de reserva
