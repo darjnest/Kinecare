@@ -15,6 +15,7 @@ fun NavGraphBuilder.client_panelGraph(
     onIrAFavoritos: () -> Unit = {},
     onIrAMiPerfil: () -> Unit = {},
     onCerrarSesion: () -> Unit = {},
+    onProfesionalClick: (String) -> Unit = {},
 ) {
     composable<MisCitasRoute> {
         MisCitasRoot(
@@ -25,6 +26,7 @@ fun NavGraphBuilder.client_panelGraph(
     }
     composable<FavoritosRoute> {
         FavoritosRoot(
+            onProfesionalClick = onProfesionalClick,
             onIrAExplorar = onIrAExplorar,
             onIrAMisCitas = onIrAMisCitas,
             onIrAMiPerfil = onIrAMiPerfil,

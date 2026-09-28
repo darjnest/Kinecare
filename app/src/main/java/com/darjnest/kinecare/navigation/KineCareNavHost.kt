@@ -18,6 +18,7 @@ import com.darjnest.kinecare.feature.client_panel.presentation.navigation.client
 import com.darjnest.kinecare.feature.payment.presentation.navigation.paymentGraph
 import com.darjnest.kinecare.feature.professional_panel.presentation.navigation.ProfessionalPanelRoute
 import com.darjnest.kinecare.feature.professional_panel.presentation.navigation.professional_panelGraph
+import com.darjnest.kinecare.feature.professional_profile.presentation.navigation.ProfessionalProfileRoute
 import com.darjnest.kinecare.feature.professional_profile.presentation.navigation.professional_profileGraph
 import com.darjnest.kinecare.feature.reviews.presentation.navigation.reviewsGraph
 import com.darjnest.kinecare.feature.search.presentation.navigation.SearchRoute
@@ -58,7 +59,11 @@ fun KineCareNavHost(modifier: Modifier = Modifier) {
                 popUpTo(SearchRoute) { inclusive = true }
             }
         }
+        val onProfesionalClick: (String) -> Unit = { profesionalId ->
+            navController.navigate(ProfessionalProfileRoute(profesionalId))
+        }
         searchGraph(
+            onProfesionalClick = onProfesionalClick,
             onCerrarSesion = onCerrarSesionCliente,
             onIrAMisCitas = { navController.navigate(MisCitasRoute) { launchSingleTop = true } },
             onIrAFavoritos = { navController.navigate(FavoritosRoute) { launchSingleTop = true } },
@@ -66,6 +71,7 @@ fun KineCareNavHost(modifier: Modifier = Modifier) {
         )
         client_panelGraph(
             navController = navController,
+            onProfesionalClick = onProfesionalClick,
             onIrAExplorar = { navController.navigate(SearchRoute) { launchSingleTop = true } },
             onIrAMisCitas = { navController.navigate(MisCitasRoute) { launchSingleTop = true } },
             onIrAFavoritos = { navController.navigate(FavoritosRoute) { launchSingleTop = true } },
@@ -78,7 +84,7 @@ fun KineCareNavHost(modifier: Modifier = Modifier) {
                 popUpTo(ProfessionalPanelRoute) { inclusive = true }
             }
         }
-        professional_profileGraph()
+        professional_profileGraph(onVolver = { navController.popBackStack() })
         bookingGraph()
         paymentGraph()
         verificationGraph()

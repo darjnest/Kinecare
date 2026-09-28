@@ -55,6 +55,9 @@ sealed interface FavoritosAction {
     data class SeleccionarFiltro(val filtro: FiltroFavoritos) : FavoritosAction
     data class QuitarDeFavoritos(val profesionalId: String) : FavoritosAction
     data class AgendarConProfesional(val profesionalId: String) : FavoritosAction
+
+    /** Navegacion al perfil publico: la resuelve el `Root` contra el NavGraph, no el ViewModel. */
+    data class VerPerfil(val profesionalId: String) : FavoritosAction
 }
 
 /**
@@ -115,6 +118,7 @@ class FavoritosViewModel @Inject constructor(
             // feature de Reserva, que no existe todavia (docs/TASKS.md,
             // Fase 4) — se conecta cuando la feature salga de esta fase.
             is FavoritosAction.AgendarConProfesional -> Unit
+            is FavoritosAction.VerPerfil -> Unit
         }
     }
 
