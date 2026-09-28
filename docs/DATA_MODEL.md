@@ -39,7 +39,9 @@ calificacionPromedio: number
 totalResenas: number
 estadoVerificacionGeneral: "PENDIENTE" | "APROBADO" | "RECHAZADO" | "NO_SOLICITADO"
 insignias: array<Insignia>           // subdocumento embebido (se lee junto al perfil)
-disponibilidad: array<Disponibilidad>
+disponibilidad: array<Disponibilidad>  // { diaSemana: "MONDAY".."SUNDAY", horaInicio: "HH:mm",
+                                       //   horaFin: "HH:mm", activo: boolean } — el dueno lo
+                                       //   reemplaza completo desde el panel profesional
 ubicacion: geopoint                  // para búsqueda por cercanía
 ```
 Índices compuestos sugeridos: `especialidades` (array-contains) +

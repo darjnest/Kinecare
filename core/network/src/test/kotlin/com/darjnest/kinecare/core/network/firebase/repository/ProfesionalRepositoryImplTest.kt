@@ -5,6 +5,7 @@ package com.darjnest.kinecare.core.network.firebase.repository
 import com.darjnest.kinecare.core.common.data.error.ProfesionalError
 import com.darjnest.kinecare.core.common.data.error.UsuarioError
 import com.darjnest.kinecare.core.common.data.repository.UsuarioRepository
+import com.darjnest.kinecare.core.common.domain.model.Disponibilidad
 import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.domain.model.Usuario
 import com.darjnest.kinecare.core.common.result.Result
@@ -22,9 +23,12 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
+import io.mockk.verify
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.test.runTest
+import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalTime
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -279,6 +283,78 @@ class ProfesionalRepositoryImplTest {
         assertEquals(ProfesionalError.NO_ENCONTRADO, (resultado as Result.Error).error)
     }
 
+    @Test
+    fun `actualizarDisponibilidad escribe solo el arreglo disponibilidad con horas HH-mm`() = runTest {
+        val profesionales = mockk<CollectionReference>()
+        val docRef = mockk<DocumentReference>()
+        every { firestore.collection(COLECCION_PROFESIONALES) } returns profesionales
+        every { profesionales.document("prof-1") } returns docRef
+        val task = mockk<Task<Void>>()
+        coEvery { task.await() } returns mockk()
+        val esperado = listOf(
+            mapOf("diaSemana" to "MONDAY", "horaInicio" to "09:00", "horaFin" to "13:30", "activo" to true),
+            mapOf("diaSemana" to "SATURDAY", "horaInicio" to "08:05", "horaFin" to "12:00", "activo" to false),
+        )
+        every { docRef.update("disponibilidad", esperado) } returns task
+
+        val resultado = repository.actualizarDisponibilidad(
+            "prof-1",
+            listOf(
+                Disponibilidad(DayOfWeek.MONDAY, LocalTime(9, 0), LocalTime(13, 30), activo = true),
+                Disponibilidad(DayOfWeek.SATURDAY, LocalTime(8, 5), LocalTime(12, 0), activo = false),
+            ),
+        )
+
+        assertTrue(resultado is Result.Success)
+        verify { docRef.update("disponibilidad", esperado) }
+    }
+
+    @Test
+    fun `actualizarDisponibilidad retorna SIN_INTERNET ante FirebaseNetworkException`() = runTest {
+        val profesionales = mockk<CollectionReference>()
+        val docRef = mockk<DocumentReference>()
+        every { firestore.collection(COLECCION_PROFESIONALES) } returns profesionales
+        every { profesionales.document("prof-1") } returns docRef
+        val task = mockk<Task<Void>>()
+        coEvery { task.await() } throws FirebaseNetworkException("sin red")
+        every { docRef.update("disponibilidad", any<List<Map<String, Any>>>()) } returns task
+
+        val resultado = repository.actualizarDisponibilidad("prof-1", emptyList())
+
+        assertEquals(ProfesionalError.SIN_INTERNET, (resultado as Result.Error).error)
+    }
+
+    @Test
+    fun `actualizarDescripcion escribe solo el campo descripcion`() = runTest {
+        val profesionales = mockk<CollectionReference>()
+        val docRef = mockk<DocumentReference>()
+        every { firestore.collection(COLECCION_PROFESIONALES) } returns profesionales
+        every { profesionales.document("prof-1") } returns docRef
+        val task = mockk<Task<Void>>()
+        coEvery { task.await() } returns mockk()
+        every { docRef.update("descripcion", "Kinesiologa deportiva") } returns task
+
+        val resultado = repository.actualizarDescripcion("prof-1", "Kinesiologa deportiva")
+
+        assertTrue(resultado is Result.Success)
+        verify { docRef.update("descripcion", "Kinesiologa deportiva") }
+    }
+
+    @Test
+    fun `actualizarDescripcion retorna DESCONOCIDO ante un error inesperado`() = runTest {
+        val profesionales = mockk<CollectionReference>()
+        val docRef = mockk<DocumentReference>()
+        every { firestore.collection(COLECCION_PROFESIONALES) } returns profesionales
+        every { profesionales.document("prof-1") } returns docRef
+        val task = mockk<Task<Void>>()
+        coEvery { task.await() } throws IllegalStateException("permiso denegado")
+        every { docRef.update("descripcion", any<String>()) } returns task
+
+        val resultado = repository.actualizarDescripcion("prof-1", "x")
+
+        assertEquals(ProfesionalError.DESCONOCIDO, (resultado as Result.Error).error)
+    }
+
     /**
      * Encadena los mocks de Firestore que recorre
      * `ProfesionalRepositoryImpl.buscarPorEspecialidad`: la query sobre
@@ -334,6 +410,7 @@ class ProfesionalRepositoryImplTest {
         every { doc.getString(any()) } answers { data[firstArg()] as? String }
         every { doc.getDouble(any()) } answers { data[firstArg()] as? Double }
         every { doc.getLong(any()) } answers { data[firstArg()] as? Long }
+        every { doc.getBoolean(any()) } answers { data[firstArg()] as? Boolean }
         every { doc.getTimestamp(any()) } answers { data[firstArg()] as? Timestamp }
         return doc
     }

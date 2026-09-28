@@ -13,4 +13,5 @@ data class Servicio(
     val modalidad: ModalidadServicio,
     val duracionMinutos: Int,
     val precio: Long,
+    val activo: Boolean = true,
 )

@@ -45,14 +45,17 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -83,6 +86,7 @@ import com.darjnest.kinecare.core.designsystem.theme.RojoError90
 import com.darjnest.kinecare.core.designsystem.theme.TextoPrincipal
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.Especialidad
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.IdentidadProfesional
+import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.LARGO_MAXIMO_BIOGRAFIA
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.MetricasReputacion
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.MiPerfilProfesionalAction
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.MiPerfilProfesionalState
@@ -121,6 +125,10 @@ fun MiPerfilProfesionalScreen(
     onCerrarSesion: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    if (state.editandoBiografia) {
+        DialogoEditarBiografia(state = state, onAction = onAction)
+    }
+
     Scaffold(
         modifier = modifier,
         containerColor = LoginFondo,
@@ -149,7 +157,9 @@ fun MiPerfilProfesionalScreen(
                     FilaMetricasReputacion(metricas = metricas)
                 }
 
-                if (state.biografia.isNotBlank()) {
+                // Siempre visible (con texto de ayuda si esta vacia): es la
+                // unica puerta para escribir la biografia por primera vez.
+                if (state.identidad != null) {
                     TarjetaBiografia(
                         biografia = state.biografia,
                         compromisoKineCare = state.compromisoKineCare,
@@ -330,15 +340,17 @@ private fun TarjetaIdentidadProfesional(identidad: IdentidadProfesional) {
                     ) {
                         Icon(Icons.Filled.Person, contentDescription = null, tint = LoginGrisTexto, modifier = Modifier.size(36.dp))
                     }
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .size(22.dp)
-                            .clip(CircleShape)
-                            .background(LoginPrimarioOscuro),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(Icons.Filled.Verified, contentDescription = "Registro SIS verificado", tint = Color.White, modifier = Modifier.size(14.dp))
+                    if (identidad.credencialesAlDia) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .size(22.dp)
+                                .clip(CircleShape)
+                                .background(LoginPrimarioOscuro),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(Icons.Filled.Verified, contentDescription = "Registro SIS verificado", tint = Color.White, modifier = Modifier.size(14.dp))
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.width(14.dp))
@@ -356,71 +368,85 @@ private fun TarjetaIdentidadProfesional(identidad: IdentidadProfesional) {
                         color = LoginPrimario,
                         modifier = Modifier.padding(top = 2.dp),
                     )
-                    Row(
-                        modifier = Modifier.padding(top = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(Icons.Filled.School, contentDescription = null, tint = AzulPetroleo30, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "${identidad.universidad} (${identidad.anioTitulacion})",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = LoginGrisTexto,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                    if (!identidad.universidad.isNullOrBlank()) {
+                        Row(
+                            modifier = Modifier.padding(top = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Filled.School, contentDescription = null, tint = AzulPetroleo30, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = listOfNotNull(identidad.universidad, identidad.anioTitulacion?.let { "($it)" })
+                                    .joinToString(" "),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = LoginGrisTexto,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
-                    Row(
-                        modifier = Modifier.padding(top = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(Icons.Filled.VerifiedUser, contentDescription = null, tint = LoginPrimarioOscuro, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Reg. SIS Nº ${identidad.numeroRegistroSis} • ${identidad.entidadRegistro}",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = LoginGrisTexto,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                    if (identidad.numeroRegistroSis.isNotBlank()) {
+                        Row(
+                            modifier = Modifier.padding(top = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Filled.VerifiedUser, contentDescription = null, tint = LoginPrimarioOscuro, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = listOfNotNull("Reg. SIS Nº ${identidad.numeroRegistroSis}", identidad.entidadRegistro)
+                                    .joinToString(" • "),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = LoginGrisTexto,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(LoginGrisClaro)
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.HealthAndSafety, contentDescription = null, tint = LoginPrimarioOscuro, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = if (identidad.habilitadoIsapreFonasa) "Habilitada para atención Isapre & Fonasa" else "Atención particular",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = TextoPrincipal,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                }
-                if (identidad.credencialesAlDia) {
-                    Text(
-                        text = "AL DÍA",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = LoginPrimarioOscuro,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(LoginMenta)
-                            .padding(horizontal = 8.dp, vertical = 3.dp),
-                    )
+            if (identidad.habilitadoIsapreFonasa != null || identidad.credencialesAlDia) {
+                Spacer(modifier = Modifier.height(14.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(LoginGrisClaro)
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        identidad.habilitadoIsapreFonasa?.let { habilitado ->
+                            Icon(Icons.Filled.HealthAndSafety, contentDescription = null, tint = LoginPrimarioOscuro, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (habilitado) "Habilitada para atención Isapre & Fonasa" else "Atención particular",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = TextoPrincipal,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false),
+                            )
+                        } ?: Text(
+                            text = "Credenciales profesionales",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = TextoPrincipal,
+                        )
+                    }
+                    if (identidad.credencialesAlDia) {
+                        Text(
+                            text = "AL DÍA",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = LoginPrimarioOscuro,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(LoginMenta)
+                                .padding(horizontal = 8.dp, vertical = 3.dp),
+                        )
+                    }
                 }
             }
         }
@@ -441,10 +467,10 @@ private fun FilaMetricasReputacion(metricas: MetricasReputacion) {
                 Text(text = "${metricas.calificacion}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = TextoPrincipal)
             },
             etiqueta = "${metricas.totalResenas} opiniones",
-            nota = "Excelente",
+            nota = if (metricas.calificacion >= 4.5) "Excelente" else "",
             colorNota = LoginPrimario,
         )
-        MetricaTarjeta(
+        if (metricas.atencionesCompletadas != null) MetricaTarjeta(
             modifier = Modifier.weight(1f),
             contenidoSuperior = {
                 Box(
@@ -462,8 +488,8 @@ private fun FilaMetricasReputacion(metricas: MetricasReputacion) {
             etiqueta = "Atenciones",
             nota = "Completadas",
             colorNota = LoginGrisTexto,
-        )
-        MetricaTarjeta(
+        ) else Spacer(modifier = Modifier.weight(1f))
+        if (metricas.porcentajePuntualidad != null) MetricaTarjeta(
             modifier = Modifier.weight(1f),
             contenidoSuperior = {
                 Box(
@@ -481,7 +507,7 @@ private fun FilaMetricasReputacion(metricas: MetricasReputacion) {
             etiqueta = "Puntualidad",
             nota = "Destacada",
             colorNota = LoginPrimarioOscuro,
-        )
+        ) else Spacer(modifier = Modifier.weight(1f))
     }
 }
 
@@ -513,7 +539,7 @@ private fun MetricaTarjeta(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = nota,
+                text = nota.ifBlank { " " },
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
                 color = colorNota,
@@ -522,6 +548,49 @@ private fun MetricaTarjeta(
             )
         }
     }
+}
+
+@Composable
+private fun DialogoEditarBiografia(
+    state: MiPerfilProfesionalState,
+    onAction: (MiPerfilProfesionalAction) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = { onAction(MiPerfilProfesionalAction.CancelarEdicionBiografia) },
+        title = { Text("Biografía y enfoque clínico") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = state.borradorBiografia,
+                    onValueChange = { onAction(MiPerfilProfesionalAction.CambiarBorradorBiografia(it)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 4,
+                    maxLines = 8,
+                    enabled = !state.guardandoBiografia,
+                    supportingText = { Text("${state.borradorBiografia.length}/$LARGO_MAXIMO_BIOGRAFIA") },
+                )
+                if (state.errorGuardarBiografia) {
+                    Text(
+                        text = "No pudimos guardar tu biografía. Inténtalo de nuevo.",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onAction(MiPerfilProfesionalAction.GuardarBiografia) },
+                enabled = !state.guardandoBiografia,
+            ) { Text(if (state.guardandoBiografia) "Guardando..." else "Guardar") }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = { onAction(MiPerfilProfesionalAction.CancelarEdicionBiografia) },
+                enabled = !state.guardandoBiografia,
+            ) { Text("Cancelar") }
+        },
+    )
 }
 
 @Composable
@@ -565,7 +634,7 @@ private fun TarjetaBiografia(
             }
             Spacer(modifier = Modifier.height(10.dp))
             Text(
-                text = biografia,
+                text = biografia.ifBlank { "Cuéntales a tus pacientes quién eres y cómo trabajas." },
                 style = MaterialTheme.typography.bodyMedium,
                 color = LoginGrisTexto,
             )

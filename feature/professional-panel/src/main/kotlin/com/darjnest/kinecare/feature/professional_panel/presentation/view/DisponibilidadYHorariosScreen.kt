@@ -40,13 +40,17 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -101,11 +105,21 @@ fun DisponibilidadYHorariosScreen(
     onVolver: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(state.mensaje) {
+        state.mensaje?.let {
+            snackbarHostState.showSnackbar(it)
+            onAction(DisponibilidadYHorariosAction.MensajeMostrado)
+        }
+    }
+
     Scaffold(
         modifier = modifier,
         containerColor = LoginFondo,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             BarraGuardarDisponibilidad(
+                guardando = state.guardando,
                 onClick = { onAction(DisponibilidadYHorariosAction.GuardarDisponibilidad) },
             )
         },
@@ -441,11 +455,13 @@ private fun TarjetaTurno(
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(text = turno.titulo, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = TextoPrincipal)
-                        Text(
-                            text = "${turno.cupos} cupos de ${turno.duracionMinutos} min",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = LoginGrisTexto,
-                        )
+                        if (turno.cupos > 0) {
+                            Text(
+                                text = "${turno.cupos} cupos de ${turno.duracionMinutos} min",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = LoginGrisTexto,
+                            )
+                        }
                     }
                 }
                 Box(
@@ -804,7 +820,7 @@ private fun TarjetaRecargoZonaLejana(
 }
 
 @Composable
-private fun BarraGuardarDisponibilidad(onClick: () -> Unit) {
+private fun BarraGuardarDisponibilidad(guardando: Boolean, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -816,7 +832,7 @@ private fun BarraGuardarDisponibilidad(onClick: () -> Unit) {
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(50))
                 .background(LoginPrimarioOscuro)
-                .clickable(onClick = onClick)
+                .clickable(enabled = !guardando, onClick = onClick)
                 .padding(vertical = 14.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
@@ -824,7 +840,7 @@ private fun BarraGuardarDisponibilidad(onClick: () -> Unit) {
             Icon(Icons.Filled.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "Guardar Disponibilidad",
+                text = if (guardando) "Guardando..." else "Guardar Disponibilidad",
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
