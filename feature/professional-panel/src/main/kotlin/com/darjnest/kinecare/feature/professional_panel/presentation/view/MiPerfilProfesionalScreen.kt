@@ -61,6 +61,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontStyle
@@ -73,6 +74,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.darjnest.kinecare.core.designsystem.theme.AzulPetroleo30
 import com.darjnest.kinecare.core.designsystem.theme.InicioDorado
+import com.darjnest.kinecare.core.designsystem.theme.KineCareSpacing
 import com.darjnest.kinecare.core.designsystem.theme.KineCareTheme
 import com.darjnest.kinecare.core.designsystem.theme.LoginAzulSuave
 import com.darjnest.kinecare.core.designsystem.theme.LoginFondo
@@ -99,18 +101,20 @@ fun MiPerfilProfesionalRoot(
     modifier: Modifier = Modifier,
     viewModel: MiPerfilProfesionalViewModel = hiltViewModel(),
     onVolver: () -> Unit = {},
+    onVerResenas: (String) -> Unit = {},
     onCerrarSesion: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     MiPerfilProfesionalScreen(
         state = state,
         onAction = { accion ->
-            // Volver atras es navegacion, no estado del ViewModel: el Root la
-            // resuelve directo contra el NavGraph (ver ProfessionalPanelNavGraph).
-            if (accion is MiPerfilProfesionalAction.VolverAtras) {
-                onVolver()
-            } else {
-                viewModel.onAction(accion)
+            // Volver atras y abrir el listado de resenas son navegacion, no
+            // estado del ViewModel: el Root las resuelve directo contra el
+            // NavGraph (ver ProfessionalPanelNavGraph).
+            when (accion) {
+                MiPerfilProfesionalAction.VolverAtras -> onVolver()
+                MiPerfilProfesionalAction.VerTodasLasResenas -> state.profesionalId?.let(onVerResenas)
+                else -> viewModel.onAction(accion)
             }
         },
         onCerrarSesion = onCerrarSesion,
@@ -187,6 +191,13 @@ fun MiPerfilProfesionalScreen(
                         totalResenas = state.metricas?.totalResenas ?: 0,
                         onAction = onAction,
                     )
+                }
+
+                // `resenaDestacada` aun no se llena (nada la mapea), asi que sin
+                // este enlace "Ver todas" seria inalcanzable aunque haya resenas.
+                val totalResenas = state.metricas?.totalResenas ?: 0
+                if (state.resenaDestacada == null && totalResenas > 0) {
+                    EnlaceVerTodasLasResenas(totalResenas = totalResenas, onAction = onAction)
                 }
 
                 BotonesAccionPerfil(onAction = onAction, onCerrarSesion = onCerrarSesion)
@@ -853,6 +864,38 @@ private fun FilaZonaAtencion(zona: ZonaAtencion) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun EnlaceVerTodasLasResenas(
+    totalResenas: Int,
+    onAction: (MiPerfilProfesionalAction) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.large)
+            .background(MaterialTheme.colorScheme.surface)
+            .clickable(role = Role.Button) { onAction(MiPerfilProfesionalAction.VerTodasLasResenas) }
+            .padding(KineCareSpacing.l),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Filled.RateReview,
+            contentDescription = null,
+            tint = InicioDorado,
+            modifier = Modifier.size(KineCareSpacing.icono),
+        )
+        Text(
+            text = "Ver todas las reseñas ($totalResenas)",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = LoginPrimario,
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = KineCareSpacing.s),
+        )
     }
 }
 

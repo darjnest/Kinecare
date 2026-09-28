@@ -6,8 +6,9 @@ import com.darjnest.kinecare.feature.professional_profile.presentation.view.Prof
 
 fun NavGraphBuilder.professional_profileGraph(
     onVolver: () -> Unit = {},
+    onVerResenas: (String) -> Unit = {},
 ) {
     composable<ProfessionalProfileRoute> {
-        ProfessionalProfileRoot(onVolver = onVolver)
+        ProfessionalProfileRoot(onVolver = onVolver, onVerResenas = onVerResenas)
     }
 }

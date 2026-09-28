@@ -106,7 +106,38 @@ comentario: string?
 fecha: timestamp
 respuestaProfesional: string?
 ```
-Índice compuesto: `profesionalId` + `fecha` (desc).
+Índice compuesto: `profesionalId` + `fecha` (desc) — ya declarado en
+`firestore.indexes.json`; lo usa `ResenaRepository.obtenerPorProfesional`
+(`:core:network`, `orderBy fecha DESC`, `limit 100`).
+
+**Convención de id:** el id del documento es **siempre el `reservaId`** de la
+reserva reseñada (`resenas/{reservaId}`). Una reserva admite a lo más una
+reseña: un segundo intento de reseñar la misma reserva sería un `update`
+sobre un documento existente, que las Security Rules deniegan al cliente —
+así se evitan duplicados sin Cloud Functions. Por eso
+`ResenaRepository.obtenerPorReserva` es una lectura directa por id (`null`
+si no existe).
+
+**Reglas de `create` endurecidas** (`firestore.rules`; **declaradas, no
+desplegadas**): además de auth (`clienteId == request.auth.uid`), reserva
+`COMPLETADA` y perteneciente al llamador, exigen `resenaId == reservaId`,
+`profesionalId` igual al de la reserva, `calificacion` entero 1..5,
+`fecha == request.time` (el cliente escribe `FieldValue.serverTimestamp()`),
+`comentario` ausente/null o string de hasta 500 caracteres,
+`respuestaProfesional` ausente, y claves restringidas a `reservaId`,
+`clienteId`, `profesionalId`, `calificacion`, `comentario`, `fecha`.
+`update` solo permite al profesional dueño modificar `respuestaProfesional`;
+`delete` está denegado. Validadas contra el Firestore Emulator local (no
+contra el proyecto Firebase real).
+
+> **`profesionales.calificacionPromedio` y `totalResenas` NO los actualiza
+> nada hoy.** El cliente no puede escribirlos (las reglas de `profesionales`
+> no lo permiten al dueño de forma segura y crear una reseña no toca ese
+> documento), así que seguirán en su valor sembrado aunque se creen reseñas.
+> Recalcularlos requiere una Cloud Function (trigger `onCreate` de
+> `resenas`), que exige plan Blaze — el mismo bloqueo que Firebase Storage.
+> Hasta entonces el promedio y el conteo mostrados en el perfil pueden no
+> coincidir con el listado real de reseñas.
 
 ### `solicitudesVerificacion/{solicitudId}`
 ```

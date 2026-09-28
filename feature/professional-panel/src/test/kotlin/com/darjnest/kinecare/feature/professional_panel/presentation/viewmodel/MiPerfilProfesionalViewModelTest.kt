@@ -111,6 +111,27 @@ class MiPerfilProfesionalViewModelTest {
     }
 
     @Test
+    fun `al cargar expone el uid propio como profesionalId para abrir sus resenas`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId(uid) } returns Result.Success(profesional())
+
+        val viewModel = crearViewModel()
+
+        assertEquals(uid, viewModel.state.value.profesionalId)
+    }
+
+    @Test
+    fun `si el perfil no carga no hay profesionalId y VerTodasLasResenas no cambia el estado`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId(uid) } returns Result.Error(ProfesionalError.SIN_INTERNET)
+        val viewModel = crearViewModel()
+        val antes = viewModel.state.value
+
+        viewModel.onAction(MiPerfilProfesionalAction.VerTodasLasResenas)
+
+        assertNull(antes.profesionalId)
+        assertEquals(antes, viewModel.state.value)
+    }
+
+    @Test
     fun `credenciales no aprobadas no se marcan al dia`() = runTest {
         coEvery { profesionalRepository.obtenerPorId(uid) } returns
             Result.Success(profesional(credencialesAprobadas = false))
