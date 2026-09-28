@@ -3,16 +3,19 @@
 package com.darjnest.kinecare.feature.client_panel.presentation.viewmodel
 
 import com.darjnest.kinecare.core.common.data.repository.ProfesionalRepository
+import com.darjnest.kinecare.core.common.data.repository.ResenaRepository
 import com.darjnest.kinecare.core.common.data.repository.ReservaRepository
 import com.darjnest.kinecare.core.common.domain.model.EstadoReserva
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
 import com.darjnest.kinecare.core.common.domain.model.Profesional
+import com.darjnest.kinecare.core.common.domain.model.Resena
 import com.darjnest.kinecare.core.common.domain.model.Reserva
 import com.darjnest.kinecare.core.common.result.Result
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -60,11 +63,19 @@ data class CitaProxima(
 /** Sesion completada, mostrada en "Historial Reciente & Reembolsos". */
 data class CitaHistorial(
     val id: String,
+    val profesionalId: String,
     val fechaTexto: String,
     val modalidadTexto: String,
     val tituloSesion: String,
     val profesionalNombre: String,
+    /** Estrellas de la resena que el cliente ya dejo; 0 si aun no reseno (o no se pudo comprobar). */
     val calificacion: Int,
+    /**
+     * `true` si se puede ofrecer "Dejar reseña": la reserva esta completada y
+     * no tiene resena. Si la comprobacion fallo (sin red), se ofrece igual: la
+     * pantalla de resena vuelve a comprobar y muestra "Ya reseñaste esta atencion".
+     */
+    val puedeResenar: Boolean = false,
 )
 
 /** Cita cancelada por el cliente o el profesional. */
@@ -93,6 +104,12 @@ sealed interface MisCitasAction {
     data class VerPreparacion(val citaId: String) : MisCitasAction
     data class DescargarBoleta(val citaId: String) : MisCitasAction
     data object ChatearConSoporte : MisCitasAction
+
+    /** Navegacion a `:feature:reviews` (formulario de resena): la resuelve el `Root` via callback. */
+    data class DejarResena(val reservaId: String, val profesionalId: String) : MisCitasAction
+
+    /** Vuelve a cargar las reservas (p. ej. al volver de dejar una resena, para que el boton desaparezca). */
+    data object Recargar : MisCitasAction
 }
 
 private fun ModalidadServicio.aTexto(): String = when (this) {
@@ -156,18 +173,26 @@ private fun Reserva.aCitaProxima(profesionales: Map<String, Profesional>): CitaP
     )
 }
 
-private fun Reserva.aCitaHistorial(profesionales: Map<String, Profesional>): CitaHistorial {
+/**
+ * [resena] es el resultado de `ResenaRepository.obtenerPorReserva`: la resena
+ * existente, `null` si la reserva aun no tiene, o ausente del mapa si la
+ * comprobacion fallo (ver [CitaHistorial.puedeResenar]).
+ */
+internal fun Reserva.aCitaHistorial(
+    profesionales: Map<String, Profesional>,
+    resena: Resena?,
+): CitaHistorial {
     val profesional = profesionales[profesionalId]
     val servicio = profesional?.servicios?.firstOrNull { it.id == servicioId }
     return CitaHistorial(
         id = id,
+        profesionalId = profesionalId,
         fechaTexto = fechaHora.aFechaTexto(),
         modalidadTexto = modalidad.aTexto(),
         tituloSesion = servicio?.nombre ?: "Sesión",
         profesionalNombre = profesional?.usuario?.nombre ?: "Profesional",
-        // Sin `Resena` conectada a esta pantalla todavia (`:feature:reviews`
-        // sigue fuera de alcance, ver docs/TASKS.md): sin calificacion.
-        calificacion = 0,
+        calificacion = resena?.calificacion ?: 0,
+        puedeResenar = resena == null,
     )
 }
 
@@ -190,11 +215,14 @@ private fun Reserva.aCitaCancelada(profesionales: Map<String, Profesional>): Cit
 class MisCitasViewModel @Inject constructor(
     private val reservaRepository: ReservaRepository,
     private val profesionalRepository: ProfesionalRepository,
+    private val resenaRepository: ResenaRepository,
     private val firebaseAuth: FirebaseAuth,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(MisCitasState())
     val state: StateFlow<MisCitasState> = _state.asStateFlow()
+
+    private var cargaJob: Job? = null
 
     init {
         cargarReservas()
@@ -204,6 +232,9 @@ class MisCitasViewModel @Inject constructor(
         when (action) {
             is MisCitasAction.SeleccionarTab ->
                 _state.update { it.copy(tabSeleccionado = action.tab) }
+            MisCitasAction.Recargar -> if (cargaJob?.isActive != true) cargarReservas()
+            // Dejar resena es navegacion: el Root la resuelve contra el NavGraph.
+            is MisCitasAction.DejarResena -> Unit
             // Seguir en vivo/chat, reprogramar, ver pauta digital, agregar a
             // Google Calendar, ver preparacion, descargar boleta y chatear
             // con soporte: requieren backend de Pagos/Boletas y navegacion
@@ -222,7 +253,7 @@ class MisCitasViewModel @Inject constructor(
 
     private fun cargarReservas() {
         val uid = firebaseAuth.currentUser?.uid ?: return
-        viewModelScope.launch {
+        cargaJob = viewModelScope.launch {
             _state.update { it.copy(cargando = true) }
             when (val resultado = reservaRepository.obtenerPorCliente(uid)) {
                 is Result.Success -> aplicarReservas(resultado.data)
@@ -239,13 +270,23 @@ class MisCitasViewModel @Inject constructor(
             if (resultado is Result.Success) profesionales[reserva.profesionalId] = resultado.data
         }
 
+        // Una resena por reserva completada (id del documento = reservaId). Si
+        // la lectura falla la reserva queda fuera del mapa y se ofrece "Dejar
+        // resena" igual (ver `CitaHistorial.puedeResenar`).
+        val resenas = mutableMapOf<String, Resena?>()
+        for (reserva in reservas) {
+            if (reserva.estado != EstadoReserva.COMPLETADA) continue
+            val resultado = resenaRepository.obtenerPorReserva(reserva.id)
+            if (resultado is Result.Success) resenas[reserva.id] = resultado.data
+        }
+
         val citaEnCurso = reservas.firstOrNull { it.estado == EstadoReserva.EN_CURSO }?.aCitaEnCurso(profesionales)
         val proximasCitas = reservas
             .filter { it.estado == EstadoReserva.SOLICITADA || it.estado == EstadoReserva.CONFIRMADA }
             .map { it.aCitaProxima(profesionales) }
         val historial = reservas
             .filter { it.estado == EstadoReserva.COMPLETADA }
-            .map { it.aCitaHistorial(profesionales) }
+            .map { it.aCitaHistorial(profesionales, resenas[it.id]) }
         val canceladas = reservas
             .filter {
                 it.estado == EstadoReserva.CANCELADA_CLIENTE ||

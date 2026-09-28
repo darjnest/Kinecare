@@ -70,6 +70,11 @@ data class ResenaDestacada(
 
 data class MiPerfilProfesionalState(
     val cargando: Boolean = false,
+    /**
+     * uid del profesional autenticado, una vez cargado su perfil. Es el id
+     * con el que el `Root` abre el listado de resenas (`onVerResenas`).
+     */
+    val profesionalId: String? = null,
     val perfilPublicoActivo: Boolean = false,
     val identidad: IdentidadProfesional? = null,
     val metricas: MetricasReputacion? = null,
@@ -143,10 +148,10 @@ class MiPerfilProfesionalViewModel @Inject constructor(
             MiPerfilProfesionalAction.CancelarEdicionBiografia ->
                 _state.update { it.copy(editandoBiografia = false, errorGuardarBiografia = false) }
             MiPerfilProfesionalAction.GuardarBiografia -> guardarBiografia()
-            // Volver atras lo resuelve el Root contra el NavGraph. Editar
-            // credenciales, previsualizar el perfil publico y ver todas las
-            // resenas dependen de pantallas/features que no existen todavia
-            // (Fase 3 y Fase 6, docs/TASKS.md).
+            // Volver atras y ver todas las resenas (usa `state.profesionalId`)
+            // los resuelve el Root contra el NavGraph. Editar credenciales y
+            // previsualizar el perfil publico dependen de pantallas que no
+            // existen todavia (Fase 6, docs/TASKS.md).
             MiPerfilProfesionalAction.VolverAtras,
             MiPerfilProfesionalAction.EditarPerfilYCredenciales,
             MiPerfilProfesionalAction.PrevisualizarPerfilPublico,
@@ -165,6 +170,7 @@ class MiPerfilProfesionalViewModel @Inject constructor(
                     _state.update {
                         it.copy(
                             cargando = false,
+                            profesionalId = uid,
                             identidad = profesional.aIdentidad(),
                             // Atenciones completadas y puntualidad no existen
                             // en Firestore todavia (Fase 4): quedan nulas y la

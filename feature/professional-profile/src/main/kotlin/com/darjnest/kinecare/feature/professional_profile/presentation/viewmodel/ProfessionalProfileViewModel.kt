@@ -73,6 +73,9 @@ sealed interface ProfessionalProfileAction {
 
     /** Navegacion: la resuelve el `Root` contra el NavGraph, no el ViewModel. */
     data object VolverAtras : ProfessionalProfileAction
+
+    /** Navegacion al listado de resenas del profesional (`:feature:reviews`), via callback del `Root`. */
+    data class VerResenas(val profesionalId: String) : ProfessionalProfileAction
 }
 
 @HiltViewModel
@@ -101,7 +104,9 @@ class ProfessionalProfileViewModel @Inject constructor(
                 }
                 it.copy(insigniasExpandidas = expandidas)
             }
-            ProfessionalProfileAction.VolverAtras -> Unit
+            ProfessionalProfileAction.VolverAtras,
+            is ProfessionalProfileAction.VerResenas,
+            -> Unit
         }
     }
 

@@ -199,7 +199,66 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       ítem), mapa/zonas de atención. **No verificado visualmente** (sin
       emulador/dispositivo disponible en el cambio); compila y pasa
       `:app:assembleDebug`.
-- [ ] `:feature:reviews`: listado y creación de reseñas
+- [x] `:feature:reviews`: listado y creación de reseñas
+      **Capa de datos.** `ResenaRepository`
+      (`:core:common`, errores `ResenaError`: `SIN_INTERNET`, `SIN_PERMISO`,
+      `DESCONOCIDO`) con impl Firestore `ResenaRepositoryImpl` en
+      `:core:network`, enlazada en `FirestoreRepositoryModule`:
+      `obtenerPorProfesional` (`fecha` desc, límite 100, usa el índice
+      `profesionalId`+`fecha` ya declarado), `obtenerPorReserva` (lectura
+      directa de `resenas/{reservaId}`, `null` si no existe) y `crear`
+      (id del documento = `reservaId`, así una segunda reseña es un update
+      denegado por las reglas; `fecha` con server timestamp;
+      `PERMISSION_DENIED` → `SIN_PERMISO`). 15 tests JUnit5/MockK. Regla
+      `create` de `resenas` endurecida en `firestore.rules` (rango 1..5,
+      `fecha == request.time`, `comentario` ≤ 500, claves permitidas,
+      `profesionalId` = el de la reserva): **declarada, no desplegada**;
+      probada con 22 casos contra el Firestore Emulator local, no contra
+      el proyecto real.
+      **UI.** `ReviewsRoute(profesionalId)`: listado con encabezado de
+      resumen (promedio, total y distribución 5→1 estrellas) **calculado
+      localmente** sobre las reseñas cargadas (máx. 100), no con
+      `profesionales.calificacionPromedio`, que nada mantiene sincronizado
+      (ver limitación). Cada reseña muestra al autor como "Nombre A."
+      (`usuarios/{id}` resuelto una vez por cliente distinto vía
+      `UsuarioRepository`; "Cliente" si falla; nunca email/RUT/teléfono),
+      estrellas, comentario (oculto si es nulo/en blanco), fecha es-CL y, si
+      existe, `respuestaProfesional` como bloque indentado. Estados de
+      carga/vacío/error (mensaje propio por `ResenaError` + "Reintentar").
+      `CrearResenaRoute(reservaId, profesionalId)`: selector accesible de
+      1–5 estrellas, comentario opcional (500 caracteres, con contador) y
+      "Enviar reseña" deshabilitado hasta elegir calificación y mientras se
+      envía; al abrir llama `obtenerPorReserva` y, si ya existe, muestra
+      "Ya reseñaste esta atención" de solo lectura. `clienteId` sale de
+      `FirebaseAuth.currentUser` (error "Inicia sesión" si es nulo); un
+      éxito vuelve atrás (`enviada` + `LaunchedEffect`), un fallo conserva el
+      formulario con un mensaje por error (`SIN_PERMISO` = reserva no
+      completada, ajena o ya reseñada). Los argumentos de ambas rutas se
+      leen del `SavedStateHandle` (`ARG_PROFESIONAL_ID`, `ARG_RESERVA_ID`,
+      con test que los ata a los nombres de las propiedades). Puntos de
+      entrada, todos por callbacks desde `KineCareNavHost` (sin
+      dependencias feature→feature): fila "Ver todas las reseñas (N)" en el
+      perfil público (`:feature:professional-profile`, solo si
+      `totalResenas > 0`), acción "Dejar reseña" en las citas completadas de
+      "Mis Citas" (`:feature:client-panel`; se oculta si
+      `ResenaRepository.obtenerPorReserva` ya devuelve una reseña — si esa
+      lectura falla se ofrece igual — y la lista se recarga al volver a la
+      pantalla; la calificación ya dada reemplaza el `0` provisional) y
+      "Ver todas las reseñas" en "Mi perfil profesional"
+      (`:feature:professional-panel`, con el uid propio). Nuevos tokens
+      `KineCareSpacing` (`barraDistribucion`, `etiquetaDistribucion`).
+      35 tests en `:feature:reviews` + los de los módulos tocados.
+      **Fuera de alcance:** responder reseñas (el bloque de respuesta solo
+      se muestra), editar/borrar reseñas, paginación de más de 100.
+      **Limitación conocida:** `profesionales.calificacionPromedio`/
+      `totalResenas` no se actualizan al crear una reseña (recalcular
+      requiere una Cloud Function → plan Blaze, mismo bloqueo que Storage):
+      el encabezado del perfil público y "Mi perfil profesional" siguen
+      mostrando los valores guardados, que pueden no coincidir con el
+      listado. **No verificado visualmente** (sin emulador/dispositivo
+      disponible en el cambio); compila y pasa `:app:assembleDebug`. Hoy la
+      colección `reservas` está vacía en la práctica (la reserva es Fase 4),
+      así que "Dejar reseña" no aparece con datos reales todavía.
 
 ## Fase 4 — Flujo de reserva
 - [ ] `:feature:booking`: 4 pasos (modalidad → fecha/hora → dirección →
@@ -282,8 +341,8 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       credenciales aprobadas y la nota "Excelente" solo con calificación
       ≥ 4.5. El interruptor de perfil público sigue siendo estado local (no
       hay campo en Firestore). Zonas de atención y reseña destacada quedan
-      vacías hasta Fase 3/Fase 4; editar credenciales, previsualizar y
-      "ver todas las reseñas" siguen sin destino.
+      vacías hasta Fase 4; editar credenciales y previsualizar siguen sin
+      destino ("Ver todas las reseñas" ya abre `:feature:reviews`).
 
 ## Fase 8 — QA, pulido y publicación
 - [ ] Cobertura de tests (JUnit5, MockK, Turbine, Compose UI Testing)

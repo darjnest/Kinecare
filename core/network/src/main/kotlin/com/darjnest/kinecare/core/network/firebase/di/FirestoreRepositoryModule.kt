@@ -2,11 +2,13 @@ package com.darjnest.kinecare.core.network.firebase.di
 
 import com.darjnest.kinecare.core.common.data.repository.ClienteRepository
 import com.darjnest.kinecare.core.common.data.repository.ProfesionalRepository
+import com.darjnest.kinecare.core.common.data.repository.ResenaRepository
 import com.darjnest.kinecare.core.common.data.repository.ReservaRepository
 import com.darjnest.kinecare.core.common.data.repository.ServicioRepository
 import com.darjnest.kinecare.core.common.data.repository.UsuarioRepository
 import com.darjnest.kinecare.core.network.firebase.repository.ClienteRepositoryImpl
 import com.darjnest.kinecare.core.network.firebase.repository.ProfesionalRepositoryImpl
+import com.darjnest.kinecare.core.network.firebase.repository.ResenaRepositoryImpl
 import com.darjnest.kinecare.core.network.firebase.repository.ReservaRepositoryImpl
 import com.darjnest.kinecare.core.network.firebase.repository.ServicioRepositoryImpl
 import com.darjnest.kinecare.core.network.firebase.repository.UsuarioRepositoryImpl
@@ -47,4 +49,8 @@ abstract class FirestoreRepositoryModule {
     @Binds
     @Singleton
     abstract fun bindServicioRepository(impl: ServicioRepositoryImpl): ServicioRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindResenaRepository(impl: ResenaRepositoryImpl): ResenaRepository
 }

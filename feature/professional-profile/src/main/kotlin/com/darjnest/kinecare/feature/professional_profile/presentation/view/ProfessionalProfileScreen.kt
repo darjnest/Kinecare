@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Star
@@ -76,17 +77,18 @@ fun ProfessionalProfileRoot(
     modifier: Modifier = Modifier,
     viewModel: ProfessionalProfileViewModel = hiltViewModel(),
     onVolver: () -> Unit = {},
+    onVerResenas: (String) -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     ProfessionalProfileScreen(
         state = state,
         onAction = { accion ->
-            // Volver atras es navegacion, no estado del ViewModel: el Root la
-            // resuelve directo contra el NavGraph.
-            if (accion is ProfessionalProfileAction.VolverAtras) {
-                onVolver()
-            } else {
-                viewModel.onAction(accion)
+            // Volver atras y abrir el listado de resenas son navegacion, no
+            // estado del ViewModel: el Root las resuelve directo contra el NavGraph.
+            when (accion) {
+                ProfessionalProfileAction.VolverAtras -> onVolver()
+                is ProfessionalProfileAction.VerResenas -> onVerResenas(accion.profesionalId)
+                else -> viewModel.onAction(accion)
             }
         },
         modifier = modifier,
@@ -182,6 +184,13 @@ private fun ContenidoPerfil(
             onAlternar = { onAction(ProfessionalProfileAction.AlternarInsignia(it)) },
         )
 
+        if (perfil.totalResenas > 0) {
+            FilaVerResenas(
+                totalResenas = perfil.totalResenas,
+                onClick = { onAction(ProfessionalProfileAction.VerResenas(perfil.id)) },
+            )
+        }
+
         if (perfil.descripcion.isNotBlank()) {
             Seccion(titulo = "Acerca de") {
                 Text(text = perfil.descripcion, style = MaterialTheme.typography.bodyMedium)
@@ -259,6 +268,29 @@ private fun EncabezadoPerfil(perfil: PerfilProfesional) {
                     }
                 }
             }
+        }
+    }
+}
+
+/** Enlace al listado completo; solo se muestra si hay resenas (`totalResenas` guardado > 0). */
+@Composable
+private fun FilaVerResenas(
+    totalResenas: Int,
+    onClick: () -> Unit,
+) {
+    KineCareCard(modifier = Modifier.clickable(role = Role.Button, onClick = onClick)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "Ver todas las reseñas ($totalResenas)",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
         }
     }
 }

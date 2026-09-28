@@ -15,6 +15,7 @@ import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.A
 fun NavGraphBuilder.professional_panelGraph(
     navController: NavController,
     onCerrarSesion: () -> Unit = {},
+    onVerResenas: (String) -> Unit = {},
 ) {
     composable<ProfessionalPanelRoute> {
         ProfessionalPanelRoot(
@@ -26,7 +27,11 @@ fun NavGraphBuilder.professional_panelGraph(
         )
     }
     composable<MiPerfilProfesionalRoute> {
-        MiPerfilProfesionalRoot(onVolver = navController::popBackStack, onCerrarSesion = onCerrarSesion)
+        MiPerfilProfesionalRoot(
+            onVolver = navController::popBackStack,
+            onVerResenas = onVerResenas,
+            onCerrarSesion = onCerrarSesion,
+        )
     }
     composable<ServiciosYTarifasRoute> {
         ServiciosYTarifasRoot(onVolver = navController::popBackStack)

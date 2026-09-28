@@ -49,10 +49,24 @@ service cloud.firestore {
 
     match /resenas/{resenaId} {
       allow read: if true;
+      // El id del documento es el reservaId: una segunda resena de la misma reserva
+      // seria un update sobre un doc existente, que se deniega mas abajo (evita duplicados).
       allow create: if request.auth != null
         && request.auth.uid == request.resource.data.clienteId
+        && resenaId == request.resource.data.reservaId
+        && request.resource.data.keys().hasAll(['reservaId', 'clienteId', 'profesionalId', 'calificacion', 'fecha'])
+        && request.resource.data.keys().hasOnly(['reservaId', 'clienteId', 'profesionalId', 'calificacion', 'comentario', 'fecha'])
+        && request.resource.data.calificacion is int
+        && request.resource.data.calificacion >= 1
+        && request.resource.data.calificacion <= 5
+        && request.resource.data.fecha == request.time
+        && (!('comentario' in request.resource.data)
+            || request.resource.data.comentario == null
+            || (request.resource.data.comentario is string && request.resource.data.comentario.size() <= 500))
+        && !('respuestaProfesional' in request.resource.data)
         && get(/databases/$(database)/documents/reservas/$(request.resource.data.reservaId)).data.estado == 'COMPLETADA'
-        && get(/databases/$(database)/documents/reservas/$(request.resource.data.reservaId)).data.clienteId == request.auth.uid;
+        && get(/databases/$(database)/documents/reservas/$(request.resource.data.reservaId)).data.clienteId == request.auth.uid
+        && get(/databases/$(database)/documents/reservas/$(request.resource.data.reservaId)).data.profesionalId == request.resource.data.profesionalId;
       allow update: if request.auth != null
         && request.auth.uid == resource.data.profesionalId
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['respuestaProfesional']);

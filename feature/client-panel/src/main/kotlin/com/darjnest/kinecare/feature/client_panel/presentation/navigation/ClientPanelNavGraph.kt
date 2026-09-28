@@ -16,9 +16,11 @@ fun NavGraphBuilder.client_panelGraph(
     onIrAMiPerfil: () -> Unit = {},
     onCerrarSesion: () -> Unit = {},
     onProfesionalClick: (String) -> Unit = {},
+    onDejarResena: (reservaId: String, profesionalId: String) -> Unit = { _, _ -> },
 ) {
     composable<MisCitasRoute> {
         MisCitasRoot(
+            onDejarResena = onDejarResena,
             onIrAExplorar = onIrAExplorar,
             onIrAFavoritos = onIrAFavoritos,
             onIrAMiPerfil = onIrAMiPerfil,

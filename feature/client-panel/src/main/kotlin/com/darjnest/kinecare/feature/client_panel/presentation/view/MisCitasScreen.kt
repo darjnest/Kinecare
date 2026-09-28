@@ -1,6 +1,8 @@
 package com.darjnest.kinecare.feature.client_panel.presentation.view
 
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
+import com.darjnest.kinecare.core.designsystem.theme.KineCareSpacing
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -33,6 +35,7 @@ import androidx.compose.material.icons.filled.PinDrop
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.RateReview
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.SupportAgent
 import androidx.compose.material.icons.filled.Verified
@@ -55,6 +58,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.darjnest.kinecare.core.designsystem.components.bar.KineCareBottomNavBar
 import com.darjnest.kinecare.core.designsystem.components.bar.PestanaClienteInferior
@@ -85,11 +90,28 @@ fun MisCitasRoot(
     onIrAExplorar: () -> Unit = {},
     onIrAFavoritos: () -> Unit = {},
     onIrAMiPerfil: () -> Unit = {},
+    onDejarResena: (reservaId: String, profesionalId: String) -> Unit = { _, _ -> },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+
+    // Al volver de dejar una resena el ViewModel sigue vivo con la lista
+    // vieja: recargar para que el boton "Dejar reseña" desaparezca. El
+    // ViewModel ignora la recarga si la carga inicial sigue en curso.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        viewModel.onAction(MisCitasAction.Recargar)
+    }
+
     MisCitasScreen(
         state = state,
-        onAction = viewModel::onAction,
+        onAction = { accion ->
+            // Dejar resena es navegacion hacia `:feature:reviews`, resuelta
+            // por callback desde `:app` (las features no se dependen entre si).
+            if (accion is MisCitasAction.DejarResena) {
+                onDejarResena(accion.reservaId, accion.profesionalId)
+            } else {
+                viewModel.onAction(accion)
+            }
+        },
         onIrAExplorar = onIrAExplorar,
         onIrAFavoritos = onIrAFavoritos,
         onIrAMiPerfil = onIrAMiPerfil,
@@ -141,7 +163,7 @@ fun MisCitasScreen(
 
                 when (state.tabSeleccionado) {
                     TabMisCitas.PROXIMAS -> ContenidoProximas(state = state, onAction = onAction, onIrAExplorar = onIrAExplorar)
-                    TabMisCitas.HISTORIAL -> ContenidoHistorial(historial = state.historial, onIrAExplorar = onIrAExplorar)
+                    TabMisCitas.HISTORIAL -> ContenidoHistorial(historial = state.historial, onAction = onAction, onIrAExplorar = onIrAExplorar)
                     TabMisCitas.CANCELADAS -> ContenidoCanceladas(canceladas = state.canceladas)
                 }
 
@@ -178,13 +200,17 @@ private fun ContenidoProximas(
 }
 
 @Composable
-private fun ContenidoHistorial(historial: List<CitaHistorial>, onIrAExplorar: () -> Unit) {
+private fun ContenidoHistorial(
+    historial: List<CitaHistorial>,
+    onAction: (MisCitasAction) -> Unit,
+    onIrAExplorar: () -> Unit,
+) {
     if (historial.isEmpty()) {
         EstadoVacioCitas(onIrAExplorar = onIrAExplorar)
         return
     }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        historial.forEach { item -> TarjetaCitaHistorial(cita = item, onAction = {}) }
+        historial.forEach { item -> TarjetaCitaHistorial(cita = item, onAction = onAction) }
     }
 }
 
@@ -823,6 +849,35 @@ private fun TarjetaCitaHistorial(
                     repeat(cita.calificacion) {
                         Icon(Icons.Filled.Star, contentDescription = null, tint = InicioDorado, modifier = Modifier.size(12.dp))
                     }
+                }
+            }
+            if (cita.puedeResenar) {
+                Spacer(modifier = Modifier.height(KineCareSpacing.m))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(50))
+                        .background(LoginPrimarioOscuro)
+                        .clickable(role = Role.Button) {
+                            onAction(MisCitasAction.DejarResena(cita.id, cita.profesionalId))
+                        }
+                        .padding(vertical = KineCareSpacing.m),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.Filled.RateReview,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(KineCareSpacing.icono),
+                    )
+                    Spacer(modifier = Modifier.width(KineCareSpacing.s))
+                    Text(
+                        text = "Dejar reseña",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                    )
                 }
             }
             Spacer(modifier = Modifier.height(10.dp))

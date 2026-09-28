@@ -20,6 +20,8 @@ import com.darjnest.kinecare.feature.professional_panel.presentation.navigation.
 import com.darjnest.kinecare.feature.professional_panel.presentation.navigation.professional_panelGraph
 import com.darjnest.kinecare.feature.professional_profile.presentation.navigation.ProfessionalProfileRoute
 import com.darjnest.kinecare.feature.professional_profile.presentation.navigation.professional_profileGraph
+import com.darjnest.kinecare.feature.reviews.presentation.navigation.CrearResenaRoute
+import com.darjnest.kinecare.feature.reviews.presentation.navigation.ReviewsRoute
 import com.darjnest.kinecare.feature.reviews.presentation.navigation.reviewsGraph
 import com.darjnest.kinecare.feature.search.presentation.navigation.SearchRoute
 import com.darjnest.kinecare.feature.search.presentation.navigation.searchGraph
@@ -77,6 +79,9 @@ fun KineCareNavHost(modifier: Modifier = Modifier) {
             onIrAFavoritos = { navController.navigate(FavoritosRoute) { launchSingleTop = true } },
             onIrAMiPerfil = { navController.navigate(MiPerfilClienteRoute) { launchSingleTop = true } },
             onCerrarSesion = onCerrarSesionCliente,
+            onDejarResena = { reservaId, profesionalId ->
+                navController.navigate(CrearResenaRoute(reservaId, profesionalId))
+            },
         )
         val onCerrarSesionProfesional: () -> Unit = {
             authViewModel.onAction(AuthAction.CerrarSesion)
@@ -84,11 +89,21 @@ fun KineCareNavHost(modifier: Modifier = Modifier) {
                 popUpTo(ProfessionalPanelRoute) { inclusive = true }
             }
         }
-        professional_profileGraph(onVolver = { navController.popBackStack() })
+        val onVerResenas: (String) -> Unit = { profesionalId ->
+            navController.navigate(ReviewsRoute(profesionalId))
+        }
+        professional_profileGraph(
+            onVolver = { navController.popBackStack() },
+            onVerResenas = onVerResenas,
+        )
         bookingGraph()
         paymentGraph()
         verificationGraph()
-        professional_panelGraph(navController, onCerrarSesion = onCerrarSesionProfesional)
-        reviewsGraph()
+        professional_panelGraph(
+            navController,
+            onCerrarSesion = onCerrarSesionProfesional,
+            onVerResenas = onVerResenas,
+        )
+        reviewsGraph(onVolver = { navController.popBackStack() })
     }
 }

@@ -4,8 +4,10 @@ package com.darjnest.kinecare.feature.client_panel.presentation.viewmodel
 
 import app.cash.turbine.test
 import com.darjnest.kinecare.core.common.data.error.ProfesionalError
+import com.darjnest.kinecare.core.common.data.error.ResenaError
 import com.darjnest.kinecare.core.common.data.error.ReservaError
 import com.darjnest.kinecare.core.common.data.repository.ProfesionalRepository
+import com.darjnest.kinecare.core.common.data.repository.ResenaRepository
 import com.darjnest.kinecare.core.common.data.repository.ReservaRepository
 import com.darjnest.kinecare.core.common.domain.model.Direccion
 import com.darjnest.kinecare.core.common.domain.model.EstadoPago
@@ -15,6 +17,7 @@ import com.darjnest.kinecare.core.common.domain.model.MetodoPago
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
 import com.darjnest.kinecare.core.common.domain.model.Pago
 import com.darjnest.kinecare.core.common.domain.model.Profesional
+import com.darjnest.kinecare.core.common.domain.model.Resena
 import com.darjnest.kinecare.core.common.domain.model.Reserva
 import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.domain.model.Servicio
@@ -24,6 +27,7 @@ import com.darjnest.kinecare.core.common.result.Result
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
@@ -45,6 +49,7 @@ class MisCitasViewModelTest {
 
     private val reservaRepository = mockk<ReservaRepository>()
     private val profesionalRepository = mockk<ProfesionalRepository>()
+    private val resenaRepository = mockk<ResenaRepository>()
     private val firebaseAuth = mockk<FirebaseAuth>()
 
     private val uid = "cliente-1"
@@ -56,7 +61,7 @@ class MisCitasViewModelTest {
     }
 
     private fun crearViewModel(): MisCitasViewModel =
-        MisCitasViewModel(reservaRepository, profesionalRepository, firebaseAuth)
+        MisCitasViewModel(reservaRepository, profesionalRepository, resenaRepository, firebaseAuth)
 
     private fun profesionalDePrueba(id: String, nombre: String): Profesional = Profesional(
         usuario = Usuario(
@@ -138,6 +143,7 @@ class MisCitasViewModelTest {
         coEvery { reservaRepository.obtenerPorCliente(uid) } returns Result.Success(reservas)
         coEvery { profesionalRepository.obtenerPorId("prof-1") } returns
             Result.Success(profesionalDePrueba("prof-1", "Bruno Diaz"))
+        coEvery { resenaRepository.obtenerPorReserva("r-historial") } returns Result.Success(null)
 
         val viewModel = crearViewModel()
 
@@ -201,5 +207,103 @@ class MisCitasViewModelTest {
             assertEquals("Profesional", estado.proximasCitas.first().profesionalNombre)
             assertEquals("Sesión", estado.proximasCitas.first().tipoSesion)
         }
+    }
+
+    private fun resenaDePrueba(reservaId: String, calificacion: Int) = Resena(
+        id = reservaId,
+        reservaId = reservaId,
+        clienteId = uid,
+        profesionalId = "prof-1",
+        calificacion = calificacion,
+        comentario = null,
+        fecha = Instant.fromEpochMilliseconds(0),
+        respuestaProfesional = null,
+    )
+
+    private fun stubReservasCompletadas(vararg ids: String) {
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns
+            Result.Success(ids.map { reservaDePrueba(it, "prof-1", EstadoReserva.COMPLETADA) })
+        coEvery { profesionalRepository.obtenerPorId("prof-1") } returns
+            Result.Success(profesionalDePrueba("prof-1", "Bruno Diaz"))
+    }
+
+    @Test
+    fun `una cita completada sin resena ofrece dejar resena con los ids para navegar`() = runTest {
+        stubReservasCompletadas("r-1")
+        coEvery { resenaRepository.obtenerPorReserva("r-1") } returns Result.Success(null)
+
+        val cita = crearViewModel().state.value.historial.single()
+
+        assertTrue(cita.puedeResenar)
+        assertEquals(0, cita.calificacion)
+        assertEquals("r-1", cita.id)
+        assertEquals("prof-1", cita.profesionalId)
+    }
+
+    @Test
+    fun `una cita ya resenada oculta el boton y muestra sus estrellas`() = runTest {
+        stubReservasCompletadas("r-1")
+        coEvery { resenaRepository.obtenerPorReserva("r-1") } returns Result.Success(resenaDePrueba("r-1", 4))
+
+        val cita = crearViewModel().state.value.historial.single()
+
+        assertFalse(cita.puedeResenar)
+        assertEquals(4, cita.calificacion)
+    }
+
+    @Test
+    fun `si no se puede comprobar la resena se ofrece dejarla igual y la lista no se rompe`() = runTest {
+        stubReservasCompletadas("r-1", "r-2")
+        coEvery { resenaRepository.obtenerPorReserva("r-1") } returns Result.Error(ResenaError.SIN_INTERNET)
+        coEvery { resenaRepository.obtenerPorReserva("r-2") } returns Result.Success(resenaDePrueba("r-2", 5))
+
+        val historial = crearViewModel().state.value.historial
+
+        assertEquals(2, historial.size)
+        assertTrue(historial.first { it.id == "r-1" }.puedeResenar)
+        assertFalse(historial.first { it.id == "r-2" }.puedeResenar)
+    }
+
+    @Test
+    fun `solo las reservas completadas consultan resenas`() = runTest {
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns Result.Success(
+            listOf(
+                reservaDePrueba("r-conf", "prof-1", EstadoReserva.CONFIRMADA),
+                reservaDePrueba("r-canc", "prof-1", EstadoReserva.CANCELADA_CLIENTE),
+            ),
+        )
+        coEvery { profesionalRepository.obtenerPorId("prof-1") } returns
+            Result.Success(profesionalDePrueba("prof-1", "Bruno Diaz"))
+
+        crearViewModel()
+
+        coVerify(exactly = 0) { resenaRepository.obtenerPorReserva(any()) }
+    }
+
+    @Test
+    fun `Recargar vuelve a leer las reservas y el boton desaparece tras reseñar`() = runTest {
+        stubReservasCompletadas("r-1")
+        coEvery { resenaRepository.obtenerPorReserva("r-1") } returns Result.Success(null)
+        val viewModel = crearViewModel()
+        assertTrue(viewModel.state.value.historial.single().puedeResenar)
+
+        coEvery { resenaRepository.obtenerPorReserva("r-1") } returns Result.Success(resenaDePrueba("r-1", 5))
+        viewModel.onAction(MisCitasAction.Recargar)
+
+        assertFalse(viewModel.state.value.historial.single().puedeResenar)
+        coVerify(exactly = 2) { reservaRepository.obtenerPorCliente(uid) }
+    }
+
+    @Test
+    fun `DejarResena es navegacion y no cambia el estado`() = runTest {
+        stubReservasCompletadas("r-1")
+        coEvery { resenaRepository.obtenerPorReserva("r-1") } returns Result.Success(null)
+        val viewModel = crearViewModel()
+        val antes = viewModel.state.value
+
+        viewModel.onAction(MisCitasAction.DejarResena("r-1", "prof-1"))
+
+        assertEquals(antes, viewModel.state.value)
+        coVerify(exactly = 1) { reservaRepository.obtenerPorCliente(uid) }
     }
 }

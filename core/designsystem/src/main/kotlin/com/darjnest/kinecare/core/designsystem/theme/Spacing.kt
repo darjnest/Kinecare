@@ -23,4 +23,10 @@ object KineCareSpacing {
 
     /** Tamano de icono decorativo junto a texto. */
     val icono: Dp = 20.dp
+
+    /** Alto de una barra de progreso fina (distribucion de calificaciones). */
+    val barraDistribucion: Dp = 8.dp
+
+    /** Ancho fijo de la etiqueta "5 ★" de cada fila de la distribucion, para alinear las barras. */
+    val etiquetaDistribucion: Dp = 36.dp
 }

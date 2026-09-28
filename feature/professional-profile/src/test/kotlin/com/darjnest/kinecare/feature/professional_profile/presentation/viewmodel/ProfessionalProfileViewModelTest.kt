@@ -277,6 +277,29 @@ class ProfessionalProfileViewModelTest {
     }
 
     @Test
+    fun `VerResenas es navegacion y no cambia el estado ni recarga`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId(id) } returns Result.Success(profesional())
+        val viewModel = crearViewModel()
+        val antes = viewModel.state.value
+
+        viewModel.onAction(ProfessionalProfileAction.VerResenas(id))
+
+        assertEquals(antes, viewModel.state.value)
+        coVerify(exactly = 1) { profesionalRepository.obtenerPorId(id) }
+    }
+
+    @Test
+    fun `el perfil expone el id que se pasa al listado de resenas y el total guardado`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId(id) } returns
+            Result.Success(profesional(totalResenas = 7))
+
+        val perfil = requerir(crearViewModel().state.value.perfil)
+
+        assertEquals(id, perfil.id)
+        assertEquals(7, perfil.totalResenas)
+    }
+
+    @Test
     fun `la clave del argumento coincide con la propiedad de la ruta`() {
         assertEquals(
             ARG_PROFESIONAL_ID,
