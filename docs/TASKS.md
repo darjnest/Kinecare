@@ -204,7 +204,7 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       navegación desde los accesos de gestión y la barra inferior del
       dashboard hacia estas rutas ya está enlazada. Pendiente: conectar a
       Firestore/Cloud Functions las pantallas de solicitudes,
-      liquidaciones, documentos, mi perfil y el dashboard (solicitudes y
+      liquidaciones, documentos y el dashboard (solicitudes y
       liquidaciones dependen de `reservas`/`pagos`, que solo escriben las
       Cloud Functions; documentos depende de Storage, bloqueado en Spark).
 - [x] `:feature:professional-panel` — **Servicios y tarifas** conectada a
@@ -238,6 +238,24 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       `cupos`/duración por cupo tampoco existen en Firestore: la vista
       oculta esa línea cuando valen 0. Fuera de alcance: editar la hora de
       un turno (falta el selector de hora en los mockups).
+- [x] `:feature:professional-panel` — **Mi perfil profesional**
+      conectada a Firestore (`profesionales/{uid}`):
+      `ProfesionalRepository.actualizarDescripcion` (2 tests) y
+      `MiPerfilProfesionalViewModel` que mapea el `Profesional` real a
+      identidad (nombre, especialidad principal, RNPI, "credenciales al día"
+      = insignia `CREDENCIALES` aprobada), calificación/opiniones,
+      biografía y especialidades (7 tests). **Editar biografía** abre un
+      diálogo (máx. 500 caracteres), escribe `descripcion` y, si falla,
+      deja el diálogo abierto con el borrador. Los datos que el dominio no
+      tiene (universidad, año de titulación, entidad de registro,
+      habilitación Isapre/Fonasa, atenciones completadas, puntualidad) son
+      nulos y la vista oculta esa fila/tarjeta en vez de mostrar un valor
+      falso; la insignia de verificado del avatar ahora solo aparece con
+      credenciales aprobadas y la nota "Excelente" solo con calificación
+      ≥ 4.5. El interruptor de perfil público sigue siendo estado local (no
+      hay campo en Firestore). Zonas de atención y reseña destacada quedan
+      vacías hasta Fase 3/Fase 4; editar credenciales, previsualizar y
+      "ver todas las reseñas" siguen sin destino.
 
 ## Fase 8 — QA, pulido y publicación
 - [ ] Cobertura de tests (JUnit5, MockK, Turbine, Compose UI Testing)

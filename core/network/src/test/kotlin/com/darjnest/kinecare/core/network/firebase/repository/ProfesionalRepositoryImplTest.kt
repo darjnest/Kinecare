@@ -324,6 +324,37 @@ class ProfesionalRepositoryImplTest {
         assertEquals(ProfesionalError.SIN_INTERNET, (resultado as Result.Error).error)
     }
 
+    @Test
+    fun `actualizarDescripcion escribe solo el campo descripcion`() = runTest {
+        val profesionales = mockk<CollectionReference>()
+        val docRef = mockk<DocumentReference>()
+        every { firestore.collection(COLECCION_PROFESIONALES) } returns profesionales
+        every { profesionales.document("prof-1") } returns docRef
+        val task = mockk<Task<Void>>()
+        coEvery { task.await() } returns mockk()
+        every { docRef.update("descripcion", "Kinesiologa deportiva") } returns task
+
+        val resultado = repository.actualizarDescripcion("prof-1", "Kinesiologa deportiva")
+
+        assertTrue(resultado is Result.Success)
+        verify { docRef.update("descripcion", "Kinesiologa deportiva") }
+    }
+
+    @Test
+    fun `actualizarDescripcion retorna DESCONOCIDO ante un error inesperado`() = runTest {
+        val profesionales = mockk<CollectionReference>()
+        val docRef = mockk<DocumentReference>()
+        every { firestore.collection(COLECCION_PROFESIONALES) } returns profesionales
+        every { profesionales.document("prof-1") } returns docRef
+        val task = mockk<Task<Void>>()
+        coEvery { task.await() } throws IllegalStateException("permiso denegado")
+        every { docRef.update("descripcion", any<String>()) } returns task
+
+        val resultado = repository.actualizarDescripcion("prof-1", "x")
+
+        assertEquals(ProfesionalError.DESCONOCIDO, (resultado as Result.Error).error)
+    }
+
     /**
      * Encadena los mocks de Firestore que recorre
      * `ProfesionalRepositoryImpl.buscarPorEspecialidad`: la query sobre

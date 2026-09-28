@@ -86,6 +86,19 @@ class ProfesionalRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun actualizarDescripcion(id: String, descripcion: String): Result<Unit, ProfesionalError> {
+        return try {
+            firestore.collection(COLECCION_PROFESIONALES).document(id)
+                .update("descripcion", descripcion)
+                .await()
+            Result.Success(Unit)
+        } catch (e: FirebaseNetworkException) {
+            Result.Error(ProfesionalError.SIN_INTERNET)
+        } catch (e: Exception) {
+            Result.Error(ProfesionalError.DESCONOCIDO)
+        }
+    }
+
     private fun Disponibilidad.aMapa(): Map<String, Any> = mapOf(
         "diaSemana" to diaSemana.name,
         "horaInicio" to horaInicio.aHoraMinuto(),

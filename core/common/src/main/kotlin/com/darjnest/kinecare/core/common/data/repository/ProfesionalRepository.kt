@@ -27,4 +27,7 @@ interface ProfesionalRepository {
         id: String,
         disponibilidad: List<Disponibilidad>,
     ): Result<Unit, ProfesionalError>
+
+    /** Actualiza la biografia (`descripcion`) de `profesionales/{id}`; solo el dueno puede escribirla. */
+    suspend fun actualizarDescripcion(id: String, descripcion: String): Result<Unit, ProfesionalError>
 }
