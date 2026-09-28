@@ -203,8 +203,10 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       todavía) y ruta registrada en `professional_panelGraph()`. La
       navegación desde los accesos de gestión y la barra inferior del
       dashboard hacia estas rutas ya está enlazada. Pendiente: conectar a
-      Firestore/Cloud Functions las pantallas de disponibilidad,
-      solicitudes, liquidaciones, documentos, mi perfil y el dashboard.
+      Firestore/Cloud Functions las pantallas de solicitudes,
+      liquidaciones, documentos, mi perfil y el dashboard (solicitudes y
+      liquidaciones dependen de `reservas`/`pagos`, que solo escriben las
+      Cloud Functions; documentos depende de Storage, bloqueado en Spark).
 - [x] `:feature:professional-panel` — **Servicios y tarifas** conectada a
       Firestore (`profesionales/{uid}/servicios`): nuevo
       `ServicioRepository` (`obtenerPorProfesional`, `actualizarActivo`;
@@ -221,6 +223,21 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       mockups). **Pendiente a decidir:** `ProfesionalRepository.obtenerPorId`
       (vista del cliente) hoy incluye los servicios pausados; filtrarlos
       pertenece al flujo de reserva (Fase 4).
+- [x] `:feature:professional-panel` — **Disponibilidad y horarios**
+      conectada a Firestore (`profesionales/{uid}.disponibilidad`):
+      `ProfesionalRepository.actualizarDisponibilidad` (reemplaza el
+      arreglo; 2 tests) y `DisponibilidadYHorariosViewModel` que carga el
+      horario real (`obtenerPorId`), deriva los 7 días y los turnos del día
+      seleccionado, implementa **Replicar** (copia los turnos del día
+      seleccionado a los demás días ya habilitados, sin habilitar
+      ninguno nuevo) y **Guardar** (7 tests). Guardar queda bloqueado si la
+      carga falló, para no pisar el horario real con una lista vacía; el
+      resultado se avisa con un Snackbar. Solo el horario semanal se
+      persiste: reservas inmediatas, traslado, radio, comunas y recargo
+      siguen siendo estado local de la pantalla (sin campos en Firestore).
+      `cupos`/duración por cupo tampoco existen en Firestore: la vista
+      oculta esa línea cuando valen 0. Fuera de alcance: editar la hora de
+      un turno (falta el selector de hora en los mockups).
 
 ## Fase 8 — QA, pulido y publicación
 - [ ] Cobertura de tests (JUnit5, MockK, Turbine, Compose UI Testing)

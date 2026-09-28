@@ -70,6 +70,32 @@ class ProfesionalRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun actualizarDisponibilidad(
+        id: String,
+        disponibilidad: List<Disponibilidad>,
+    ): Result<Unit, ProfesionalError> {
+        return try {
+            firestore.collection(COLECCION_PROFESIONALES).document(id)
+                .update("disponibilidad", disponibilidad.map { it.aMapa() })
+                .await()
+            Result.Success(Unit)
+        } catch (e: FirebaseNetworkException) {
+            Result.Error(ProfesionalError.SIN_INTERNET)
+        } catch (e: Exception) {
+            Result.Error(ProfesionalError.DESCONOCIDO)
+        }
+    }
+
+    private fun Disponibilidad.aMapa(): Map<String, Any> = mapOf(
+        "diaSemana" to diaSemana.name,
+        "horaInicio" to horaInicio.aHoraMinuto(),
+        "horaFin" to horaFin.aHoraMinuto(),
+        "activo" to activo,
+    )
+
+    // `LocalTime.toString()` omite los segundos en cero pero no siempre; se fija HH:mm.
+    private fun LocalTime.aHoraMinuto(): String = "%02d:%02d".format(hour, minute)
+
     private suspend fun DocumentSnapshot.aProfesionalONull(): Profesional? {
         if (!exists()) return null
         // Si `usuarios/{id}` no se puede resolver (borrado, red caida al
