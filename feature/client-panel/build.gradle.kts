@@ -48,6 +48,11 @@ dependencies {
 
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.auth)
+    // `ReporteProblemaRepositoryImpl` (data/repository_impl): repositorio
+    // que solo usa esta feature, asi que su impl Firestore vive aqui y no
+    // en `:core:network` (mismo criterio que `AuthRepositoryImpl`).
+    implementation(libs.firebase.firestore)
+    implementation(libs.kotlinx.coroutines.play.services)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

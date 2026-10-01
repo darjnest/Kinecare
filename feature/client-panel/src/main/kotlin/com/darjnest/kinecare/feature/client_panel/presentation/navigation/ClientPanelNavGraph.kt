@@ -7,6 +7,7 @@ import com.darjnest.kinecare.feature.client_panel.presentation.view.FavoritosRoo
 import com.darjnest.kinecare.feature.client_panel.presentation.view.InformacionPersonalClienteRoot
 import com.darjnest.kinecare.feature.client_panel.presentation.view.MiPerfilClienteRoot
 import com.darjnest.kinecare.feature.client_panel.presentation.view.MisCitasRoot
+import com.darjnest.kinecare.feature.client_panel.presentation.view.ReportarProblemaRoot
 
 fun NavGraphBuilder.client_panelGraph(
     navController: NavController,
@@ -21,6 +22,10 @@ fun NavGraphBuilder.client_panelGraph(
     composable<MisCitasRoute> {
         MisCitasRoot(
             onDejarResena = onDejarResena,
+            // Pantalla de esta misma feature: navegacion interna, sin pasar por `:app`.
+            onReportarProblema = { reservaId, profesionalId ->
+                navController.navigate(ReportarProblemaRoute(reservaId, profesionalId))
+            },
             onIrAExplorar = onIrAExplorar,
             onIrAFavoritos = onIrAFavoritos,
             onIrAMiPerfil = onIrAMiPerfil,
@@ -45,5 +50,8 @@ fun NavGraphBuilder.client_panelGraph(
     }
     composable<InformacionPersonalClienteRoute> {
         InformacionPersonalClienteRoot(onVolver = navController::popBackStack)
+    }
+    composable<ReportarProblemaRoute> {
+        ReportarProblemaRoot(onVolver = navController::popBackStack)
     }
 }

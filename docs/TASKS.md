@@ -317,11 +317,38 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       (`firebase deploy --only functions,firestore -P qa`); con
       contención alta la transacción puede agotar reintentos y responder
       sin `motivo` (el cliente lo muestra como error genérico).
-- [ ] Historial de reservas, confirmación, reportar problema — la
-      confirmación ya existe (pantalla final del flujo) y el historial es
-      "Mis Citas" de `:feature:client-panel` (Fase 2); falta **reportar
-      problema** y revisar "Mis Citas" con reservas reales creadas por la
-      función (bloqueado por el despliegue).
+- [x] Historial de reservas y confirmación: la confirmación es la pantalla
+      final del flujo de reserva y el historial es "Mis Citas" de
+      `:feature:client-panel` (Fase 2).
+- [x] **Reportar problema** (`:feature:client-panel`). Nueva colección
+      `reportesProblema/{reservaId}` (un reporte por reserva, mismo truco
+      de id que `resenas`) escrita directo por el cliente, con reglas de
+      `create` estrictas (reserva propia, `profesionalId` de la reserva,
+      motivo del enum, descripción 10–1000, `estado == ABIERTO`, fecha del
+      servidor, claves exactas); el profesional no lo lee y nadie lo puede
+      editar desde la app (ver [DATA_MODEL.md](DATA_MODEL.md)). **Reglas
+      declaradas, no desplegadas**; probadas con 29 casos contra el
+      Firestore Emulator. Repositorio propio de la feature
+      (`ReporteProblemaRepository` + impl Firestore en `data/`, binding en
+      `di/ClientPanelModule.kt`; no sube a `:core:*` porque solo lo usa esta
+      feature). Cada tarjeta de "Mis Citas" (en curso, próximas, historial,
+      canceladas) tiene "Reportar un problema" o, si ya existe, el estado
+      del reporte ("Reporte recibido / en revisión / resuelto") + "Ver
+      reporte"; los reportes se leen con una sola consulta por `clienteId`
+      (si falla, se ofrece reportar igual y la pantalla vuelve a comprobar).
+      `ReportarProblemaRoute(reservaId, profesionalId)`, navegación interna
+      de la feature: motivo (radio), descripción con contador y mínimo,
+      errores por tipo, y al enviar muestra "Recibimos tu reporte"; si ya
+      había uno lo muestra de solo lectura. 22 tests nuevos
+      (`ReporteProblemaRepositoryImplTest` 10, `ReportarProblemaViewModelTest`
+      11, `ClientPanelRouteTest` 1) + 4 en `MisCitasViewModelTest`.
+      **Fuera de alcance:** adjuntar fotos (Storage bloqueado), avisar a
+      soporte al llegar un reporte (trigger → Blaze), reportar desde el
+      panel profesional. **No verificado visualmente** (sin reservas reales
+      en QA); compila y pasa `:app:assembleDebug` y `testDebugUnitTest`.
+- [ ] Revisar "Mis Citas" y "Reportar problema" con reservas reales creadas
+      por `crearReserva` (bloqueado por el despliegue, plan Blaze) y
+      desplegar las reglas de `reportesProblema`.
 
 ## Fase 5 — Pago
 - [ ] Elegir pasarela (Transbank Webpay Plus / Flow / Mercado Pago)
