@@ -62,9 +62,11 @@ activo: boolean
 clienteId: string
 profesionalId: string
 servicioId: string
-modalidad: "DOMICILIO" | "CONSULTA" | "ONLINE"
-fechaHora: timestamp
-direccion: Direccion?
+modalidad: "DOMICILIO" | "CONSULTA" | "ONLINE"   // copiada del servicio, no la envía el cliente
+fechaHora: timestamp                              // inicio de la cita (instante UTC)
+duracionMinutos: number                           // copiada de servicio.duracionMinutos al reservar;
+                                                  // necesaria para detectar solapes entre reservas
+direccion: Direccion?                             // solo si modalidad == DOMICILIO; null en otro caso
 estado: "SOLICITADA" | "CONFIRMADA" | "EN_CURSO" | "COMPLETADA" |
         "CANCELADA_CLIENTE" | "CANCELADA_PROFESIONAL" | "RECHAZADA"
 pago: PagoRef                        // { id, monto, estado } — detalle en `pagos/{pagoId}`
@@ -72,6 +74,16 @@ comisionPorcentaje: number           // escrito solo por Cloud Function
 creadoEn: timestamp
 actualizadoEn: timestamp
 ```
+`pago` lo inicializa `crearReserva` como `{ id: null, monto: servicio.precio,
+estado: "PENDIENTE" }`: **`pago.id` es `null` hasta la Fase 5**, cuando
+`iniciarPago` crea el documento en `pagos` y escribe su id aquí. El `monto`
+siempre sale del documento del servicio, nunca del cliente.
+
+Estados que **ocupan agenda** (bloquean el horario): `SOLICITADA`,
+`CONFIRMADA`, `EN_CURSO`. Una reserva en cualquier otro estado libera su
+horario. Las reservas anteriores a `duracionMinutos` (si existieran) se
+tratan como de 60 minutos al buscar solapes.
+
 Índices compuestos sugeridos: `clienteId` + `estado` + `fechaHora` (desc);
 `profesionalId` + `estado` + `fechaHora` (desc) — ya desplegados (Fase 2).
 Además `clienteId` (asc) + `fechaHora` (desc) sin filtro de `estado` — lo
@@ -81,6 +93,24 @@ Próximas/Historial/Canceladas se resuelve en el `ViewModel` sobre la lista
 completa); declarado en `firestore.indexes.json` en este cambio pero
 **no confirmado como desplegado** — no se verificó contra el proyecto
 Firebase real (sin acceso a Firebase MCP en esta sesión).
+
+`profesionalId` (asc) + `fechaHora` (asc) — lo usa `crearReserva` para buscar
+reservas del profesional en una ventana de tiempo y detectar
+`HORARIO_OCUPADO` (igualdad en `profesionalId` + rango en `fechaHora`; el
+filtro por `estado` se hace en memoria). **Declarado en
+`firestore.indexes.json`, no desplegado**: el Firestore Emulator no exige
+índices, así que la consulta no está probada contra uno real.
+
+### `bloqueosAgenda/{profesionalId}`
+```
+profesionalId: string
+ultimaReservaId: string
+actualizadoEn: timestamp
+```
+Documento-candado, uno por profesional, que **solo `crearReserva` lee y
+escribe** (Admin SDK; las Security Rules deniegan todo acceso al cliente).
+No es un dato de negocio: existe para serializar las reservas de un mismo
+profesional (ver [Cloud Functions](#cloud-functions) → concurrencia).
 
 ### `pagos/{pagoId}`
 ```
@@ -151,6 +181,76 @@ fechaResolucion: timestamp?
 Escrito por Cloud Functions (`solicitarVerificacion`, `estadoVerificacion`).
 Nunca contiene documentos de identidad ni biometría — esos se suben a
 Storage y el proveedor externo los procesa fuera de Firestore.
+
+## Cloud Functions
+
+Código en `functions/` (TypeScript, Node 22, `firebase-functions` v2,
+región `us-central1`). Ninguna está desplegada todavía: los proyectos están
+en plan Spark y Cloud Functions exige Blaze.
+
+### `crearReserva` (callable) — escrita y probada en emulador, **no desplegada**
+Protocolo callable sobre HTTP (lo consume el cliente Android con Retrofit):
+`POST https://us-central1-<projectId>.cloudfunctions.net/crearReserva`,
+header `Authorization: Bearer <ID token de Firebase>`, cuerpo
+`{"data": {...}}`. Éxito: `{"result": {...}}`. Error:
+`{"error": {"status": "<CODE>", "message": "...", "details": {"motivo": "<MOTIVO>"}}}`.
+
+Request `data`:
+```
+profesionalId: string
+servicioId: string
+fechaHora: string        // ISO-8601 con zona, p. ej. "2026-10-05T13:00:00Z"
+direccion?: { calle, numero, comuna, ciudad: string, lat?: number|null,
+              lng?: number|null, indicaciones?: string|null } | null
+```
+`modalidad`, `precio` y `comisionPorcentaje` **no** se envían; si llegan, se
+ignoran. La modalidad, la duración y el precio salen de
+`profesionales/{id}/servicios/{servicioId}`; la comisión es la constante
+`COMISION_PORCENTAJE = 0.10` del servidor. Response `result`:
+`{ reservaId: string }`. Escribe `reservas/{reservaId}` en estado
+`SOLICITADA` con `pago = { id: null, monto, estado: "PENDIENTE" }`.
+
+| `status` (HTTP) | `motivo` | Cuándo |
+|---|---|---|
+| `UNAUTHENTICATED` (401) | `SIN_SESION` | Sin sesión |
+| `PERMISSION_DENIED` (403) | `ROL_INVALIDO` | `usuarios/{uid}.rol != "CLIENTE"` (o sin documento), o `uid == profesionalId` |
+| `INVALID_ARGUMENT` (400) | `DATOS_INVALIDOS` | Payload mal formado: ids vacíos/no texto, `fechaHora` no parseable, tipos incorrectos, calle/numero/comuna/ciudad > 120 caracteres o indicaciones > 300 |
+| `INVALID_ARGUMENT` (400) | `DIRECCION_REQUERIDA` | Servicio `DOMICILIO` y `direccion` ausente o con calle/numero/comuna en blanco |
+| `NOT_FOUND` (404) | `SERVICIO_NO_DISPONIBLE` | El profesional o el servicio no existen |
+| `FAILED_PRECONDITION` (400) | `SERVICIO_NO_DISPONIBLE` | `servicio.activo == false` (o servicio con datos corruptos) |
+| `FAILED_PRECONDITION` (400) | `ANTICIPACION_INSUFICIENTE` | `fechaHora` < ahora + 60 min, o > ahora + 60 días |
+| `FAILED_PRECONDITION` (400) | `FUERA_DE_HORARIO` | El tramo `[fechaHora, fechaHora + duracionMinutos)` no cabe completo en una `Disponibilidad` con `activo == true` de ese día |
+| `ALREADY_EXISTS` (409) | `HORARIO_OCUPADO` | Se solapa con otra reserva del profesional en `SOLICITADA`/`CONFIRMADA`/`EN_CURSO` |
+
+Reglas de detalle:
+- **Zona horaria.** `Disponibilidad` está en hora de Chile
+  (`America/Santiago`, con horario de verano): `fechaHora` se convierte a esa
+  zona (vía `Intl`) para elegir el día de la semana y comparar `HH:mm`. El
+  tramo no puede cruzar la medianoche local; terminar exactamente a las 00:00
+  solo es válido si `horaFin` es `"24:00"`.
+- **Rol** se lee siempre de `usuarios/{uid}`, nunca del payload ni de claims.
+- **Concurrencia (`HORARIO_OCUPADO`).** El chequeo y la escritura van en una
+  transacción de Firestore (Admin SDK). Dentro de ella se lee primero el
+  documento-candado `bloqueosAgenda/{profesionalId}`, luego se consultan las
+  reservas con `fechaHora` en `[inicio - 24 h, fin)` (una reserva nunca
+  cruza la medianoche, así que dura ≤ 24 h) y se filtran estado y solape en
+  memoria; al crear la reserva se reescribe el candado. El candado existe
+  porque la documentación de Firestore no garantiza que una consulta de
+  rango bloquee inserciones "fantasma" en el rango; con él, dos reservas del
+  mismo profesional siempre escriben el mismo documento y se serializan.
+  En el emulador la prueba de concurrencia (8 llamadas paralelas al mismo
+  tramo → exactamente 1 éxito) también pasa sin el candado, por lo que
+  **no se pudo demostrar que el candado sea necesario en Firestore real**;
+  se mantiene como defensa a un costo mínimo (1 lectura + 1 escritura por
+  reserva; las reservas de un mismo profesional se serializan).
+- Si hay contención extrema la transacción reintenta hasta 10 veces; agotado,
+  el error sale como `aborted`/`internal` **sin** `motivo` del contrato.
+
+Pruebas (`functions/`): `npm run test:unit` (validación, conversión
+`America/Santiago` incluidos cambios de horario, solapes) y
+`npm run test:emulator` (levanta el Firestore Emulator y corre además la
+integración del handler: todos los `motivo`, camino feliz y reservas
+simultáneas). No se probó contra un proyecto Firebase real.
 
 ## Firebase Storage
 

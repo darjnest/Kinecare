@@ -1,6 +1,8 @@
 package com.darjnest.kinecare.core.network.di
 
-import com.darjnest.kinecare.core.network.CLOUD_FUNCTIONS_BASE_URL
+import com.darjnest.kinecare.core.network.functions.CloudFunctionsApi
+import com.darjnest.kinecare.core.network.urlBaseCloudFunctions
+import com.google.firebase.FirebaseApp
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -44,10 +46,18 @@ object NetworkModule {
     @Singleton
     fun provideRetrofit(okHttpClient: OkHttpClient, json: Json): Retrofit {
         val contentType = "application/json".toMediaType()
+        val projectId = requireNotNull(FirebaseApp.getInstance().options.projectId) {
+            "google-services.json no define project_id"
+        }
         return Retrofit.Builder()
-            .baseUrl(CLOUD_FUNCTIONS_BASE_URL)
+            .baseUrl(urlBaseCloudFunctions(projectId))
             .client(okHttpClient)
             .addConverterFactory(json.asConverterFactory(contentType))
             .build()
     }
+
+    @Provides
+    @Singleton
+    fun provideCloudFunctionsApi(retrofit: Retrofit): CloudFunctionsApi =
+        retrofit.create(CloudFunctionsApi::class.java)
 }

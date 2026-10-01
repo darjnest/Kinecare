@@ -2,6 +2,7 @@
 
 package com.darjnest.kinecare.core.network.firebase.repository
 
+import com.darjnest.kinecare.core.common.data.error.CrearReservaError
 import com.darjnest.kinecare.core.common.data.error.ReservaError
 import com.darjnest.kinecare.core.common.data.repository.ReservaRepository
 import com.darjnest.kinecare.core.common.domain.model.Direccion
@@ -11,31 +12,45 @@ import com.darjnest.kinecare.core.common.domain.model.MetodoPago
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
 import com.darjnest.kinecare.core.common.domain.model.Pago
 import com.darjnest.kinecare.core.common.domain.model.Reserva
+import com.darjnest.kinecare.core.common.domain.model.SolicitudReserva
 import com.darjnest.kinecare.core.common.domain.model.TipoMetodoPago
 import com.darjnest.kinecare.core.common.result.Result
+import com.darjnest.kinecare.core.network.functions.CloudFunctionsApi
+import com.darjnest.kinecare.core.network.functions.dto.CallableErrorBody
+import com.darjnest.kinecare.core.network.functions.dto.CallableRequest
+import com.darjnest.kinecare.core.network.functions.dto.CrearReservaRequestDto
+import com.darjnest.kinecare.core.network.functions.dto.DireccionDto
 import com.google.firebase.FirebaseNetworkException
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Instant
+import kotlinx.serialization.json.Json
+import java.io.IOException
 import javax.inject.Inject
 
 private const val COLECCION_RESERVAS = "reservas"
 private const val COLECCION_PAGOS = "pagos"
 
 /**
- * Implementacion Firestore de lectura de `reservas/{reservaId}`
- * (docs/DATA_MODEL.md). Solo lectura: la escritura es exclusiva de las
- * Cloud Functions `crearReserva`/`iniciarPago` (Fase 4/5, todavia no
- * desplegadas) — firestore.rules ya deniega `write` desde el cliente sobre
- * esta coleccion.
+ * Lectura de `reservas/{reservaId}` con el SDK de Firestore
+ * (docs/DATA_MODEL.md) y creacion via la Cloud Function `crearReserva`
+ * (Retrofit, [CloudFunctionsApi]) — firestore.rules deniega `write` desde el
+ * cliente sobre esta coleccion. `crearReserva` esta escrita y probada contra
+ * el emulador, pero **no desplegada** (plan Spark): hasta subir a Blaze,
+ * [crear] termina en [CrearReservaError.DESCONOCIDO] (404 sin cuerpo JSON).
  *
  * Requiere el indice compuesto `clienteId` (ASC) + `fechaHora` (DESC) —
  * documentado en docs/DATA_MODEL.md y agregado a `firestore.indexes.json`.
  */
 class ReservaRepositoryImpl @Inject constructor(
     private val firestore: FirebaseFirestore,
+    private val firebaseAuth: FirebaseAuth,
+    private val cloudFunctionsApi: CloudFunctionsApi,
+    private val json: Json,
 ) : ReservaRepository {
 
     override suspend fun obtenerPorCliente(clienteId: String): Result<List<Reserva>, ReservaError> {
@@ -52,6 +67,55 @@ class ReservaRepositoryImpl @Inject constructor(
             Result.Error(ReservaError.SIN_INTERNET)
         } catch (e: Exception) {
             Result.Error(ReservaError.DESCONOCIDO)
+        }
+    }
+
+    override suspend fun crear(solicitud: SolicitudReserva): Result<String, CrearReservaError> {
+        val usuario = firebaseAuth.currentUser ?: return Result.Error(CrearReservaError.SIN_SESION)
+        return try {
+            val token = usuario.getIdToken(false).await().token
+                ?: return Result.Error(CrearReservaError.SIN_SESION)
+            val respuesta = cloudFunctionsApi.crearReserva(
+                autorizacion = "Bearer $token",
+                cuerpo = CallableRequest(solicitud.aDto()),
+            )
+            val cuerpo = respuesta.body()
+            if (respuesta.isSuccessful && cuerpo != null) {
+                Result.Success(cuerpo.result.reservaId)
+            } else {
+                Result.Error(errorDeCallable(respuesta.errorBody()?.string()))
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: FirebaseNetworkException) {
+            Result.Error(CrearReservaError.SIN_INTERNET)
+        } catch (e: IOException) {
+            Result.Error(CrearReservaError.SIN_INTERNET)
+        } catch (e: Exception) {
+            Result.Error(CrearReservaError.DESCONOCIDO)
+        }
+    }
+
+    /**
+     * Prioriza `details.motivo` (1:1 con [CrearReservaError]); si no viene,
+     * cae al `status` canonico. Un cuerpo que no es JSON de callable (p. ej.
+     * el 404 HTML de una funcion no desplegada) es [CrearReservaError.DESCONOCIDO].
+     */
+    private fun errorDeCallable(cuerpo: String?): CrearReservaError {
+        val error = cuerpo
+            ?.let { runCatching { json.decodeFromString<CallableErrorBody>(it) }.getOrNull() }
+            ?.error
+            ?: return CrearReservaError.DESCONOCIDO
+        val porMotivo = error.details?.motivo?.let { motivo ->
+            CrearReservaError.entries.firstOrNull { it.name == motivo }
+        }
+        return porMotivo ?: when (error.status) {
+            "UNAUTHENTICATED" -> CrearReservaError.SIN_SESION
+            "PERMISSION_DENIED" -> CrearReservaError.ROL_INVALIDO
+            "INVALID_ARGUMENT" -> CrearReservaError.DATOS_INVALIDOS
+            "ALREADY_EXISTS" -> CrearReservaError.HORARIO_OCUPADO
+            "NOT_FOUND" -> CrearReservaError.SERVICIO_NO_DISPONIBLE
+            else -> CrearReservaError.DESCONOCIDO
         }
     }
 
@@ -141,3 +205,20 @@ class ReservaRepositoryImpl @Inject constructor(
         )
     }
 }
+
+private fun SolicitudReserva.aDto() = CrearReservaRequestDto(
+    profesionalId = profesionalId,
+    servicioId = servicioId,
+    fechaHora = fechaHora.toString(),
+    direccion = direccion?.let {
+        DireccionDto(
+            calle = it.calle,
+            numero = it.numero,
+            comuna = it.comuna,
+            ciudad = it.ciudad,
+            lat = it.lat,
+            lng = it.lng,
+            indicaciones = it.indicaciones,
+        )
+    },
+)

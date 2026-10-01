@@ -39,6 +39,11 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Candados de agenda por profesional: los lee y escribe solo crearReserva (Admin SDK).
+    match /bloqueosAgenda/{profesionalId} {
+      allow read, write: if false;
+    }
+
     match /pagos/{pagoId} {
       allow read: if request.auth != null && (
         get(/databases/$(database)/documents/reservas/$(resource.data.reservaId)).data.clienteId == request.auth.uid ||

@@ -260,11 +260,68 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       colección `reservas` está vacía en la práctica (la reserva es Fase 4),
       así que "Dejar reseña" no aparece con datos reales todavía.
 
-## Fase 4 — Flujo de reserva
-- [ ] `:feature:booking`: 4 pasos (modalidad → fecha/hora → dirección →
-      revisión)
-- [ ] Cloud Function `crearReserva`
-- [ ] Historial de reservas, confirmación, reportar problema
+## Fase 4 — Flujo de reserva 🔧 *(en progreso)*
+- [x] `:feature:booking`: 4 pasos (modalidad → fecha/hora → dirección →
+      revisión). `BookingRoute(profesionalId, servicioId?)`, entradas desde
+      el perfil público (`:feature:professional-profile`): botón fijo
+      "Reservar hora" (oculto si no hay servicios activos) y "Reservar" en
+      cada servicio (llega preseleccionado), por callback `onReservar`
+      cableado en `KineCareNavHost`. **Paso 1** modalidad (solo las que
+      tienen servicios activos; se autoselecciona si hay una sola, igual que
+      el servicio si la modalidad tiene uno). **Paso 2** días/horas: cupos
+      generados en `domain/service/GeneradorHorarios.kt` a partir de
+      `Disponibilidad.activo` en hora de Chile (`ZonaHorariaChile`, nuevo
+      en `:core:common/util`, no la zona del dispositivo), en pasos de
+      `duracionMinutos` del servicio, 14 días hacia adelante, mínimo 60 min
+      de anticipación (mismas reglas que valida la función). **Paso 3**
+      dirección, solo para `DOMICILIO` (los demás servicios tienen 3 pasos):
+      direcciones guardadas de `clientes/{uid}` (si fallan, formulario vacío
+      sin bloquear) o una nueva; calle/número/comuna obligatorios.
+      **Paso 4** revisión con total. Back del sistema y de la barra
+      retroceden un paso. Tras confirmar, pantalla "¡Reserva solicitada!"
+      con "Ver mis citas" (saca el flujo del back stack) y "Listo". Si la
+      función rechaza el horario (`HORARIO_OCUPADO`/`FUERA_DE_HORARIO`/
+      `ANTICIPACION_INSUFICIENTE`) vuelve al paso 2 sin ese cupo;
+      `DIRECCION_REQUERIDA` vuelve al 3; cada `CrearReservaError` tiene su
+      mensaje. Resuelve el pendiente de la Fase 7: los servicios pausados
+      se filtran en el perfil y en el flujo, y la función los rechaza.
+      **Limitación:** el cliente no ve reservas ajenas (Security Rules), así
+      que puede ofrecer un cupo ya tomado; se detecta al confirmar.
+      Clock inyectado (`di/BookingModule.kt`) para tests deterministas.
+      64 tests (`BookingViewModelTest` 53, `GeneradorHorariosTest` 9 con
+      cambio de horario de abril, `BookingRouteTest` 2) + 1 en
+      `ProfessionalProfileViewModelTest`. **Verificado en emulador**
+      (Pixel 7a, flavor QA, sesión de Cliente existente): pasos 1→4 con
+      datos reales de `kinecare-cl-qa`; "Confirmar" llega a
+      `us-central1-kinecare-cl-qa.cloudfunctions.net/crearReserva`, recibe
+      404 (no desplegada) y muestra el error genérico sin romperse. La
+      confirmación exitosa no se pudo ver en vivo.
+- [x] Cloud Function `crearReserva` — **escrita y probada, no desplegada**
+      (Cloud Functions requiere plan Blaze). `functions/` (TypeScript,
+      Node 22, `firebase-functions` v2 `onCall`, `us-central1`); contrato,
+      motivos de error y documento escrito en
+      [DATA_MODEL.md](DATA_MODEL.md#cloud-functions). Precio, modalidad y
+      comisión (`COMISION_PORCENTAJE = 0.10`) salen del backend, nunca del
+      cliente. Valida rol `CLIENTE`, servicio activo, dirección para
+      domicilio, anticipación (60 min – 60 días), que el cupo caiga entero
+      en un turno activo en `America/Santiago` y que no se superponga con
+      otra reserva activa del profesional (transacción + candado
+      `bloqueosAgenda/{profesionalId}`, nuevo en `firestore.rules` con
+      todo denegado al cliente). Nuevo campo `reservas.duracionMinutos` e
+      índice `profesionalId`+`fechaHora` (declarado, no desplegado).
+      68 tests (`npm run test:emulator`: 38 unitarios + 30 de integración
+      contra el Firestore Emulator, incluida una carrera de 8 llamadas al
+      mismo cupo → 1 gana). Cliente Android: `ReservaRepository.crear`
+      (`:core:network`, Retrofit `CloudFunctionsApi`, 10 tests nuevos).
+      **Pendiente:** subir a Blaze y desplegar función, reglas e índice
+      (`firebase deploy --only functions,firestore -P qa`); con
+      contención alta la transacción puede agotar reintentos y responder
+      sin `motivo` (el cliente lo muestra como error genérico).
+- [ ] Historial de reservas, confirmación, reportar problema — la
+      confirmación ya existe (pantalla final del flujo) y el historial es
+      "Mis Citas" de `:feature:client-panel` (Fase 2); falta **reportar
+      problema** y revisar "Mis Citas" con reservas reales creadas por la
+      función (bloqueado por el despliegue).
 
 ## Fase 5 — Pago
 - [ ] Elegir pasarela (Transbank Webpay Plus / Flow / Mercado Pago)
@@ -307,9 +364,10 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       `modalidad`), `reembolsableIsapreFonasa`/`notaInferior` fijos en
       `false`/`null` y `region` vacío (sin esos datos en Firestore). Fuera
       de alcance: agregar/editar un servicio (falta el formulario en los
-      mockups). **Pendiente a decidir:** `ProfesionalRepository.obtenerPorId`
-      (vista del cliente) hoy incluye los servicios pausados; filtrarlos
-      pertenece al flujo de reserva (Fase 4).
+      mockups). ~~Pendiente a decidir~~ resuelto en la Fase 4:
+      `ProfesionalRepository.obtenerPorId` sigue trayendo los pausados,
+      pero el perfil público y `:feature:booking` los filtran y
+      `crearReserva` los rechaza.
 - [x] `:feature:professional-panel` — **Disponibilidad y horarios**
       conectada a Firestore (`profesionales/{uid}.disponibilidad`):
       `ProfesionalRepository.actualizarDisponibilidad` (reemplaza el

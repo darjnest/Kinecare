@@ -76,6 +76,13 @@ sealed interface ProfessionalProfileAction {
 
     /** Navegacion al listado de resenas del profesional (`:feature:reviews`), via callback del `Root`. */
     data class VerResenas(val profesionalId: String) : ProfessionalProfileAction
+
+    /**
+     * Navegacion al flujo de reserva (`:feature:booking`), via callback del
+     * `Root`. [servicioId] nulo = boton general "Reservar hora"; no nulo =
+     * "Reservar" de un servicio concreto (llega preseleccionado).
+     */
+    data class Reservar(val profesionalId: String, val servicioId: String? = null) : ProfessionalProfileAction
 }
 
 @HiltViewModel
@@ -106,6 +113,7 @@ class ProfessionalProfileViewModel @Inject constructor(
             }
             ProfessionalProfileAction.VolverAtras,
             is ProfessionalProfileAction.VerResenas,
+            is ProfessionalProfileAction.Reservar,
             -> Unit
         }
     }
