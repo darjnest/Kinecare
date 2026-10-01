@@ -169,6 +169,47 @@ contra el proyecto Firebase real).
 > Hasta entonces el promedio y el conteo mostrados en el perfil pueden no
 > coincidir con el listado real de reseñas.
 
+### `reportesProblema/{reporteId}`
+```
+reservaId: string
+clienteId: string
+profesionalId: string
+motivo: "PROFESIONAL_NO_LLEGO" | "ATRASO" | "COBRO_INCORRECTO" |
+        "CONDUCTA_INAPROPIADA" | "CALIDAD_ATENCION" | "OTRO"
+descripcion: string    // 10..1000 caracteres (sin contar espacios al borde)
+estado: "ABIERTO" | "EN_REVISION" | "RESUELTO"
+fecha: timestamp
+```
+Problema que un Cliente reporta sobre una de sus reservas, desde "Mis Citas"
+(`:feature:client-panel`, `ReporteProblemaRepository`). Lo escribe el
+cliente directo (no es pago ni verificación, así que no requiere Cloud
+Function).
+
+**Convención de id:** igual que `resenas`, el id es **siempre el
+`reservaId`**: una reserva admite a lo más un reporte, y un segundo intento
+sería un `update`, denegado.
+
+**Security Rules** (`firestore.rules`; **declaradas, no desplegadas**):
+- `create`: `clienteId == request.auth.uid`, `reporteId == reservaId`, la
+  reserva existe y es del llamador, `profesionalId` igual al de la reserva,
+  `motivo` dentro del enum, `descripcion` string de 10 a 1000 caracteres
+  (`trim()` para el mínimo), `estado == "ABIERTO"`, `fecha ==
+  request.time` (server timestamp) y claves exactamente las 7 de arriba.
+  Se acepta cualquier `estado` de la reserva: "el profesional no llegó"
+  suele quedar en `CONFIRMADA` porque nada la cierra automáticamente.
+- `read`: solo el cliente dueño, más `resource == null` para que el cliente
+  pueda comprobar si ya reportó una reserva (leer un id que no existe). El
+  **profesional no lo lee**: el reporte puede ser sobre él, lo media soporte.
+  "Mis Citas" consulta `where clienteId == uid` (igualdad sobre un solo
+  campo, sin índice compuesto).
+- `update`/`delete`: denegados al cliente. `EN_REVISION`/`RESUELTO` los
+  escribe el equipo de soporte desde la consola de Firebase.
+
+Probadas con 29 casos contra el Firestore Emulator local (no contra el
+proyecto real). **Limitación:** nadie recibe un aviso cuando llega un
+reporte; soporte tiene que revisar la colección a mano. Notificar (correo o
+FCM) requiere un trigger `onCreate` → plan Blaze.
+
 ### `solicitudesVerificacion/{solicitudId}`
 ```
 profesionalId: string

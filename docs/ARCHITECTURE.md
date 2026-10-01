@@ -138,8 +138,11 @@ de Firebase (`firebase use qa` / `firebase use prod`) al proyecto correcto.
   `:feature:search` cuando `:feature:client-panel` también necesitó
   resolver un profesional por id) y `ReservaRepository` (lectura de
   `reservas` por cliente). Un repositorio que solo usa **una** feature
-  (ej. `UbicacionRepository` de `:feature:search`, que no toca Firestore)
-  se queda dentro de esa feature — no todo repositorio sube a `:core:*`,
+  (ej. `UbicacionRepository` de `:feature:search`, que no toca Firestore, o
+  `ReporteProblemaRepository` de `:feature:client-panel`, que sí: interfaz
+  en `data/repository`, impl Firestore en `data/repository_impl` y binding
+  en el `di/` de la feature, igual que `AuthRepository`) se queda dentro de
+  esa feature — no todo repositorio sube a `:core:*`,
   solo el que 2+ features necesitan de verdad (sin abstracciones para
   casos hipotéticos que no existen hoy).
 

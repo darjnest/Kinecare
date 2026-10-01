@@ -24,6 +24,11 @@ import com.darjnest.kinecare.core.common.domain.model.Servicio
 import com.darjnest.kinecare.core.common.domain.model.TipoMetodoPago
 import com.darjnest.kinecare.core.common.domain.model.Usuario
 import com.darjnest.kinecare.core.common.result.Result
+import com.darjnest.kinecare.feature.client_panel.data.repository.ReporteProblemaRepository
+import com.darjnest.kinecare.feature.client_panel.domain.EstadoReporte
+import com.darjnest.kinecare.feature.client_panel.domain.MotivoReporte
+import com.darjnest.kinecare.feature.client_panel.domain.ReporteProblema
+import com.darjnest.kinecare.feature.client_panel.domain.ReporteProblemaError
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import io.mockk.coEvery
@@ -50,6 +55,7 @@ class MisCitasViewModelTest {
     private val reservaRepository = mockk<ReservaRepository>()
     private val profesionalRepository = mockk<ProfesionalRepository>()
     private val resenaRepository = mockk<ResenaRepository>()
+    private val reporteProblemaRepository = mockk<ReporteProblemaRepository>()
     private val firebaseAuth = mockk<FirebaseAuth>()
 
     private val uid = "cliente-1"
@@ -58,10 +64,16 @@ class MisCitasViewModelTest {
         val firebaseUser = mockk<FirebaseUser>()
         every { firebaseUser.uid } returns uid
         every { firebaseAuth.currentUser } returns firebaseUser
+        coEvery { reporteProblemaRepository.obtenerPorCliente(uid) } returns Result.Success(emptyList())
     }
 
-    private fun crearViewModel(): MisCitasViewModel =
-        MisCitasViewModel(reservaRepository, profesionalRepository, resenaRepository, firebaseAuth)
+    private fun crearViewModel(): MisCitasViewModel = MisCitasViewModel(
+        reservaRepository,
+        profesionalRepository,
+        resenaRepository,
+        reporteProblemaRepository,
+        firebaseAuth,
+    )
 
     private fun profesionalDePrueba(id: String, nombre: String): Profesional = Profesional(
         usuario = Usuario(
@@ -305,5 +317,83 @@ class MisCitasViewModelTest {
 
         assertEquals(antes, viewModel.state.value)
         coVerify(exactly = 1) { reservaRepository.obtenerPorCliente(uid) }
+    }
+
+    // --- reportar problema ---
+
+    private fun reporteDePrueba(reservaId: String, estado: EstadoReporte) = ReporteProblema(
+        reservaId = reservaId,
+        clienteId = uid,
+        profesionalId = "prof-1",
+        motivo = MotivoReporte.ATRASO,
+        descripcion = "Llego una hora tarde",
+        estado = estado,
+        fecha = Instant.fromEpochMilliseconds(0),
+    )
+
+    @Test
+    fun `cada cita lleva el estado de su reporte y los ids para reportar`() = runTest {
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns Result.Success(
+            listOf(
+                reservaDePrueba("r-en-curso", "prof-1", EstadoReserva.EN_CURSO),
+                reservaDePrueba("r-proxima", "prof-1", EstadoReserva.CONFIRMADA),
+                reservaDePrueba("r-historial", "prof-1", EstadoReserva.COMPLETADA),
+                reservaDePrueba("r-cancelada", "prof-1", EstadoReserva.CANCELADA_PROFESIONAL),
+            ),
+        )
+        coEvery { profesionalRepository.obtenerPorId("prof-1") } returns
+            Result.Success(profesionalDePrueba("prof-1", "Bruno Diaz"))
+        coEvery { resenaRepository.obtenerPorReserva("r-historial") } returns Result.Success(null)
+        coEvery { reporteProblemaRepository.obtenerPorCliente(uid) } returns Result.Success(
+            listOf(
+                reporteDePrueba("r-proxima", EstadoReporte.ABIERTO),
+                reporteDePrueba("r-cancelada", EstadoReporte.RESUELTO),
+            ),
+        )
+
+        val estado = crearViewModel().state.value
+
+        assertNull(requireNotNull(estado.citaEnCurso).estadoReporte)
+        assertEquals("prof-1", estado.citaEnCurso?.profesionalId)
+        assertEquals(EstadoReporte.ABIERTO, estado.proximasCitas.single().estadoReporte)
+        assertEquals("prof-1", estado.proximasCitas.single().profesionalId)
+        assertNull(estado.historial.single().estadoReporte)
+        assertEquals(EstadoReporte.RESUELTO, estado.canceladas.single().estadoReporte)
+        assertEquals("prof-1", estado.canceladas.single().profesionalId)
+        coVerify(exactly = 1) { reporteProblemaRepository.obtenerPorCliente(uid) }
+    }
+
+    @Test
+    fun `si no se pueden leer los reportes ninguna cita queda marcada y la lista no se rompe`() = runTest {
+        stubReservasCompletadas("r-1")
+        coEvery { resenaRepository.obtenerPorReserva("r-1") } returns Result.Success(null)
+        coEvery { reporteProblemaRepository.obtenerPorCliente(uid) } returns
+            Result.Error(ReporteProblemaError.SIN_INTERNET)
+
+        val estado = crearViewModel().state.value
+
+        assertFalse(estado.cargando)
+        assertNull(estado.historial.single().estadoReporte)
+    }
+
+    @Test
+    fun `sin reservas no se consultan reportes`() = runTest {
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns Result.Success(emptyList())
+
+        crearViewModel()
+
+        coVerify(exactly = 0) { reporteProblemaRepository.obtenerPorCliente(any()) }
+    }
+
+    @Test
+    fun `ReportarProblema es navegacion y no cambia el estado`() = runTest {
+        stubReservasCompletadas("r-1")
+        coEvery { resenaRepository.obtenerPorReserva("r-1") } returns Result.Success(null)
+        val viewModel = crearViewModel()
+        val antes = viewModel.state.value
+
+        viewModel.onAction(MisCitasAction.ReportarProblema("r-1", "prof-1"))
+
+        assertEquals(antes, viewModel.state.value)
     }
 }

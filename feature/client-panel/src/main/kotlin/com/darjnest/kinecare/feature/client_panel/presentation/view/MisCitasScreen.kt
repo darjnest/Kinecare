@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.EventBusy
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PinDrop
@@ -63,6 +65,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.darjnest.kinecare.core.designsystem.components.bar.KineCareBottomNavBar
 import com.darjnest.kinecare.core.designsystem.components.bar.PestanaClienteInferior
+import com.darjnest.kinecare.core.designsystem.components.label.KineCareBadge
 import com.darjnest.kinecare.core.designsystem.theme.InicioDorado
 import com.darjnest.kinecare.core.designsystem.theme.KineCareTheme
 import com.darjnest.kinecare.core.designsystem.theme.LoginAzulSuave
@@ -74,6 +77,7 @@ import com.darjnest.kinecare.core.designsystem.theme.LoginMentaSuave
 import com.darjnest.kinecare.core.designsystem.theme.LoginPrimario
 import com.darjnest.kinecare.core.designsystem.theme.LoginPrimarioOscuro
 import com.darjnest.kinecare.core.designsystem.theme.TextoPrincipal
+import com.darjnest.kinecare.feature.client_panel.domain.EstadoReporte
 import com.darjnest.kinecare.feature.client_panel.presentation.viewmodel.CitaCancelada
 import com.darjnest.kinecare.feature.client_panel.presentation.viewmodel.CitaEnCurso
 import com.darjnest.kinecare.feature.client_panel.presentation.viewmodel.CitaHistorial
@@ -91,6 +95,7 @@ fun MisCitasRoot(
     onIrAFavoritos: () -> Unit = {},
     onIrAMiPerfil: () -> Unit = {},
     onDejarResena: (reservaId: String, profesionalId: String) -> Unit = { _, _ -> },
+    onReportarProblema: (reservaId: String, profesionalId: String) -> Unit = { _, _ -> },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
@@ -106,10 +111,10 @@ fun MisCitasRoot(
         onAction = { accion ->
             // Dejar resena es navegacion hacia `:feature:reviews`, resuelta
             // por callback desde `:app` (las features no se dependen entre si).
-            if (accion is MisCitasAction.DejarResena) {
-                onDejarResena(accion.reservaId, accion.profesionalId)
-            } else {
-                viewModel.onAction(accion)
+            when (accion) {
+                is MisCitasAction.DejarResena -> onDejarResena(accion.reservaId, accion.profesionalId)
+                is MisCitasAction.ReportarProblema -> onReportarProblema(accion.reservaId, accion.profesionalId)
+                else -> viewModel.onAction(accion)
             }
         },
         onIrAExplorar = onIrAExplorar,
@@ -164,7 +169,7 @@ fun MisCitasScreen(
                 when (state.tabSeleccionado) {
                     TabMisCitas.PROXIMAS -> ContenidoProximas(state = state, onAction = onAction, onIrAExplorar = onIrAExplorar)
                     TabMisCitas.HISTORIAL -> ContenidoHistorial(historial = state.historial, onAction = onAction, onIrAExplorar = onIrAExplorar)
-                    TabMisCitas.CANCELADAS -> ContenidoCanceladas(canceladas = state.canceladas)
+                    TabMisCitas.CANCELADAS -> ContenidoCanceladas(canceladas = state.canceladas, onAction = onAction)
                 }
 
                 BannerSoporte(onAction = onAction)
@@ -215,7 +220,10 @@ private fun ContenidoHistorial(
 }
 
 @Composable
-private fun ContenidoCanceladas(canceladas: List<CitaCancelada>) {
+private fun ContenidoCanceladas(
+    canceladas: List<CitaCancelada>,
+    onAction: (MisCitasAction) -> Unit,
+) {
     if (canceladas.isEmpty()) {
         Column(
             modifier = Modifier
@@ -237,7 +245,7 @@ private fun ContenidoCanceladas(canceladas: List<CitaCancelada>) {
         return
     }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        canceladas.forEach { cancelada -> TarjetaCitaCancelada(cita = cancelada) }
+        canceladas.forEach { cancelada -> TarjetaCitaCancelada(cita = cancelada, onAction = onAction) }
     }
 }
 
@@ -639,6 +647,12 @@ private fun TarjetaCitaEnCurso(
                     )
                 }
             }
+
+            AccionReportarProblema(
+                estadoReporte = cita.estadoReporte,
+                onClick = { onAction(MisCitasAction.ReportarProblema(cita.id, cita.profesionalId)) },
+                modifier = Modifier.padding(top = 4.dp),
+            )
         }
     }
 }
@@ -772,6 +786,11 @@ private fun TarjetaCitaProxima(
                     Text(text = "Preparación", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = TextoPrincipal)
                 }
             }
+            AccionReportarProblema(
+                estadoReporte = cita.estadoReporte,
+                onClick = { onAction(MisCitasAction.ReportarProblema(cita.id, cita.profesionalId)) },
+                modifier = Modifier.padding(top = 4.dp),
+            )
         }
     }
 }
@@ -900,12 +919,20 @@ private fun TarjetaCitaHistorial(
                     color = TextoPrincipal,
                 )
             }
+            AccionReportarProblema(
+                estadoReporte = cita.estadoReporte,
+                onClick = { onAction(MisCitasAction.ReportarProblema(cita.id, cita.profesionalId)) },
+                modifier = Modifier.padding(top = 4.dp),
+            )
         }
     }
 }
 
 @Composable
-private fun TarjetaCitaCancelada(cita: CitaCancelada) {
+private fun TarjetaCitaCancelada(
+    cita: CitaCancelada,
+    onAction: (MisCitasAction) -> Unit,
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -933,6 +960,52 @@ private fun TarjetaCitaCancelada(cita: CitaCancelada) {
                     modifier = Modifier.padding(top = 2.dp),
                 )
             }
+            AccionReportarProblema(
+                estadoReporte = cita.estadoReporte,
+                onClick = { onAction(MisCitasAction.ReportarProblema(cita.id, cita.profesionalId)) },
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+    }
+}
+
+/**
+ * Pie de tarjeta: "Reportar un problema", o el estado del reporte si la
+ * reserva ya tiene uno (tocarlo abre el reporte de solo lectura).
+ */
+@Composable
+private fun AccionReportarProblema(
+    estadoReporte: EstadoReporte?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = KineCareSpacing.iconoTactil)
+            .clip(RoundedCornerShape(50))
+            .clickable(role = Role.Button, onClick = onClick),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (estadoReporte == null) {
+            Icon(Icons.Outlined.Flag, contentDescription = null, tint = LoginGrisTexto, modifier = Modifier.size(14.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = "Reportar un problema",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = LoginGrisTexto,
+            )
+        } else {
+            KineCareBadge(texto = estadoReporte.aTexto(), tono = estadoReporte.aTono())
+            Spacer(modifier = Modifier.width(KineCareSpacing.s))
+            Text(
+                text = "Ver reporte",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = LoginPrimario,
+            )
         }
     }
 }

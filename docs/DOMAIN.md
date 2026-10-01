@@ -120,6 +120,19 @@ Resuelto exclusivamente por las Cloud Functions `iniciarPago` / `estadoPago`
 - `fecha: Instant`
 - `respuestaProfesional: String?`
 
+## ReporteProblema
+Vive en `:feature:client-panel` (`domain/`), no en `:core:common`: solo esa
+feature lo usa.
+- `reservaId: String` (también es el id del documento: un reporte por reserva)
+- `clienteId: String`
+- `profesionalId: String`
+- `motivo: MotivoReporte` (`PROFESIONAL_NO_LLEGO`, `ATRASO`,
+  `COBRO_INCORRECTO`, `CONDUCTA_INAPROPIADA`, `CALIDAD_ATENCION`, `OTRO`)
+- `descripcion: String` (10–1000 caracteres)
+- `estado: EstadoReporte` (`ABIERTO` → `EN_REVISION` → `RESUELTO`; el cliente
+  solo crea `ABIERTO`, el resto lo escribe soporte)
+- `fecha: Instant`
+
 ## SolicitudVerificacion
 - `id: String`
 - `profesionalId: String`
@@ -156,3 +169,6 @@ Resuelto exclusivamente por las Cloud Functions `iniciarPago` / `estadoPago`
    (salvo que el negocio decida lo contrario más adelante).
 4. Un `Cliente` solo puede dejar `Resena` sobre una `Reserva` en estado
    `COMPLETADA` y de la cual es el `clienteId`.
+5. Un `Cliente` puede reportar un problema sobre cualquier `Reserva` suya,
+   en cualquier estado, una sola vez por reserva. El `Profesional` no ve el
+   reporte.
