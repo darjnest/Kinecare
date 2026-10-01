@@ -289,6 +289,19 @@ class ProfessionalProfileViewModelTest {
     }
 
     @Test
+    fun `Reservar es navegacion y no cambia el estado ni recarga`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId(id) } returns Result.Success(profesional())
+        val viewModel = crearViewModel()
+        val antes = viewModel.state.value
+
+        viewModel.onAction(ProfessionalProfileAction.Reservar(id))
+        viewModel.onAction(ProfessionalProfileAction.Reservar(id, servicioId = "serv-1"))
+
+        assertEquals(antes, viewModel.state.value)
+        coVerify(exactly = 1) { profesionalRepository.obtenerPorId(id) }
+    }
+
+    @Test
     fun `el perfil expone el id que se pasa al listado de resenas y el total guardado`() = runTest {
         coEvery { profesionalRepository.obtenerPorId(id) } returns
             Result.Success(profesional(totalResenas = 7))

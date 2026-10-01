@@ -22,6 +22,7 @@ import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -34,7 +35,7 @@ private const val COLECCION_PAGOS = "pagos"
 class ReservaRepositoryImplTest {
 
     private val firestore = mockk<FirebaseFirestore>()
-    private val repository = ReservaRepositoryImpl(firestore)
+    private val repository = ReservaRepositoryImpl(firestore, mockk(), mockk(), Json)
 
     @BeforeEach
     fun setUp() {

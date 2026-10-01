@@ -26,7 +26,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -78,16 +80,19 @@ fun ProfessionalProfileRoot(
     viewModel: ProfessionalProfileViewModel = hiltViewModel(),
     onVolver: () -> Unit = {},
     onVerResenas: (String) -> Unit = {},
+    onReservar: (profesionalId: String, servicioId: String?) -> Unit = { _, _ -> },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     ProfessionalProfileScreen(
         state = state,
         onAction = { accion ->
-            // Volver atras y abrir el listado de resenas son navegacion, no
-            // estado del ViewModel: el Root las resuelve directo contra el NavGraph.
+            // Volver atras, abrir el listado de resenas y reservar son
+            // navegacion, no estado del ViewModel: el Root las resuelve directo
+            // contra el NavGraph.
             when (accion) {
                 ProfessionalProfileAction.VolverAtras -> onVolver()
                 is ProfessionalProfileAction.VerResenas -> onVerResenas(accion.profesionalId)
+                is ProfessionalProfileAction.Reservar -> onReservar(accion.profesionalId, accion.servicioId)
                 else -> viewModel.onAction(accion)
             }
         },
@@ -113,6 +118,21 @@ fun ProfessionalProfileScreen(
                     }
                 },
             )
+        },
+        bottomBar = {
+            // Sin servicios activos no hay nada que reservar: se oculta en vez de
+            // llevar a un flujo vacio.
+            val perfil = state.perfil
+            if (perfil != null && perfil.servicios.isNotEmpty()) {
+                Surface(tonalElevation = KineCareSpacing.xs) {
+                    Box(modifier = Modifier.padding(KineCareSpacing.l)) {
+                        KineCarePrimaryButton(
+                            text = "Reservar hora",
+                            onClick = { onAction(ProfessionalProfileAction.Reservar(perfil.id)) },
+                        )
+                    }
+                }
+            }
         },
     ) { innerPadding ->
         val contenidoModifier = Modifier
@@ -201,7 +221,10 @@ private fun ContenidoPerfil(
             Seccion(titulo = "Servicios") {
                 perfil.servicios.forEachIndexed { indice, servicio ->
                     if (indice > 0) Box(modifier = Modifier.padding(top = KineCareSpacing.m))
-                    FilaServicio(servicio = servicio)
+                    FilaServicio(
+                        servicio = servicio,
+                        onReservar = { onAction(ProfessionalProfileAction.Reservar(perfil.id, servicio.id)) },
+                    )
                 }
             }
         }
@@ -379,7 +402,10 @@ private fun FilaInsignia(
 }
 
 @Composable
-private fun FilaServicio(servicio: Servicio) {
+private fun FilaServicio(
+    servicio: Servicio,
+    onReservar: () -> Unit = {},
+) {
     Row(verticalAlignment = Alignment.Top) {
         Column(
             modifier = Modifier.weight(1f),
@@ -396,11 +422,18 @@ private fun FilaServicio(servicio: Servicio) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Text(
-            text = servicio.precio.formatComoClp(),
-            style = MaterialTheme.typography.titleMedium,
+        Column(
+            horizontalAlignment = Alignment.End,
             modifier = Modifier.padding(start = KineCareSpacing.m),
-        )
+        ) {
+            Text(
+                text = servicio.precio.formatComoClp(),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            TextButton(onClick = onReservar) {
+                Text("Reservar")
+            }
+        }
     }
 }
 

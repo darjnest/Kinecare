@@ -10,6 +10,7 @@ import com.darjnest.kinecare.feature.auth.presentation.navigation.AuthRoute
 import com.darjnest.kinecare.feature.auth.presentation.navigation.authGraph
 import com.darjnest.kinecare.feature.auth.presentation.viewmodel.AuthAction
 import com.darjnest.kinecare.feature.auth.presentation.viewmodel.AuthViewModel
+import com.darjnest.kinecare.feature.booking.presentation.navigation.BookingRoute
 import com.darjnest.kinecare.feature.booking.presentation.navigation.bookingGraph
 import com.darjnest.kinecare.feature.client_panel.presentation.navigation.FavoritosRoute
 import com.darjnest.kinecare.feature.client_panel.presentation.navigation.MiPerfilClienteRoute
@@ -95,8 +96,21 @@ fun KineCareNavHost(modifier: Modifier = Modifier) {
         professional_profileGraph(
             onVolver = { navController.popBackStack() },
             onVerResenas = onVerResenas,
+            onReservar = { profesionalId, servicioId ->
+                navController.navigate(BookingRoute(profesionalId, servicioId))
+            },
         )
-        bookingGraph()
+        bookingGraph(
+            onVolver = { navController.popBackStack() },
+            // La reserva ya esta creada: el flujo sale del back stack para que
+            // "atras" desde Mis Citas no vuelva a la confirmacion.
+            onIrAMisCitas = {
+                navController.navigate(MisCitasRoute) {
+                    popUpTo<BookingRoute> { inclusive = true }
+                    launchSingleTop = true
+                }
+            },
+        )
         paymentGraph()
         verificationGraph()
         professional_panelGraph(

@@ -4,8 +4,11 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import com.darjnest.kinecare.feature.booking.presentation.view.BookingRoot
 
-fun NavGraphBuilder.bookingGraph() {
+fun NavGraphBuilder.bookingGraph(
+    onVolver: () -> Unit = {},
+    onIrAMisCitas: () -> Unit = {},
+) {
     composable<BookingRoute> {
-        BookingRoot()
+        BookingRoot(onVolver = onVolver, onIrAMisCitas = onIrAMisCitas)
     }
 }
