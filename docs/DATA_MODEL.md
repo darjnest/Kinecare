@@ -90,16 +90,15 @@ Además `clienteId` (asc) + `fechaHora` (desc) sin filtro de `estado` — lo
 usa `ReservaRepository.obtenerPorCliente` (`:core:network`) para "Mis
 Citas" del Cliente, que hoy no filtra por estado en la consulta (la pestaña
 Próximas/Historial/Canceladas se resuelve en el `ViewModel` sobre la lista
-completa); declarado en `firestore.indexes.json` en este cambio pero
-**no confirmado como desplegado** — no se verificó contra el proyecto
-Firebase real (sin acceso a Firebase MCP en esta sesión).
+completa); declarado en `firestore.indexes.json` y **desplegado en QA**
+(`kinecare-cl-qa`, verificado con `firebase firestore:indexes -P qa`).
 
 `profesionalId` (asc) + `fechaHora` (asc) — lo usa `crearReserva` para buscar
 reservas del profesional en una ventana de tiempo y detectar
 `HORARIO_OCUPADO` (igualdad en `profesionalId` + rango en `fechaHora`; el
-filtro por `estado` se hace en memoria). **Declarado en
-`firestore.indexes.json`, no desplegado**: el Firestore Emulator no exige
-índices, así que la consulta no está probada contra uno real.
+filtro por `estado` se hace en memoria). **Desplegado en QA**
+(`kinecare-cl-qa`); el Firestore Emulator no exige índices, así que la
+consulta todavía no se ha ejercitado contra uno real.
 
 ### `bloqueosAgenda/{profesionalId}`
 ```
@@ -189,7 +188,7 @@ Function).
 `reservaId`**: una reserva admite a lo más un reporte, y un segundo intento
 sería un `update`, denegado.
 
-**Security Rules** (`firestore.rules`; **declaradas, no desplegadas**):
+**Security Rules** (`firestore.rules`; **desplegadas en QA**):
 - `create`: `clienteId == request.auth.uid`, `reporteId == reservaId`, la
   reserva existe y es del llamador, `profesionalId` igual al de la reserva,
   `motivo` dentro del enum, `descripcion` string de 10 a 1000 caracteres
@@ -226,10 +225,12 @@ Storage y el proveedor externo los procesa fuera de Firestore.
 ## Cloud Functions
 
 Código en `functions/` (TypeScript, Node 22, `firebase-functions` v2,
-región `us-central1`). Ninguna está desplegada todavía: los proyectos están
-en plan Spark y Cloud Functions exige Blaze.
+región `us-central1`). Cloud Functions exige plan Blaze: QA
+(`kinecare-cl-qa`) ya está en Blaze, con política de limpieza de imágenes
+de 1 día en Artifact Registry (`gcf-artifacts`, `us-central1`); producción
+(`kinecare-cl`) sigue en Spark y sin funciones.
 
-### `crearReserva` (callable) — escrita y probada en emulador, **no desplegada**
+### `crearReserva` (callable) — **desplegada en QA**, no en producción
 Protocolo callable sobre HTTP (lo consume el cliente Android con Retrofit):
 `POST https://us-central1-<projectId>.cloudfunctions.net/crearReserva`,
 header `Authorization: Bearer <ID token de Firebase>`, cuerpo

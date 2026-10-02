@@ -80,10 +80,11 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       que no vive en Firestore. Primeros tests de repositorio y de
       ViewModel del proyecto (JUnit5 + MockK + Turbine, precedente de
       convención para el resto de `:feature:*`).
-- [ ] Storage: **bloqueado** — Firebase Storage ya no se puede inicializar
-      en proyectos nuevos con plan Spark (Google lo restringió a Blaze).
-      Hay que subir a Blaze antes de la Fase 6 (fotos de perfil,
-      credenciales de verificación)
+- [ ] Storage: Firebase Storage ya no se puede inicializar en proyectos
+      nuevos con plan Spark (Google lo restringió a Blaze). **QA
+      (`kinecare-cl-qa`) ya está en Blaze**, así que se puede inicializar
+      ahí; producción (`kinecare-cl`) sigue en Spark. Necesario antes de la
+      Fase 6 (fotos de perfil, credenciales de verificación)
 - [x] Cliente: al iniciar sesión o registrarse (rol `CLIENTE`), el `NavHost`
       de `:app` navega automáticamente a `SearchRoute` y saca `AuthRoute`
       del back stack (`KineCareNavHost.kt`, callback
@@ -212,9 +213,8 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       `PERMISSION_DENIED` → `SIN_PERMISO`). 15 tests JUnit5/MockK. Regla
       `create` de `resenas` endurecida en `firestore.rules` (rango 1..5,
       `fecha == request.time`, `comentario` ≤ 500, claves permitidas,
-      `profesionalId` = el de la reserva): **declarada, no desplegada**;
-      probada con 22 casos contra el Firestore Emulator local, no contra
-      el proyecto real.
+      `profesionalId` = el de la reserva): **desplegada en QA**; probada
+      con 22 casos contra el Firestore Emulator local.
       **UI.** `ReviewsRoute(profesionalId)`: listado con encabezado de
       resumen (promedio, total y distribución 5→1 estrellas) **calculado
       localmente** sobre las reseñas cargadas (máx. 100), no con
@@ -294,10 +294,12 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       (Pixel 7a, flavor QA, sesión de Cliente existente): pasos 1→4 con
       datos reales de `kinecare-cl-qa`; "Confirmar" llega a
       `us-central1-kinecare-cl-qa.cloudfunctions.net/crearReserva`, recibe
-      404 (no desplegada) y muestra el error genérico sin romperse. La
-      confirmación exitosa no se pudo ver en vivo.
-- [x] Cloud Function `crearReserva` — **escrita y probada, no desplegada**
-      (Cloud Functions requiere plan Blaze). `functions/` (TypeScript,
+      404 (todavía no desplegada) y muestra el error genérico sin romperse.
+      La confirmación exitosa no se pudo ver en vivo (pendiente, ver último
+      ítem de esta fase).
+- [x] Cloud Function `crearReserva` — **desplegada en QA**
+      (`kinecare-cl-qa`, Blaze); producción (`kinecare-cl`) sigue en Spark
+      y sin funciones. `functions/` (TypeScript,
       Node 22, `firebase-functions` v2 `onCall`, `us-central1`); contrato,
       motivos de error y documento escrito en
       [DATA_MODEL.md](DATA_MODEL.md#cloud-functions). Precio, modalidad y
@@ -308,15 +310,17 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       otra reserva activa del profesional (transacción + candado
       `bloqueosAgenda/{profesionalId}`, nuevo en `firestore.rules` con
       todo denegado al cliente). Nuevo campo `reservas.duracionMinutos` e
-      índice `profesionalId`+`fechaHora` (declarado, no desplegado).
+      índice `profesionalId`+`fechaHora` (desplegado en QA).
       68 tests (`npm run test:emulator`: 38 unitarios + 30 de integración
       contra el Firestore Emulator, incluida una carrera de 8 llamadas al
       mismo cupo → 1 gana). Cliente Android: `ReservaRepository.crear`
       (`:core:network`, Retrofit `CloudFunctionsApi`, 10 tests nuevos).
-      **Pendiente:** subir a Blaze y desplegar función, reglas e índice
-      (`firebase deploy --only functions,firestore -P qa`); con
-      contención alta la transacción puede agotar reintentos y responder
-      sin `motivo` (el cliente lo muestra como error genérico).
+      Desplegada con `firebase deploy --only functions,firestore -P qa`
+      (función + reglas + índices) y política de limpieza de Artifact
+      Registry de 1 día. Verificado: sin sesión responde 401 `SIN_SESION`.
+      **Limitación:** con contención alta la transacción puede agotar
+      reintentos y responder sin `motivo` (el cliente lo muestra como error
+      genérico).
 - [x] Historial de reservas y confirmación: la confirmación es la pantalla
       final del flujo de reserva y el historial es "Mis Citas" de
       `:feature:client-panel` (Fase 2).
@@ -327,7 +331,7 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       motivo del enum, descripción 10–1000, `estado == ABIERTO`, fecha del
       servidor, claves exactas); el profesional no lo lee y nadie lo puede
       editar desde la app (ver [DATA_MODEL.md](DATA_MODEL.md)). **Reglas
-      declaradas, no desplegadas**; probadas con 29 casos contra el
+      desplegadas en QA**; probadas con 29 casos contra el
       Firestore Emulator. Repositorio propio de la feature
       (`ReporteProblemaRepository` + impl Firestore en `data/`, binding en
       `di/ClientPanelModule.kt`; no sube a `:core:*` porque solo lo usa esta
@@ -347,8 +351,9 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       panel profesional. **No verificado visualmente** (sin reservas reales
       en QA); compila y pasa `:app:assembleDebug` y `testDebugUnitTest`.
 - [ ] Revisar "Mis Citas" y "Reportar problema" con reservas reales creadas
-      por `crearReserva` (bloqueado por el despliegue, plan Blaze) y
-      desplegar las reglas de `reportesProblema`.
+      por `crearReserva` en QA (función, reglas e índices ya desplegados
+      en `kinecare-cl-qa`; falta la prueba de punta a punta en
+      dispositivo).
 
 ## Fase 5 — Pago
 - [ ] Elegir pasarela (Transbank Webpay Plus / Flow / Mercado Pago)
