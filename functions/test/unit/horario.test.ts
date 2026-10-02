@@ -55,10 +55,28 @@ describe("parseHoraMinutos", () => {
       assert.equal(parseHoraMinutos(v), null, String(v));
     }
   });
+
+  it("tolera segundos (HH:mm:ss), como LocalTime.parse del cliente Android", () => {
+    assert.equal(parseHoraMinutos("09:00:00"), 540);
+    assert.equal(parseHoraMinutos("13:00:00"), 780);
+    assert.equal(parseHoraMinutos("24:00:00"), 1440);
+    assert.equal(parseHoraMinutos("09:00:30"), 540.5);
+    for (const v of ["09:00:60", "09:00:", "09:00:0", "24:00:01", "09:00:00.000"]) {
+      assert.equal(parseHoraMinutos(v), null, v);
+    }
+  });
 });
 
 describe("slotDentroDeDisponibilidad", () => {
   const lunes = [dia("MONDAY", "09:00", "18:00")];
+
+  it("acepta disponibilidad guardada con segundos (\"09:00:00\")", () => {
+    const conSegundos = [dia("MONDAY", "09:00:00", "13:00:00")];
+    // Lunes 2026-10-05 10:00 local (13:00Z), 60 min.
+    assert.equal(slotDentroDeDisponibilidad(conSegundos, utc("2026-10-05T13:00:00Z"), 60), true);
+    // 12:30 local + 60 min se pasa de las 13:00.
+    assert.equal(slotDentroDeDisponibilidad(conSegundos, utc("2026-10-05T15:30:00Z"), 60), false);
+  });
 
   it("acepta un slot completamente dentro, incluidos los bordes", () => {
     assert.equal(slotDentroDeDisponibilidad(lunes, utc("2026-10-05T13:00:00Z"), 60), true); // 10:00-11:00

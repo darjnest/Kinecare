@@ -467,7 +467,11 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       features. 37 tests Android nuevos (`SolicitudesDeAtencionViewModelTest`
       19, `ReservaRepositoryImplResponderTest` 13, `ReservaRepositoryImplTest`
       +2, `MisCitasViewModelTest` +2 aserciones). `responderReserva` **desplegada en QA**
-      (sin sesión responde 401 `SIN_SESION`). **Pendiente:** probar de
+      (sin sesión responde 401 `SIN_SESION`). Bug encontrado al preparar la
+      prueba: `crearReserva` solo aceptaba `horaInicio`/`horaFin` como
+      `HH:mm` y había disponibilidades en QA guardadas como `HH:mm:ss`, que
+      la app sí lee; ahora acepta ambos (2 tests nuevos, redesplegada en
+      QA). **Pendiente:** probar de
       punta a punta en dispositivo
       (crear una reserva como Cliente → aceptarla/rechazarla como
       Profesional → verla en "Mis Citas"). **Fuera de alcance:** cancelar

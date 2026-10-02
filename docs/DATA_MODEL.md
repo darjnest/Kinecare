@@ -273,7 +273,10 @@ ignoran. La modalidad, la duración y el precio salen de
 Reglas de detalle:
 - **Zona horaria.** `Disponibilidad` está en hora de Chile
   (`America/Santiago`, con horario de verano): `fechaHora` se convierte a esa
-  zona (vía `Intl`) para elegir el día de la semana y comparar `HH:mm`. El
+  zona (vía `Intl`) para elegir el día de la semana y comparar `HH:mm`
+  (también acepta `HH:mm:ss`, como `LocalTime.parse` del cliente: hay datos
+  en QA guardados con segundos y, sin esto, la app ofrecía horarios que la
+  función rechazaba con `FUERA_DE_HORARIO`). El
   tramo no puede cruzar la medianoche local; terminar exactamente a las 00:00
   solo es válido si `horaFin` es `"24:00"`.
 - **Rol** se lee siempre de `usuarios/{uid}`, nunca del payload ni de claims.

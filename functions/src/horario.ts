@@ -45,12 +45,18 @@ export function aHoraLocal(instante: Date): InstanteLocal {
   };
 }
 
-/** "HH:mm" -> minutos desde medianoche. Acepta "24:00" solo como fin de dia. null si no es valida. */
+/**
+ * "HH:mm" (o "HH:mm:ss") -> minutos desde medianoche, con los segundos como fraccion.
+ * Acepta "24:00"/"24:00:00" solo como fin de dia. null si no es valida.
+ * Los segundos se toleran porque el cliente Android lee la disponibilidad con
+ * `LocalTime.parse`, que acepta ambos formatos: si el backend solo aceptara "HH:mm",
+ * la app ofreceria horarios que crearReserva rechaza (FUERA_DE_HORARIO).
+ */
 export function parseHoraMinutos(valor: unknown): number | null {
   if (typeof valor !== "string") return null;
-  if (valor === "24:00") return 1440;
-  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(valor);
-  return m === null ? null : Number(m[1]) * 60 + Number(m[2]);
+  if (valor === "24:00" || valor === "24:00:00") return 1440;
+  const m = /^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/.exec(valor);
+  return m === null ? null : Number(m[1]) * 60 + Number(m[2]) + Number(m[3] ?? 0) / 60;
 }
 
 /**
