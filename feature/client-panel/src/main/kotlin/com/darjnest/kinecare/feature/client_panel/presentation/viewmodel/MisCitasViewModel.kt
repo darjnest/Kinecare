@@ -64,6 +64,8 @@ data class CitaProxima(
     val profesionalNombre: String,
     val tipoSesion: String,
     val precioTotal: Long,
+    /** `true` mientras el profesional no responde la solicitud (`SOLICITADA`); `false` si ya la confirmo. */
+    val porConfirmar: Boolean = false,
     /**
      * Estado del reporte de problema de esta reserva; `null` si no tiene o si
      * no se pudo comprobar (sin red): se ofrece "Reportar un problema" igual y
@@ -199,6 +201,7 @@ private fun Reserva.aCitaProxima(
         profesionalNombre = profesional?.usuario?.nombre ?: "Profesional",
         tipoSesion = servicio?.nombre ?: "Sesión",
         precioTotal = pago.monto,
+        porConfirmar = estado == EstadoReserva.SOLICITADA,
         estadoReporte = reportes[id],
     )
 }

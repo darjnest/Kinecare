@@ -4,6 +4,7 @@ package com.darjnest.kinecare.core.network.firebase.repository
 
 import com.darjnest.kinecare.core.common.data.error.CrearReservaError
 import com.darjnest.kinecare.core.common.data.error.ReservaError
+import com.darjnest.kinecare.core.common.data.error.ResponderReservaError
 import com.darjnest.kinecare.core.common.data.repository.ReservaRepository
 import com.darjnest.kinecare.core.common.domain.model.Direccion
 import com.darjnest.kinecare.core.common.domain.model.EstadoPago
@@ -12,14 +13,19 @@ import com.darjnest.kinecare.core.common.domain.model.MetodoPago
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
 import com.darjnest.kinecare.core.common.domain.model.Pago
 import com.darjnest.kinecare.core.common.domain.model.Reserva
+import com.darjnest.kinecare.core.common.domain.model.RespuestaReserva
 import com.darjnest.kinecare.core.common.domain.model.SolicitudReserva
 import com.darjnest.kinecare.core.common.domain.model.TipoMetodoPago
+import com.darjnest.kinecare.core.common.result.Error
 import com.darjnest.kinecare.core.common.result.Result
 import com.darjnest.kinecare.core.network.functions.CloudFunctionsApi
 import com.darjnest.kinecare.core.network.functions.dto.CallableErrorBody
+import com.darjnest.kinecare.core.network.functions.dto.CallableErrorDto
 import com.darjnest.kinecare.core.network.functions.dto.CallableRequest
+import com.darjnest.kinecare.core.network.functions.dto.CallableResponse
 import com.darjnest.kinecare.core.network.functions.dto.CrearReservaRequestDto
 import com.darjnest.kinecare.core.network.functions.dto.DireccionDto
+import com.darjnest.kinecare.core.network.functions.dto.ResponderReservaRequestDto
 import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
@@ -29,6 +35,7 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
+import retrofit2.Response
 import java.io.IOException
 import javax.inject.Inject
 
@@ -37,14 +44,15 @@ private const val COLECCION_PAGOS = "pagos"
 
 /**
  * Lectura de `reservas/{reservaId}` con el SDK de Firestore
- * (docs/DATA_MODEL.md) y creacion via la Cloud Function `crearReserva`
- * (Retrofit, [CloudFunctionsApi]) — firestore.rules deniega `write` desde el
- * cliente sobre esta coleccion. `crearReserva` esta desplegada en QA
- * (`kinecare-cl-qa`), no en produccion (plan Spark): ahi [crear] termina en
- * [CrearReservaError.DESCONOCIDO] (404 sin cuerpo JSON).
+ * (docs/DATA_MODEL.md) y escritura via las Cloud Functions `crearReserva` y
+ * `responderReserva` (Retrofit, [CloudFunctionsApi]) — firestore.rules
+ * deniega `write` desde el cliente sobre esta coleccion. Las funciones estan
+ * desplegadas en QA (`kinecare-cl-qa`), no en produccion (plan Spark): ahi
+ * terminan en `DESCONOCIDO` (404 sin cuerpo JSON).
  *
- * Requiere el indice compuesto `clienteId` (ASC) + `fechaHora` (DESC) —
- * documentado en docs/DATA_MODEL.md y agregado a `firestore.indexes.json`.
+ * Requiere los indices compuestos `clienteId` (ASC) + `fechaHora` (DESC) y
+ * `profesionalId` (ASC) + `fechaHora` (ASC) — documentados en
+ * docs/DATA_MODEL.md y declarados en `firestore.indexes.json`.
  */
 class ReservaRepositoryImpl @Inject constructor(
     private val firestore: FirebaseFirestore,
@@ -70,42 +78,109 @@ class ReservaRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun crear(solicitud: SolicitudReserva): Result<String, CrearReservaError> {
-        val usuario = firebaseAuth.currentUser ?: return Result.Error(CrearReservaError.SIN_SESION)
+    override suspend fun obtenerPorProfesional(profesionalId: String): Result<List<Reserva>, ReservaError> {
         return try {
-            val token = usuario.getIdToken(false).await().token
-                ?: return Result.Error(CrearReservaError.SIN_SESION)
-            val respuesta = cloudFunctionsApi.crearReserva(
-                autorizacion = "Bearer $token",
-                cuerpo = CallableRequest(solicitud.aDto()),
-            )
-            val cuerpo = respuesta.body()
-            if (respuesta.isSuccessful && cuerpo != null) {
-                Result.Success(cuerpo.result.reservaId)
-            } else {
-                Result.Error(errorDeCallable(respuesta.errorBody()?.string()))
-            }
+            val documentos = firestore.collection(COLECCION_RESERVAS)
+                .whereEqualTo("profesionalId", profesionalId)
+                .orderBy("fechaHora", Query.Direction.ASCENDING)
+                .get()
+                .await()
+
+            Result.Success(documentos.documents.mapNotNull { it.aReservaONull() })
         } catch (e: CancellationException) {
             throw e
         } catch (e: FirebaseNetworkException) {
-            Result.Error(CrearReservaError.SIN_INTERNET)
-        } catch (e: IOException) {
-            Result.Error(CrearReservaError.SIN_INTERNET)
+            Result.Error(ReservaError.SIN_INTERNET)
         } catch (e: Exception) {
-            Result.Error(CrearReservaError.DESCONOCIDO)
+            Result.Error(ReservaError.DESCONOCIDO)
+        }
+    }
+
+    override suspend fun crear(solicitud: SolicitudReserva): Result<String, CrearReservaError> {
+        val resultado = llamarCallable(
+            sinSesion = CrearReservaError.SIN_SESION,
+            sinInternet = CrearReservaError.SIN_INTERNET,
+            desconocido = CrearReservaError.DESCONOCIDO,
+            aError = ::errorDeCrear,
+            llamada = { autorizacion ->
+                cloudFunctionsApi.crearReserva(autorizacion, CallableRequest(solicitud.aDto()))
+            },
+        )
+        // `when` explicito y no `Result.map`: es inline y `:core:common` compila
+        // con JVM target 17, que no se puede inlinear en este modulo (target 11).
+        return when (resultado) {
+            is Result.Success -> Result.Success(resultado.data.reservaId)
+            is Result.Error -> resultado
+        }
+    }
+
+    override suspend fun responder(
+        reservaId: String,
+        respuesta: RespuestaReserva,
+    ): Result<EstadoReserva, ResponderReservaError> {
+        val resultado = llamarCallable(
+            sinSesion = ResponderReservaError.SIN_SESION,
+            sinInternet = ResponderReservaError.SIN_INTERNET,
+            desconocido = ResponderReservaError.DESCONOCIDO,
+            aError = ::errorDeResponder,
+            llamada = { autorizacion ->
+                cloudFunctionsApi.responderReserva(
+                    autorizacion,
+                    CallableRequest(ResponderReservaRequestDto(reservaId, respuesta.name)),
+                )
+            },
+        )
+        return when (resultado) {
+            is Result.Success -> EstadoReserva.entries.firstOrNull { it.name == resultado.data.estado }
+                ?.let { Result.Success(it) }
+                ?: Result.Error(ResponderReservaError.DESCONOCIDO)
+            is Result.Error -> resultado
         }
     }
 
     /**
-     * Prioriza `details.motivo` (1:1 con [CrearReservaError]); si no viene,
-     * cae al `status` canonico. Un cuerpo que no es JSON de callable (p. ej.
-     * el 404 HTML de una funcion no desplegada) es [CrearReservaError.DESCONOCIDO].
+     * Llama a una funcion `onCall` con el ID token del usuario autenticado.
+     * El cuerpo de error (si lo hay) se parsea a [CallableErrorDto] y
+     * [aError] lo traduce al error propio de cada funcion; un cuerpo que no
+     * es JSON de callable (p. ej. el 404 HTML de una funcion no desplegada)
+     * llega como `null`.
      */
-    private fun errorDeCallable(cuerpo: String?): CrearReservaError {
-        val error = cuerpo
-            ?.let { runCatching { json.decodeFromString<CallableErrorBody>(it) }.getOrNull() }
-            ?.error
-            ?: return CrearReservaError.DESCONOCIDO
+    private suspend fun <T, E : Error> llamarCallable(
+        sinSesion: E,
+        sinInternet: E,
+        desconocido: E,
+        aError: (CallableErrorDto?) -> E,
+        llamada: suspend (autorizacion: String) -> Response<CallableResponse<T>>,
+    ): Result<T, E> {
+        val usuario = firebaseAuth.currentUser ?: return Result.Error(sinSesion)
+        return try {
+            val token = usuario.getIdToken(false).await().token
+                ?: return Result.Error(sinSesion)
+            val respuesta = llamada("Bearer $token")
+            val cuerpo = respuesta.body()
+            if (respuesta.isSuccessful && cuerpo != null) {
+                Result.Success(cuerpo.result)
+            } else {
+                Result.Error(aError(errorCallable(respuesta.errorBody()?.string())))
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: FirebaseNetworkException) {
+            Result.Error(sinInternet)
+        } catch (e: IOException) {
+            Result.Error(sinInternet)
+        } catch (e: Exception) {
+            Result.Error(desconocido)
+        }
+    }
+
+    private fun errorCallable(cuerpo: String?): CallableErrorDto? = cuerpo
+        ?.let { runCatching { json.decodeFromString<CallableErrorBody>(it) }.getOrNull() }
+        ?.error
+
+    /** Prioriza `details.motivo` (1:1 con [CrearReservaError]); si no viene, cae al `status` canonico. */
+    private fun errorDeCrear(error: CallableErrorDto?): CrearReservaError {
+        if (error == null) return CrearReservaError.DESCONOCIDO
         val porMotivo = error.details?.motivo?.let { motivo ->
             CrearReservaError.entries.firstOrNull { it.name == motivo }
         }
@@ -116,6 +191,22 @@ class ReservaRepositoryImpl @Inject constructor(
             "ALREADY_EXISTS" -> CrearReservaError.HORARIO_OCUPADO
             "NOT_FOUND" -> CrearReservaError.SERVICIO_NO_DISPONIBLE
             else -> CrearReservaError.DESCONOCIDO
+        }
+    }
+
+    /** Igual que [errorDeCrear], con los motivos de `responderReserva`. */
+    private fun errorDeResponder(error: CallableErrorDto?): ResponderReservaError {
+        if (error == null) return ResponderReservaError.DESCONOCIDO
+        val porMotivo = error.details?.motivo?.let { motivo ->
+            ResponderReservaError.entries.firstOrNull { it.name == motivo }
+        }
+        return porMotivo ?: when (error.status) {
+            "UNAUTHENTICATED" -> ResponderReservaError.SIN_SESION
+            "PERMISSION_DENIED" -> ResponderReservaError.ROL_INVALIDO
+            "INVALID_ARGUMENT" -> ResponderReservaError.DATOS_INVALIDOS
+            "NOT_FOUND" -> ResponderReservaError.RESERVA_NO_ENCONTRADA
+            "FAILED_PRECONDITION" -> ResponderReservaError.RESERVA_YA_RESPONDIDA
+            else -> ResponderReservaError.DESCONOCIDO
         }
     }
 

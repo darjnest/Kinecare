@@ -21,15 +21,15 @@ export interface SolicitudReserva {
 
 const ISO_INSTANTE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?(Z|[+-]\d{2}:\d{2})$/;
 
-function invalido(detalle: string) {
-  return errorDeNegocio("invalid-argument", "DATOS_INVALIDOS", `Datos de la reserva inválidos: ${detalle}.`);
+export function invalido(detalle: string) {
+  return errorDeNegocio("invalid-argument", "DATOS_INVALIDOS", `Datos inválidos: ${detalle}.`);
 }
 
-function esObjeto(valor: unknown): valor is Record<string, unknown> {
+export function esObjeto(valor: unknown): valor is Record<string, unknown> {
   return typeof valor === "object" && valor !== null && !Array.isArray(valor);
 }
 
-function idObligatorio(valor: unknown, campo: string): string {
+export function idObligatorio(valor: unknown, campo: string): string {
   if (typeof valor !== "string") throw invalido(`${campo} debe ser texto`);
   const id = valor.trim();
   if (id.length === 0) throw invalido(`${campo} es obligatorio`);

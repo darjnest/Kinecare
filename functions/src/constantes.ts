@@ -1,4 +1,4 @@
-// Constantes de negocio de crearReserva. Viven en un solo lugar para que
+// Constantes de negocio de las Cloud Functions de reservas. Viven en un solo lugar para que
 // tests y handler no dupliquen numeros magicos.
 
 /** Comision del marketplace. Solo el backend la fija; el cliente nunca la envia. */

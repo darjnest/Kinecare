@@ -755,6 +755,13 @@ private fun TarjetaCitaProxima(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            Text(
+                text = if (cita.porConfirmar) "Esperando confirmación del profesional" else "Confirmada",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = if (cita.porConfirmar) LoginGrisTexto else LoginPrimarioOscuro,
+                modifier = Modifier.padding(top = 4.dp),
+            )
             Spacer(modifier = Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(

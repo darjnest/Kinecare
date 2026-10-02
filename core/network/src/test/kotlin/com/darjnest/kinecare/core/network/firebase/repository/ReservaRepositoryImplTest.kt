@@ -20,6 +20,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
+import io.mockk.verify
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -108,7 +109,45 @@ class ReservaRepositoryImplTest {
         assertEquals(ReservaError.SIN_INTERNET, (resultado as Result.Error).error)
     }
 
-    private fun setUpQuery(reservaDocumentos: List<DocumentSnapshot>, queryException: Exception? = null) {
+    @Test
+    fun `obtenerPorProfesional filtra por profesionalId en orden ascendente`() = runTest {
+        val reservaDoc = mockDocumentSnapshot(
+            id = "reserva-2",
+            data = mapOf(
+                "clienteId" to "cliente-1",
+                "profesionalId" to "prof-1",
+                "servicioId" to "serv-1",
+                "modalidad" to "DOMICILIO",
+                "fechaHora" to Timestamp(1_700_000_000L, 0),
+                "estado" to "SOLICITADA",
+                "direccion" to mapOf("calle" to "Av. Pocuro", "numero" to "2150", "comuna" to "Providencia", "ciudad" to "Santiago"),
+                "pago" to mapOf("id" to null, "monto" to 25000L, "estado" to "PENDIENTE"),
+                "comisionPorcentaje" to 0.1,
+            ),
+        )
+        val query = setUpQuery(reservaDocumentos = listOf(reservaDoc))
+
+        val resultado = repository.obtenerPorProfesional("prof-1")
+
+        assertTrue(resultado is Result.Success)
+        val reserva = (resultado as Result.Success).data.single()
+        assertEquals(EstadoReserva.SOLICITADA, reserva.estado)
+        assertEquals(25000L, reserva.pago.monto)
+        assertEquals("Providencia", reserva.direccion?.comuna)
+        verify { query.reservasCollection.whereEqualTo("profesionalId", "prof-1") }
+        verify { query.query.orderBy("fechaHora", Query.Direction.ASCENDING) }
+    }
+
+    @Test
+    fun `obtenerPorProfesional retorna SIN_INTERNET ante FirebaseNetworkException`() = runTest {
+        setUpQuery(reservaDocumentos = emptyList(), queryException = FirebaseNetworkException("sin conexion"))
+
+        assertEquals(Result.Error(ReservaError.SIN_INTERNET), repository.obtenerPorProfesional("prof-1"))
+    }
+
+    private class ConsultaMock(val reservasCollection: CollectionReference, val query: Query)
+
+    private fun setUpQuery(reservaDocumentos: List<DocumentSnapshot>, queryException: Exception? = null): ConsultaMock {
         val reservasCollection = mockk<CollectionReference>()
         val query = mockk<Query>()
         every { firestore.collection(COLECCION_RESERVAS) } returns reservasCollection
@@ -124,6 +163,7 @@ class ReservaRepositoryImplTest {
             coEvery { queryTask.await() } returns querySnapshot
         }
         every { query.get() } returns queryTask
+        return ConsultaMock(reservasCollection, query)
     }
 
     private fun setUpPago(pagoId: String, doc: DocumentSnapshot) {

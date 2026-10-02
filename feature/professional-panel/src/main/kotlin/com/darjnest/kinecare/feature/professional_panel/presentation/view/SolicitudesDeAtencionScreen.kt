@@ -37,14 +37,21 @@ import androidx.compose.material.icons.filled.PinDrop
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -58,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.darjnest.kinecare.core.designsystem.components.dialog.KineCareConfirmDialog
 import com.darjnest.kinecare.core.designsystem.theme.AzulPetroleo30
 import com.darjnest.kinecare.core.designsystem.theme.InicioDorado
 import com.darjnest.kinecare.core.designsystem.theme.KineCareTheme
@@ -72,10 +80,12 @@ import com.darjnest.kinecare.core.designsystem.theme.LoginTerciario
 import com.darjnest.kinecare.core.designsystem.theme.RojoError40
 import com.darjnest.kinecare.core.designsystem.theme.RojoError90
 import com.darjnest.kinecare.core.designsystem.theme.TextoPrincipal
+import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.EstadoSolicitudResuelta
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.ModalidadSolicitud
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.NivelUrgenciaSolicitud
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.PestanaSolicitudes
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.SolicitudAtencion
+import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.SolicitudResuelta
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.SolicitudesDeAtencionAction
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.SolicitudesDeAtencionState
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.SolicitudesDeAtencionViewModel
@@ -108,9 +118,30 @@ fun SolicitudesDeAtencionScreen(
     onAction: (SolicitudesDeAtencionAction) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(state.mensaje) {
+        state.mensaje?.let {
+            snackbarHostState.showSnackbar(it)
+            onAction(SolicitudesDeAtencionAction.MensajeMostrado)
+        }
+    }
+
+    state.solicitudPorRechazar?.let { solicitud ->
+        KineCareConfirmDialog(
+            titulo = "Rechazar solicitud",
+            mensaje = "¿Rechazar la solicitud de ${solicitud.pacienteNombre} para ${solicitud.fechaHoraTexto}? " +
+                "El horario quedará libre y no podrás deshacerlo.",
+            textoConfirmar = "Rechazar",
+            textoCancelar = "Volver",
+            onConfirmar = { onAction(SolicitudesDeAtencionAction.ConfirmarRechazo) },
+            onCancelar = { onAction(SolicitudesDeAtencionAction.CancelarRechazo) },
+        )
+    }
+
     Scaffold(
         modifier = modifier,
         containerColor = LoginFondo,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = { BarraNavegacionInferiorSolicitudes() },
     ) { innerPadding ->
         Column(
@@ -130,7 +161,19 @@ fun SolicitudesDeAtencionScreen(
                     onAction = onAction,
                 )
 
-                if (state.pestanaSeleccionada == PestanaSolicitudes.PENDIENTES) {
+                if (state.cargando && state.solicitudesPendientes.isEmpty() && state.historial.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 48.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator(color = LoginPrimarioOscuro)
+                    }
+                } else if (state.errorCarga) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    TarjetaErrorCarga(onReintentar = { onAction(SolicitudesDeAtencionAction.Reintentar) })
+                } else if (state.pestanaSeleccionada == PestanaSolicitudes.PENDIENTES) {
                     if (state.solicitudesPendientes.isNotEmpty() && state.plazoRespuestaTexto.isNotBlank()) {
                         Spacer(modifier = Modifier.height(16.dp))
                         BannerPlazoRespuesta(
@@ -143,7 +186,12 @@ fun SolicitudesDeAtencionScreen(
                     if (state.solicitudesPendientes.isNotEmpty()) {
                         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             state.solicitudesPendientes.forEach { solicitud ->
-                                TarjetaSolicitud(solicitud = solicitud, onAction = onAction)
+                                TarjetaSolicitud(
+                                    solicitud = solicitud,
+                                    respondiendo = state.respondiendoId == solicitud.id,
+                                    habilitada = state.respondiendoId == null,
+                                    onAction = onAction,
+                                )
                             }
                         }
                     } else {
@@ -155,6 +203,12 @@ fun SolicitudesDeAtencionScreen(
                         completadasEstaSemana = state.completadasEstaSemana,
                         porcentajeRespuestaATiempo = state.porcentajeRespuestaATiempo,
                     )
+                    if (state.historial.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            state.historial.forEach { FilaSolicitudResuelta(it) }
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -373,7 +427,7 @@ private fun TarjetaSinSolicitudesPendientes() {
 }
 
 @Composable
-private fun TarjetaHistorialResumen(completadasEstaSemana: Int, porcentajeRespuestaATiempo: Int) {
+private fun TarjetaHistorialResumen(completadasEstaSemana: Int, porcentajeRespuestaATiempo: Int?) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -403,10 +457,12 @@ private fun TarjetaHistorialResumen(completadasEstaSemana: Int, porcentajeRespue
                 color = TextoPrincipal,
             )
             Text(
-                text = if (completadasEstaSemana > 0) {
-                    "Has completado y gestionado $completadasEstaSemana solicitudes esta semana con $porcentajeRespuestaATiempo% de respuesta a tiempo."
-                } else {
-                    "Aún no tienes solicitudes resueltas esta semana."
+                text = when {
+                    completadasEstaSemana == 0 -> "Aún no tienes atenciones completadas esta semana."
+                    porcentajeRespuestaATiempo != null ->
+                        "Has completado y gestionado $completadasEstaSemana solicitudes esta semana con $porcentajeRespuestaATiempo% de respuesta a tiempo."
+                    completadasEstaSemana == 1 -> "Has completado 1 atención esta semana."
+                    else -> "Has completado $completadasEstaSemana atenciones esta semana."
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = LoginGrisTexto,
@@ -419,6 +475,8 @@ private fun TarjetaHistorialResumen(completadasEstaSemana: Int, porcentajeRespue
 @Composable
 private fun TarjetaSolicitud(
     solicitud: SolicitudAtencion,
+    respondiendo: Boolean,
+    habilitada: Boolean,
     onAction: (SolicitudesDeAtencionAction) -> Unit,
 ) {
     Card(
@@ -457,18 +515,22 @@ private fun TarjetaSolicitud(
                             fontWeight = FontWeight.Bold,
                             color = TextoPrincipal,
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Icon(Icons.Filled.Star, contentDescription = null, tint = InicioDorado, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(2.dp))
-                        Text(text = "${solicitud.calificacion}", style = MaterialTheme.typography.labelMedium, color = LoginGrisTexto)
+                        solicitud.calificacion?.let { calificacion ->
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Icon(Icons.Filled.Star, contentDescription = null, tint = InicioDorado, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text(text = "$calificacion", style = MaterialTheme.typography.labelMedium, color = LoginGrisTexto)
+                        }
                     }
-                    Text(
-                        text = solicitud.pacienteVerificadoTexto,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = LoginPrimarioOscuro,
-                    )
-                    Text(text = solicitud.especialidad, style = MaterialTheme.typography.labelSmall, color = LoginGrisTexto)
+                    solicitud.pacienteVerificadoTexto?.let { verificado ->
+                        Text(
+                            text = verificado,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = LoginPrimarioOscuro,
+                        )
+                    }
+                    Text(text = solicitud.servicioNombre, style = MaterialTheme.typography.labelSmall, color = LoginGrisTexto)
                 }
             }
 
@@ -503,30 +565,32 @@ private fun TarjetaSolicitud(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(LoginGrisClaro)
-                    .padding(12.dp),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.MedicalServices, contentDescription = null, tint = LoginGrisTexto, modifier = Modifier.size(14.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
+            solicitud.motivoConsulta?.let { motivoConsulta ->
+                Spacer(modifier = Modifier.height(12.dp))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(LoginGrisClaro)
+                        .padding(12.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.MedicalServices, contentDescription = null, tint = LoginGrisTexto, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "MOTIVO DE CONSULTA",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = LoginGrisTexto,
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "MOTIVO DE CONSULTA",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = LoginGrisTexto,
+                        text = "“$motivoConsulta”",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontStyle = FontStyle.Italic,
+                        color = TextoPrincipal,
                     )
                 }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "“${solicitud.motivoConsulta}”",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontStyle = FontStyle.Italic,
-                    color = TextoPrincipal,
-                )
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -544,42 +608,46 @@ private fun TarjetaSolicitud(
                         color = TextoPrincipal,
                     )
                 }
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(LoginMenta)
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Filled.Shield, contentDescription = null, tint = LoginPrimarioOscuro, modifier = Modifier.size(14.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = solicitud.custodiaTexto,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = LoginPrimarioOscuro,
-                    )
+                solicitud.custodiaTexto?.let { custodia ->
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(LoginMenta)
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Filled.Shield, contentDescription = null, tint = LoginPrimarioOscuro, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = custodia,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = LoginPrimarioOscuro,
+                        )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(50))
-                    .background(LoginGrisClaro)
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.Filled.Lock, contentDescription = null, tint = LoginTerciario, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = solicitud.avisoPagoTexto,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = LoginGrisTexto,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            solicitud.avisoPagoTexto?.let { avisoPago ->
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(50))
+                        .background(LoginGrisClaro)
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Filled.Lock, contentDescription = null, tint = LoginTerciario, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = avisoPago,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = LoginGrisTexto,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -589,7 +657,7 @@ private fun TarjetaSolicitud(
                         .weight(1f)
                         .clip(RoundedCornerShape(50))
                         .background(LoginGrisClaro)
-                        .clickable { onAction(SolicitudesDeAtencionAction.RechazarSolicitud(solicitud.id)) }
+                        .clickable(enabled = habilitada) { onAction(SolicitudesDeAtencionAction.RechazarSolicitud(solicitud.id)) }
                         .padding(vertical = 13.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
@@ -602,18 +670,111 @@ private fun TarjetaSolicitud(
                     modifier = Modifier
                         .weight(1.6f)
                         .clip(RoundedCornerShape(50))
-                        .background(LoginPrimarioOscuro)
-                        .clickable { onAction(SolicitudesDeAtencionAction.AceptarSolicitud(solicitud.id)) }
+                        .background(if (habilitada) LoginPrimarioOscuro else LoginGrisTexto)
+                        .clickable(enabled = habilitada) { onAction(SolicitudesDeAtencionAction.AceptarSolicitud(solicitud.id)) }
                         .padding(vertical = 13.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                    if (respondiendo) {
+                        CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                    } else {
+                        Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                    }
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(text = "Aceptar Cita", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(text = if (respondiendo) "Enviando…" else "Aceptar Cita", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color.White)
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun TarjetaErrorCarga(onReintentar: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 32.dp, horizontal = 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Icon(Icons.Filled.WifiOff, contentDescription = null, tint = LoginGrisTexto, modifier = Modifier.size(30.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "No pudimos cargar tus solicitudes",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = TextoPrincipal,
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "Reintentar",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(LoginPrimarioOscuro)
+                    .clickable(onClick = onReintentar)
+                    .padding(horizontal = 24.dp, vertical = 10.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun FilaSolicitudResuelta(solicitud: SolicitudResuelta) {
+    val (fondo, color) = when (solicitud.estado) {
+        EstadoSolicitudResuelta.CONFIRMADA,
+        EstadoSolicitudResuelta.EN_CURSO,
+        EstadoSolicitudResuelta.COMPLETADA,
+        -> LoginMenta to LoginPrimarioOscuro
+        EstadoSolicitudResuelta.RECHAZADA,
+        EstadoSolicitudResuelta.CANCELADA,
+        -> RojoError90 to RojoError40
+        EstadoSolicitudResuelta.VENCIDA -> LoginGrisClaro to LoginGrisTexto
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = solicitud.pacienteNombre,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold,
+                color = TextoPrincipal,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = "${solicitud.servicioNombre} • ${solicitud.fechaHoraTexto}",
+                style = MaterialTheme.typography.labelSmall,
+                color = LoginGrisTexto,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = solicitud.estadoTexto,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = color,
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .background(fondo)
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+        )
     }
 }
 
@@ -641,7 +802,11 @@ private fun BadgeUrgencia(urgencia: NivelUrgenciaSolicitud, texto: String) {
 
 @Composable
 private fun BadgeModalidad(modalidad: ModalidadSolicitud, texto: String) {
-    val icono: ImageVector = if (modalidad == ModalidadSolicitud.A_DOMICILIO) Icons.Filled.PinDrop else Icons.Filled.Apartment
+    val icono: ImageVector = when (modalidad) {
+        ModalidadSolicitud.A_DOMICILIO -> Icons.Filled.PinDrop
+        ModalidadSolicitud.EN_CONSULTA -> Icons.Filled.Apartment
+        ModalidadSolicitud.ONLINE -> Icons.Filled.Videocam
+    }
     val fondo = if (modalidad == ModalidadSolicitud.A_DOMICILIO) LoginGrisClaro else LoginAzulSuave
     val color = if (modalidad == ModalidadSolicitud.A_DOMICILIO) LoginGrisTexto else AzulPetroleo30
     Row(
@@ -724,7 +889,7 @@ private fun SolicitudesDeAtencionScreenConDatosPreview() {
                         pacienteNombre = "Matías Morales",
                         calificacion = 4.9,
                         pacienteVerificadoTexto = "Paciente Verificado Fonasa/Isapre",
-                        especialidad = "Kinesiología Deportiva",
+                        servicioNombre = "Kinesiología Deportiva",
                         fechaHoraTexto = "Hoy, 17:30 hrs",
                         tiempoRelativoTexto = "(En 2 horas)",
                         direccion = "Av. Pocuro 2150, Depto 402, Providencia",

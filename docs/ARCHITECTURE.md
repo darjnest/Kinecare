@@ -111,16 +111,17 @@ de Firebase (`firebase use qa` / `firebase use prod`) al proyecto correcto.
   región `us-central1`; `firebase.json` declara `functions` y `emulators`).
   Las funciones son *callable* y el cliente las invoca por HTTP con Retrofit
   (`POST .../<nombre>`, `Authorization: Bearer <ID token>`, cuerpo
-  `{"data": ...}`) en vez de usar el SDK `firebase-functions`. Hoy existe
-  `crearReserva` (contrato en [DATA_MODEL.md](DATA_MODEL.md#cloud-functions)),
-  probada contra el Firestore Emulator y el Functions Emulator, **pero no
-  desplegada** (requiere subir a Blaze primero). Lado Android: interfaz
+  `{"data": ...}`) en vez de usar el SDK `firebase-functions`. Hoy existen
+  `crearReserva` y `responderReserva` (contratos en
+  [DATA_MODEL.md](DATA_MODEL.md#cloud-functions)), probadas contra el
+  Firestore Emulator; desplegadas solo en QA (producción sigue en Spark,
+  ver DATA_MODEL.md). Lado Android: interfaz
   Retrofit `CloudFunctionsApi` + DTOs del sobre callable en
   `:core:network` (`functions/`); la URL base se arma con el `projectId` de
   `google-services.json` del flavor (`https://us-central1-<projectId>.cloudfunctions.net/`),
   así QA nunca llama a las funciones de producción. El `motivo` de cada
   `HttpsError` se mapea 1:1 a un enum de error de `:core:common`
-  (`CrearReservaError`).
+  (`CrearReservaError`, `ResponderReservaError`).
 - **Cloud Messaging**: notificaciones, tópicos separados por reserva y por rol.
   Sin configurar todavía.
 - **Storage**: fotos de perfil y credenciales de profesionales. **Bloqueado

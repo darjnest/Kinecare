@@ -4,6 +4,8 @@ import com.darjnest.kinecare.core.network.functions.dto.CallableRequest
 import com.darjnest.kinecare.core.network.functions.dto.CallableResponse
 import com.darjnest.kinecare.core.network.functions.dto.CrearReservaRequestDto
 import com.darjnest.kinecare.core.network.functions.dto.CrearReservaResultadoDto
+import com.darjnest.kinecare.core.network.functions.dto.ResponderReservaRequestDto
+import com.darjnest.kinecare.core.network.functions.dto.ResponderReservaResultadoDto
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.Header
@@ -24,4 +26,10 @@ interface CloudFunctionsApi {
         @Header("Authorization") autorizacion: String,
         @Body cuerpo: CallableRequest<CrearReservaRequestDto>,
     ): Response<CallableResponse<CrearReservaResultadoDto>>
+
+    @POST("responderReserva")
+    suspend fun responderReserva(
+        @Header("Authorization") autorizacion: String,
+        @Body cuerpo: CallableRequest<ResponderReservaRequestDto>,
+    ): Response<CallableResponse<ResponderReservaResultadoDto>>
 }
