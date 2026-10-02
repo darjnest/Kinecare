@@ -39,9 +39,9 @@ private const val COLECCION_PAGOS = "pagos"
  * Lectura de `reservas/{reservaId}` con el SDK de Firestore
  * (docs/DATA_MODEL.md) y creacion via la Cloud Function `crearReserva`
  * (Retrofit, [CloudFunctionsApi]) — firestore.rules deniega `write` desde el
- * cliente sobre esta coleccion. `crearReserva` esta escrita y probada contra
- * el emulador, pero **no desplegada** (plan Spark): hasta subir a Blaze,
- * [crear] termina en [CrearReservaError.DESCONOCIDO] (404 sin cuerpo JSON).
+ * cliente sobre esta coleccion. `crearReserva` esta desplegada en QA
+ * (`kinecare-cl-qa`), no en produccion (plan Spark): ahi [crear] termina en
+ * [CrearReservaError.DESCONOCIDO] (404 sin cuerpo JSON).
  *
  * Requiere el indice compuesto `clienteId` (ASC) + `fechaHora` (DESC) —
  * documentado en docs/DATA_MODEL.md y agregado a `firestore.indexes.json`.
