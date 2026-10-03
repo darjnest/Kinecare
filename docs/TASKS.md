@@ -471,13 +471,24 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       prueba: `crearReserva` solo aceptaba `horaInicio`/`horaFin` como
       `HH:mm` y había disponibilidades en QA guardadas como `HH:mm:ss`, que
       la app sí lee; ahora acepta ambos (2 tests nuevos, redesplegada en
-      QA). **Pendiente:** probar de
-      punta a punta en dispositivo
-      (crear una reserva como Cliente → aceptarla/rechazarla como
-      Profesional → verla en "Mis Citas"). **Fuera de alcance:** cancelar
+      QA). **Verificado en emulador** (Pixel 7a,
+      flavor QA, sesión de Cliente existente): primera reserva confirmada
+      en vivo con `crearReserva` (antes solo se había visto el 404) y "Mis
+      Citas" mostrando "Esperando confirmación del profesional"; de paso se
+      corrigió el encabezado "N confirmadas", que contaba también las
+      solicitudes. **Pendiente:** el lado Profesional en dispositivo
+      (aceptar/rechazar y ver el cambio en "Mis Citas"): falta una cuenta
+      de profesional con Firebase Auth y credenciales conocidas —
+      `usuarios/88154428` (Carlos Silva Araneda) es un perfil cargado a
+      mano, sin cuenta en Auth, así que nadie puede iniciar sesión como él. **Fuera de alcance:** cancelar
       una cita confirmada (`CANCELADA_PROFESIONAL`/`CANCELADA_CLIENTE`),
       expirar solicitudes sin respuesta (función programada), notificar al
       cliente (FCM) y el contador de pendientes en el dashboard.
+- [ ] Un profesional registrado desde la app no aparece en la búsqueda:
+      `:feature:search` filtra `especialidades` por la etiqueta
+      `KINESIOLOGIA`/`MASOTERAPIA` (`TipoAtencion`), que hoy solo tienen los
+      perfiles sembrados. Detectado con `profesionales/88154428`, al que se
+      le agregó la etiqueta a mano en QA para la prueba.
 
 ## Fase 8 — QA, pulido y publicación
 - [ ] Cobertura de tests (JUnit5, MockK, Turbine, Compose UI Testing)
