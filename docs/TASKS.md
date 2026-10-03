@@ -509,6 +509,12 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       `tiposAtencion` en los 13 `profesionales` existentes (derivado de
       `especialidades`); sin eso la búsqueda queda vacía en QA. Falta
       también editar `tiposAtencion` desde el panel profesional.
+      **Rellenado hecho en QA:** los 13 perfiles ya tienen `tiposAtencion`
+      (8 `KINESIOLOGIA`, 5 `MASOTERAPIA`). **Falta desplegar** reglas e
+      índice (`firebase deploy --only firestore -P qa`): hasta entonces la
+      consulta de búsqueda falla con `FAILED_PRECONDITION` (índice
+      `tiposAtencion` + `calificacionPromedio` inexistente). Al desplegar,
+      verificar con una consulta `array-contains` sobre `tiposAtencion`.
 
 ## Fase 8 — QA, pulido y publicación
 - [ ] Cobertura de tests (JUnit5, MockK, Turbine, Compose UI Testing)
