@@ -73,6 +73,8 @@ pago: PagoRef                        // { id, monto, estado } — detalle en `pa
 comisionPorcentaje: number           // escrito solo por Cloud Function
 creadoEn: timestamp
 actualizadoEn: timestamp
+respondidaEn: timestamp?             // lo escribe responderReserva al aceptar/rechazar;
+                                     // ausente mientras la reserva sigue SOLICITADA
 ```
 `pago` lo inicializa `crearReserva` como `{ id: null, monto: servicio.precio,
 estado: "PENDIENTE" }`: **`pago.id` es `null` hasta la Fase 5**, cuando
@@ -96,7 +98,11 @@ completa); declarado en `firestore.indexes.json` y **desplegado en QA**
 `profesionalId` (asc) + `fechaHora` (asc) — lo usa `crearReserva` para buscar
 reservas del profesional en una ventana de tiempo y detectar
 `HORARIO_OCUPADO` (igualdad en `profesionalId` + rango en `fechaHora`; el
-filtro por `estado` se hace en memoria). **Desplegado en QA**
+filtro por `estado` se hace en memoria). También
+`ReservaRepository.obtenerPorProfesional` (`:core:network`) para
+"Solicitudes de Atención" del panel profesional: todas las reservas del
+profesional en orden ascendente; pendientes e historial se separan en el
+`ViewModel`. **Desplegado en QA**
 (`kinecare-cl-qa`); el Firestore Emulator no exige índices, así que la
 consulta todavía no se ha ejercitado contra uno real.
 
@@ -267,7 +273,10 @@ ignoran. La modalidad, la duración y el precio salen de
 Reglas de detalle:
 - **Zona horaria.** `Disponibilidad` está en hora de Chile
   (`America/Santiago`, con horario de verano): `fechaHora` se convierte a esa
-  zona (vía `Intl`) para elegir el día de la semana y comparar `HH:mm`. El
+  zona (vía `Intl`) para elegir el día de la semana y comparar `HH:mm`
+  (también acepta `HH:mm:ss`, como `LocalTime.parse` del cliente: hay datos
+  en QA guardados con segundos y, sin esto, la app ofrecía horarios que la
+  función rechazaba con `FUERA_DE_HORARIO`). El
   tramo no puede cruzar la medianoche local; terminar exactamente a las 00:00
   solo es válido si `horaFin` es `"24:00"`.
 - **Rol** se lee siempre de `usuarios/{uid}`, nunca del payload ni de claims.
@@ -293,6 +302,48 @@ Pruebas (`functions/`): `npm run test:unit` (validación, conversión
 `npm run test:emulator` (levanta el Firestore Emulator y corre además la
 integración del handler: todos los `motivo`, camino feliz y reservas
 simultáneas). No se probó contra un proyecto Firebase real.
+
+### `responderReserva` (callable) — **desplegada en QA**, no en producción
+Mismo protocolo que `crearReserva` (`POST .../responderReserva`). El
+profesional dueño acepta o rechaza una reserva en `SOLICITADA`.
+
+Request `data`:
+```
+reservaId: string
+respuesta: "ACEPTAR" | "RECHAZAR"
+```
+Cualquier otra clave se ignora (el estado nunca lo elige el cliente).
+Response `result`: `{ estado: "CONFIRMADA" | "RECHAZADA" }`. Actualiza
+`reservas/{reservaId}`: `estado`, `respondidaEn` y `actualizadoEn` (hora
+del servidor); el resto del documento no cambia.
+
+| `status` (HTTP) | `motivo` | Cuándo |
+|---|---|---|
+| `UNAUTHENTICATED` (401) | `SIN_SESION` | Sin sesión |
+| `INVALID_ARGUMENT` (400) | `DATOS_INVALIDOS` | `reservaId` vacío/no texto/con `/`/> 128 caracteres, o `respuesta` fuera del enum |
+| `PERMISSION_DENIED` (403) | `ROL_INVALIDO` | `usuarios/{uid}.rol != "PROFESIONAL"` (o sin documento) |
+| `NOT_FOUND` (404) | `RESERVA_NO_ENCONTRADA` | La reserva no existe **o es de otro profesional** (no se revela que existe) |
+| `FAILED_PRECONDITION` (400) | `RESERVA_YA_RESPONDIDA` | `estado != "SOLICITADA"` (ya aceptada/rechazada, cancelada, etc.) |
+| `FAILED_PRECONDITION` (400) | `RESERVA_VENCIDA` | `ACEPTAR` con `fechaHora <= ahora` (o sin `fechaHora`). Rechazar una vencida sí se permite |
+
+Reglas de detalle:
+- Lectura y escritura en una transacción: dos respuestas simultáneas a la
+  misma reserva → una gana y la otra recibe `RESERVA_YA_RESPONDIDA`
+  (probado con 6 llamadas paralelas en el emulador).
+- No toca `bloqueosAgenda`: `SOLICITADA` y `CONFIRMADA` ocupan agenda por
+  igual, y `RECHAZADA` solo la libera.
+- **Sin plazo de respuesta.** Una solicitud no respondida no expira sola;
+  cuando su hora pasa, el panel profesional la muestra como "Vencida sin
+  respuesta" (derivado, no se escribe) y ya no se puede aceptar. Expirarlas
+  en el backend requiere una función programada.
+- No notifica al cliente (FCM sin configurar): el cliente ve el cambio al
+  recargar "Mis Citas".
+
+Pruebas: `test/unit/responderReserva.test.ts` (validación del payload) y
+`test/integration/responderReserva.integration.test.ts` (17 casos contra el
+Firestore Emulator: camino feliz, cada `motivo`, reserva ajena, concurrencia).
+Desplegada con `firebase deploy --only functions:responderReserva -P qa`;
+verificado que sin sesión responde 401 `SIN_SESION`.
 
 ## Firebase Storage
 

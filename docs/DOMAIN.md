@@ -94,6 +94,13 @@ Núcleo transaccional del marketplace.
 `SOLICITADA → CONFIRMADA → EN_CURSO → COMPLETADA` con ramas
 `CANCELADA_CLIENTE`, `CANCELADA_PROFESIONAL`, `RECHAZADA`.
 
+`SOLICITADA → CONFIRMADA | RECHAZADA` lo decide el profesional dueño con
+`RespuestaReserva` (`ACEPTAR`, `RECHAZAR`) vía la Cloud Function
+`responderReserva`; solo se puede aceptar antes de la hora de la cita. Una
+`SOLICITADA` cuya hora ya pasó no cambia de estado en Firestore (no hay
+plazo de respuesta todavía), pero el panel profesional la muestra como
+vencida.
+
 ## Pago
 - `id: String`
 - `reservaId: String`

@@ -12,6 +12,15 @@ enum class EstadoReserva {
     RECHAZADA,
 }
 
+/** Respuesta del profesional a una reserva en [EstadoReserva.SOLICITADA]. */
+enum class RespuestaReserva {
+    /** Pasa a [EstadoReserva.CONFIRMADA]. */
+    ACEPTAR,
+
+    /** Pasa a [EstadoReserva.RECHAZADA] y libera el horario. */
+    RECHAZAR,
+}
+
 data class Reserva(
     val id: String,
     val clienteId: String,

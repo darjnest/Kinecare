@@ -433,6 +433,62 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       hay campo en Firestore). Zonas de atención y reseña destacada quedan
       vacías hasta Fase 4; editar credenciales y previsualizar siguen sin
       destino ("Ver todas las reseñas" ya abre `:feature:reviews`).
+- [x] `:feature:professional-panel` — **Solicitudes de atención**
+      conectada a reservas reales y con respuesta del profesional. Nueva
+      Cloud Function `responderReserva` (`ACEPTAR` → `CONFIRMADA`,
+      `RECHAZAR` → `RECHAZADA`; contrato y motivos en
+      [DATA_MODEL.md](DATA_MODEL.md#cloud-functions)): solo el profesional
+      dueño, solo desde `SOLICITADA`, aceptar exige que la cita no haya
+      empezado; transacción para respuestas simultáneas; nuevo campo
+      `reservas.respondidaEn`. 22 tests nuevos en `functions/` (5 unitarios
+      + 17 de integración contra el Firestore Emulator; total 90 con
+      `npm run test:emulator`). Android: `ReservaRepository` gana
+      `obtenerPorProfesional` (índice `profesionalId` + `fechaHora` ASC, ya
+      desplegado en QA) y `responder` (Retrofit; el manejo de token/errores
+      de callable se extrajo a un helper común con `crear`), nuevo
+      `ResponderReservaError` y `RespuestaReserva` en `:core:common`.
+      `SolicitudesDeAtencionViewModel`: pendientes = `SOLICITADA` futuras
+      (la más próxima primero, urgente si empieza en < 24 h, fecha/hora en
+      hora de Chile), nombre del paciente desde `usuarios/{clienteId}` y del
+      servicio desde el catálogo propio (textos genéricos si fallan),
+      honorario neto = monto − comisión; "Historial / Resueltas" lista
+      confirmadas, en curso, completadas, rechazadas, canceladas y
+      "vencidas sin respuesta" (`SOLICITADA` con hora pasada, derivado), y
+      cuenta las completadas de la semana. Aceptar muestra progreso en la
+      tarjeta; rechazar pide confirmación; tras responder la tarjeta pasa al
+      historial sin recargar y se avisa con un Snackbar; si la reserva ya
+      fue respondida/cancelada/venció, avisa y recarga. Calificación y
+      verificación del paciente, motivo de consulta, custodia de pago
+      (solo con pago `AUTORIZADO`, Fase 5) y plazo de respuesta no tienen
+      datos todavía: la tarjeta los oculta. "Mis Citas" del cliente ahora
+      distingue "Esperando confirmación del profesional" de "Confirmada".
+      El `Clock` inyectado pasó de `:feature:booking` (`BookingModule`,
+      eliminado) a `:app` (`di/ClockModule.kt`) porque ahora lo usan dos
+      features. 37 tests Android nuevos (`SolicitudesDeAtencionViewModelTest`
+      19, `ReservaRepositoryImplResponderTest` 13, `ReservaRepositoryImplTest`
+      +2, `MisCitasViewModelTest` +2 aserciones). `responderReserva` **desplegada en QA**
+      (sin sesión responde 401 `SIN_SESION`). Bug encontrado al preparar la
+      prueba: `crearReserva` solo aceptaba `horaInicio`/`horaFin` como
+      `HH:mm` y había disponibilidades en QA guardadas como `HH:mm:ss`, que
+      la app sí lee; ahora acepta ambos (2 tests nuevos, redesplegada en
+      QA). **Verificado en emulador** (Pixel 7a,
+      flavor QA, sesión de Cliente existente): primera reserva confirmada
+      en vivo con `crearReserva` (antes solo se había visto el 404) y "Mis
+      Citas" mostrando "Esperando confirmación del profesional"; de paso se
+      corrigió el encabezado "N confirmadas", que contaba también las
+      solicitudes. **Pendiente:** el lado Profesional en dispositivo
+      (aceptar/rechazar y ver el cambio en "Mis Citas"): falta una cuenta
+      de profesional con Firebase Auth y credenciales conocidas —
+      `usuarios/88154428` (Carlos Silva Araneda) es un perfil cargado a
+      mano, sin cuenta en Auth, así que nadie puede iniciar sesión como él. **Fuera de alcance:** cancelar
+      una cita confirmada (`CANCELADA_PROFESIONAL`/`CANCELADA_CLIENTE`),
+      expirar solicitudes sin respuesta (función programada), notificar al
+      cliente (FCM) y el contador de pendientes en el dashboard.
+- [ ] Un profesional registrado desde la app no aparece en la búsqueda:
+      `:feature:search` filtra `especialidades` por la etiqueta
+      `KINESIOLOGIA`/`MASOTERAPIA` (`TipoAtencion`), que hoy solo tienen los
+      perfiles sembrados. Detectado con `profesionales/88154428`, al que se
+      le agregó la etiqueta a mano en QA para la prueba.
 
 ## Fase 8 — QA, pulido y publicación
 - [ ] Cobertura de tests (JUnit5, MockK, Turbine, Compose UI Testing)

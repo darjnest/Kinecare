@@ -675,7 +675,9 @@ private fun SeccionProximosDias(
                 color = TextoPrincipal,
             )
             Text(
-                text = "${citas.size} confirmada${if (citas.size == 1) "" else "s"}",
+                // Cuenta solo las confirmadas: las `SOLICITADA` tambien estan en
+                // esta lista, pero aun esperan respuesta del profesional.
+                text = citas.count { !it.porConfirmar }.let { n -> "$n confirmada${if (n == 1) "" else "s"}" },
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
                 color = LoginGrisTexto,
@@ -754,6 +756,13 @@ private fun TarjetaCitaProxima(
                 color = LoginGrisTexto,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = if (cita.porConfirmar) "Esperando confirmación del profesional" else "Confirmada",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = if (cita.porConfirmar) LoginGrisTexto else LoginPrimarioOscuro,
+                modifier = Modifier.padding(top = 4.dp),
             )
             Spacer(modifier = Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

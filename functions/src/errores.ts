@@ -9,7 +9,11 @@ export type Motivo =
   | "SERVICIO_NO_DISPONIBLE"
   | "ANTICIPACION_INSUFICIENTE"
   | "FUERA_DE_HORARIO"
-  | "HORARIO_OCUPADO";
+  | "HORARIO_OCUPADO"
+  // responderReserva
+  | "RESERVA_NO_ENCONTRADA"
+  | "RESERVA_YA_RESPONDIDA"
+  | "RESERVA_VENCIDA";
 
 /** Crea el HttpsError con `details: { motivo }`, el contrato con el cliente. */
 export function errorDeNegocio(code: FunctionsErrorCode, motivo: Motivo, message: string): HttpsError {

@@ -172,6 +172,8 @@ class MisCitasViewModelTest {
             assertEquals(2, estado.proximasCitas.size)
             assertTrue(estado.proximasCitas.any { it.id == "r-proxima-solicitada" })
             assertTrue(estado.proximasCitas.any { it.id == "r-proxima-confirmada" })
+            assertTrue(estado.proximasCitas.single { it.id == "r-proxima-solicitada" }.porConfirmar)
+            assertFalse(estado.proximasCitas.single { it.id == "r-proxima-confirmada" }.porConfirmar)
             assertTrue(estado.proximasCitas.all { it.profesionalNombre == "Bruno Diaz" })
 
             assertEquals(1, estado.historial.size)
