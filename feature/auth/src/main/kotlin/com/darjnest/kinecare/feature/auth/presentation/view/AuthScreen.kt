@@ -23,6 +23,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Email
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.SelfImprovement
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Work
@@ -81,6 +83,7 @@ import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.darjnest.kinecare.core.common.domain.model.RolUsuario
+import com.darjnest.kinecare.core.common.domain.model.TipoAtencion
 import com.darjnest.kinecare.core.common.domain.model.Usuario
 import com.darjnest.kinecare.core.designsystem.components.button.KineCarePrimaryButton
 import com.darjnest.kinecare.core.designsystem.components.card.KineCareCard
@@ -183,6 +186,10 @@ private fun FormularioAuthContenido(
     Column(modifier = Modifier.padding(horizontal = 20.dp)) {
         Spacer(modifier = Modifier.height(20.dp))
         SelectorRol(seleccionado = state.rolSeleccionado, modo = state.modo, onAction = onAction)
+        if (state.modo == ModoAuth.REGISTRO && state.rolSeleccionado == RolUsuario.PROFESIONAL) {
+            Spacer(modifier = Modifier.height(16.dp))
+            SelectorTiposAtencion(seleccionados = state.tiposAtencion, onAction = onAction)
+        }
 
         CamposFormulario(state = state, onAction = onAction)
 
@@ -243,6 +250,10 @@ private fun FormularioCompletarPerfilGoogle(
     Column(modifier = Modifier.padding(horizontal = 20.dp)) {
         Spacer(modifier = Modifier.height(20.dp))
         SelectorRolTarjetas(seleccionado = state.rolSeleccionado, onAction = onAction)
+        if (state.rolSeleccionado == RolUsuario.PROFESIONAL) {
+            Spacer(modifier = Modifier.height(16.dp))
+            SelectorTiposAtencion(seleccionados = state.tiposAtencion, onAction = onAction)
+        }
 
         Spacer(modifier = Modifier.height(20.dp))
         EtiquetaCampo(texto = "Nombre y Apellido")
@@ -1094,6 +1105,57 @@ private fun SelectorRolTarjetas(seleccionado: RolUsuario, onAction: (AuthAction)
     }
 }
 
+/**
+ * Seleccion multiple de disciplinas del Profesional (al menos una). Es lo
+ * que la busqueda del Cliente filtra, asi que se pide al registrarse en vez
+ * de dejarlo para despues: sin esto el perfil no apareceria en resultados.
+ */
+@Composable
+private fun SelectorTiposAtencion(seleccionados: Set<TipoAtencion>, onAction: (AuthAction) -> Unit) {
+    Column {
+        Text(
+            text = "¿QUÉ ATENCIONES OFRECES?",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = LoginGrisTexto,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(LoginGrisClaro)
+                .padding(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            TarjetaRol(
+                titulo = "Kinesiología",
+                descripcion = "Rehabilitación y terapia física",
+                icono = Icons.AutoMirrored.Filled.DirectionsRun,
+                seleccionado = TipoAtencion.KINESIOLOGIA in seleccionados,
+                onClick = { onAction(AuthAction.AlternarTipoAtencion(TipoAtencion.KINESIOLOGIA)) },
+                modifier = Modifier.weight(1f),
+            )
+            TarjetaRol(
+                titulo = "Masoterapia",
+                descripcion = "Masajes terapéuticos y relajación",
+                icono = Icons.Filled.Spa,
+                seleccionado = TipoAtencion.MASOTERAPIA in seleccionados,
+                onClick = { onAction(AuthAction.AlternarTipoAtencion(TipoAtencion.MASOTERAPIA)) },
+                modifier = Modifier.weight(1f),
+            )
+        }
+        if (seleccionados.isEmpty()) {
+            Text(
+                text = "Elige al menos una para aparecer en las búsquedas.",
+                style = MaterialTheme.typography.bodySmall,
+                color = LoginGrisTexto,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+    }
+}
+
 @Composable
 private fun TarjetaRol(
     titulo: String,
@@ -1167,6 +1229,22 @@ private fun AuthScreenLoginPreview() {
 private fun AuthScreenRegistroPreview() {
     KineCareTheme {
         AuthScreen(state = AuthState(modo = ModoAuth.REGISTRO, verificandoSesion = false), onAction = {})
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun AuthScreenRegistroProfesionalPreview() {
+    KineCareTheme {
+        AuthScreen(
+            state = AuthState(
+                modo = ModoAuth.REGISTRO,
+                verificandoSesion = false,
+                rolSeleccionado = RolUsuario.PROFESIONAL,
+                tiposAtencion = setOf(TipoAtencion.KINESIOLOGIA),
+            ),
+            onAction = {},
+        )
     }
 }
 

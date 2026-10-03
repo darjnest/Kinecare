@@ -15,6 +15,7 @@ import androidx.lifecycle.viewModelScope
 import com.darjnest.kinecare.core.common.data.repository.ProfesionalRepository
 import com.darjnest.kinecare.core.common.domain.model.EstadoVerificacion
 import com.darjnest.kinecare.core.common.domain.model.Profesional
+import com.darjnest.kinecare.core.common.domain.model.TipoAtencion
 import com.darjnest.kinecare.core.common.result.Result
 import com.darjnest.kinecare.core.designsystem.theme.LoginAzulSuave
 import com.darjnest.kinecare.core.designsystem.theme.LoginMenta
@@ -28,9 +29,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-
-/** Tipo de atencion que el Cliente busca (selector segmentado de la tarjeta de filtros). */
-enum class TipoAtencion { KINESIOLOGIA, MASOTERAPIA }
 
 /** Modalidad de entrega del servicio (pestanas de la seccion "Servicios cerca de ti"). */
 enum class ModalidadAtencion { A_DOMICILIO, EN_CONSULTA }
@@ -251,7 +249,7 @@ class SearchViewModel @Inject constructor(
     private fun cargarProfesionalesDestacados(tipo: TipoAtencion) {
         viewModelScope.launch {
             _state.update { it.copy(cargandoProfesionales = true) }
-            when (val resultado = profesionalRepository.buscarPorEspecialidad(tipo.name)) {
+            when (val resultado = profesionalRepository.buscarPorTipoAtencion(tipo)) {
                 is Result.Success -> _state.update {
                     it.copy(
                         cargandoProfesionales = false,

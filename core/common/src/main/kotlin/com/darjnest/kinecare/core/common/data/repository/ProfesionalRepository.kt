@@ -3,6 +3,7 @@ package com.darjnest.kinecare.core.common.data.repository
 import com.darjnest.kinecare.core.common.data.error.ProfesionalError
 import com.darjnest.kinecare.core.common.domain.model.Disponibilidad
 import com.darjnest.kinecare.core.common.domain.model.Profesional
+import com.darjnest.kinecare.core.common.domain.model.TipoAtencion
 import com.darjnest.kinecare.core.common.result.Result
 
 /**
@@ -13,7 +14,12 @@ import com.darjnest.kinecare.core.common.result.Result
  * (docs/ARCHITECTURE.md).
  */
 interface ProfesionalRepository {
-    suspend fun buscarPorEspecialidad(especialidad: String): Result<List<Profesional>, ProfesionalError>
+    /**
+     * Profesionales que ofrecen [tipo] (array-contains sobre `tiposAtencion`),
+     * mejor calificados primero. No filtra por `especialidades`: ese campo es
+     * texto libre y no tiene un vocabulario fijo con el cual comparar.
+     */
+    suspend fun buscarPorTipoAtencion(tipo: TipoAtencion): Result<List<Profesional>, ProfesionalError>
 
     suspend fun obtenerPorId(id: String): Result<Profesional, ProfesionalError>
 

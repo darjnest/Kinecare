@@ -18,12 +18,43 @@ service cloud.firestore {
       allow read, write: if esDueno(usuarioId);
     }
 
+    // Disciplinas por las que filtra la busqueda (TipoAtencion). Sin al menos
+    // una, el perfil nunca aparece en resultados.
+    function tiposAtencionValidos(data) {
+      return data.tiposAtencion is list
+        && data.tiposAtencion.size() > 0
+        && data.tiposAtencion.size() <= 2
+        && data.tiposAtencion.hasOnly(['KINESIOLOGIA', 'MASOTERAPIA']);
+    }
+
     match /profesionales/{usuarioId} {
       allow read: if true;
-      allow create: if esDueno(usuarioId);
+      // Se crea al registrarse, en el mismo batch que usuarios/{uid} (por eso
+      // getAfter), y siempre en estado inicial: sin insignias, sin verificacion
+      // y sin reputacion — nadie puede autoasignarse calificacion o insignias.
+      allow create: if esDueno(usuarioId)
+        && getAfter(/databases/$(database)/documents/usuarios/$(usuarioId)).data.rol == 'PROFESIONAL'
+        && request.resource.data.keys().hasAll(['tiposAtencion', 'especialidades', 'rnpi', 'descripcion',
+            'calificacionPromedio', 'totalResenas', 'estadoVerificacionGeneral', 'insignias', 'disponibilidad'])
+        && request.resource.data.keys().hasOnly(['tiposAtencion', 'especialidades', 'rnpi', 'descripcion',
+            'calificacionPromedio', 'totalResenas', 'estadoVerificacionGeneral', 'insignias', 'disponibilidad'])
+        && tiposAtencionValidos(request.resource.data)
+        && request.resource.data.especialidades is list
+        && request.resource.data.rnpi is string
+        && request.resource.data.descripcion is string
+        && request.resource.data.calificacionPromedio == 0
+        && request.resource.data.totalResenas == 0
+        && request.resource.data.estadoVerificacionGeneral == 'NO_SOLICITADO'
+        && request.resource.data.insignias == []
+        && request.resource.data.disponibilidad is list;
+      // Reputacion (calificacionPromedio/totalResenas) ordena la busqueda: no
+      // la escribe el dueno. tiposAtencion es opcional en perfiles legados,
+      // pero si se toca tiene que quedar valido.
       allow update: if esDueno(usuarioId)
-        && request.resource.data.insignias == resource.data.insignias
-        && request.resource.data.estadoVerificacionGeneral == resource.data.estadoVerificacionGeneral;
+        && !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['insignias', 'estadoVerificacionGeneral', 'calificacionPromedio', 'totalResenas'])
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['tiposAtencion'])
+            || tiposAtencionValidos(request.resource.data));
       allow delete: if false;
 
       match /servicios/{servicioId} {

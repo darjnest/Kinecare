@@ -4,7 +4,7 @@
       "collectionGroup": "profesionales",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "especialidades", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "tiposAtencion", "arrayConfig": "CONTAINS" },
         { "fieldPath": "calificacionPromedio", "order": "DESCENDING" }
       ]
     },

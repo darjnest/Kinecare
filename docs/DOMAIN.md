@@ -43,7 +43,15 @@ Extiende `Usuario`. Datos propios del rol cliente.
 
 ### Profesional
 Extiende `Usuario`. Es la entidad más rica del dominio.
-- `especialidades: List<String>` (kinesiología, masoterapia, etc.)
+- `tiposAtencion: List<TipoAtencion>` (`KINESIOLOGIA`, `MASOTERAPIA`):
+  disciplinas que ofrece. Es lo **único** por lo que filtra la búsqueda del
+  Cliente, así que se pide al registrarse (al menos una) y el perfil
+  profesional se crea junto con la cuenta. `TipoAtencion` vive en
+  `:core:common` (lo usan `:feature:auth` y `:feature:search`).
+- `especialidades: List<String>` (texto libre para mostrar: "Kinesiología
+  deportiva", ids de categoría de vitrina, etc.). No se usa para filtrar;
+  la tarjeta de búsqueda (`especialidadLegible()`) ignora las etiquetas de
+  tipo que tengan perfiles antiguos.
 - `rnpi: String`
 - `servicios: List<Servicio>`
 - `insignias: List<Insignia>`

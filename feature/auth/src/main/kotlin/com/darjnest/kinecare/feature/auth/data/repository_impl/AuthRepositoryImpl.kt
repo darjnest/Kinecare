@@ -3,9 +3,11 @@
 package com.darjnest.kinecare.feature.auth.data.repository_impl
 
 import com.darjnest.kinecare.core.common.domain.model.RolUsuario
+import com.darjnest.kinecare.core.common.domain.model.TipoAtencion
 import com.darjnest.kinecare.core.common.domain.model.Usuario
 import com.darjnest.kinecare.core.common.domain.util.RutUtils
 import com.darjnest.kinecare.core.common.result.Result
+import com.darjnest.kinecare.core.network.firebase.perfilProfesionalInicial
 import com.darjnest.kinecare.feature.auth.data.repository.AuthRepository
 import com.darjnest.kinecare.feature.auth.domain.AuthError
 import com.darjnest.kinecare.feature.auth.domain.ResultadoGoogle
@@ -27,6 +29,7 @@ import javax.inject.Inject
 import kotlin.time.Clock
 
 private const val COLECCION_USUARIOS = "usuarios"
+private const val COLECCION_PROFESIONALES = "profesionales"
 
 class AuthRepositoryImpl @Inject constructor(
     private val firebaseAuth: FirebaseAuth,
@@ -56,6 +59,7 @@ class AuthRepositoryImpl @Inject constructor(
         rol: RolUsuario,
         telefono: String,
         correoContacto: String,
+        tiposAtencion: Set<TipoAtencion>,
     ): Result<Usuario, AuthError> {
         return try {
             val rutNormalizado = RutUtils.normalizar(rut)
@@ -72,7 +76,7 @@ class AuthRepositoryImpl @Inject constructor(
                 "fotoUrl" to null,
                 "fechaRegistro" to FieldValue.serverTimestamp(),
             )
-            firestore.collection(COLECCION_USUARIOS).document(uid).set(datosUsuario).await()
+            crearDocumentosDeCuenta(uid, datosUsuario, rol, tiposAtencion)
 
             val usuarioCreado = obtenerUsuario(uid)
             // createUserWithEmailAndPassword deja la sesión iniciada automáticamente;
@@ -125,6 +129,7 @@ class AuthRepositoryImpl @Inject constructor(
         correoContacto: String,
         rol: RolUsuario,
         fotoUrl: String?,
+        tiposAtencion: Set<TipoAtencion>,
     ): Result<Usuario, AuthError> {
         return try {
             val rutNormalizado = RutUtils.normalizar(rut)
@@ -145,7 +150,7 @@ class AuthRepositoryImpl @Inject constructor(
                 "fotoUrl" to fotoUrl,
                 "fechaRegistro" to FieldValue.serverTimestamp(),
             )
-            firestore.collection(COLECCION_USUARIOS).document(uid).set(datosUsuario).await()
+            crearDocumentosDeCuenta(uid, datosUsuario, rol, tiposAtencion)
             obtenerUsuario(uid)
         } catch (e: FirebaseNetworkException) {
             Result.Error(AuthError.SIN_INTERNET)
@@ -171,6 +176,29 @@ class AuthRepositoryImpl @Inject constructor(
 
     override suspend fun cerrarSesion() {
         firebaseAuth.signOut()
+    }
+
+    /**
+     * Escribe `usuarios/{uid}` y, para un Profesional, `profesionales/{uid}`
+     * en un solo batch: si el perfil profesional fallara por separado
+     * quedaria una cuenta PROFESIONAL sin documento, invisible en la
+     * busqueda y sin donde guardar disponibilidad ni biografia.
+     */
+    private suspend fun crearDocumentosDeCuenta(
+        uid: String,
+        datosUsuario: Map<String, Any?>,
+        rol: RolUsuario,
+        tiposAtencion: Set<TipoAtencion>,
+    ) {
+        val batch = firestore.batch()
+        batch.set(firestore.collection(COLECCION_USUARIOS).document(uid), datosUsuario)
+        if (rol == RolUsuario.PROFESIONAL) {
+            batch.set(
+                firestore.collection(COLECCION_PROFESIONALES).document(uid),
+                perfilProfesionalInicial(tiposAtencion),
+            )
+        }
+        batch.commit().await()
     }
 
     private suspend fun obtenerUsuario(uid: String): Result<Usuario, AuthError> {

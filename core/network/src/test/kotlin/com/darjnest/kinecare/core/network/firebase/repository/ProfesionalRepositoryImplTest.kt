@@ -7,6 +7,7 @@ import com.darjnest.kinecare.core.common.data.error.UsuarioError
 import com.darjnest.kinecare.core.common.data.repository.UsuarioRepository
 import com.darjnest.kinecare.core.common.domain.model.Disponibilidad
 import com.darjnest.kinecare.core.common.domain.model.RolUsuario
+import com.darjnest.kinecare.core.common.domain.model.TipoAtencion
 import com.darjnest.kinecare.core.common.domain.model.Usuario
 import com.darjnest.kinecare.core.common.result.Result
 import com.google.android.gms.tasks.Task
@@ -103,6 +104,7 @@ class ProfesionalRepositoryImplTest {
             id = "prof-1",
             data = mapOf(
                 "especialidades" to listOf("KINESIOLOGIA", "kine-deportiva"),
+                "tiposAtencion" to listOf("KINESIOLOGIA", "MASOTERAPIA"),
                 "insignias" to listOf(insigniaMap),
                 "disponibilidad" to listOf(disponibilidadMap),
                 "rnpi" to "RNPI-1234",
@@ -118,7 +120,7 @@ class ProfesionalRepositoryImplTest {
             serviciosPorProfesionalId = mapOf("prof-1" to listOf(servicioDoc)),
         )
 
-        val resultado = repository.buscarPorEspecialidad("KINESIOLOGIA")
+        val resultado = repository.buscarPorTipoAtencion(TipoAtencion.KINESIOLOGIA)
 
         assertTrue(resultado is Result.Success)
         val profesionales = (resultado as Result.Success).data
@@ -127,6 +129,7 @@ class ProfesionalRepositoryImplTest {
         assertEquals("Ana Soto", profesional.usuario.nombre)
         assertEquals("RNPI-1234", profesional.rnpi)
         assertEquals(listOf("KINESIOLOGIA", "kine-deportiva"), profesional.especialidades)
+        assertEquals(listOf(TipoAtencion.KINESIOLOGIA, TipoAtencion.MASOTERAPIA), profesional.tiposAtencion)
         assertEquals(1, profesional.servicios.size)
         assertEquals("Sesion de kinesiologia deportiva", profesional.servicios.first().nombre)
         assertEquals(1, profesional.insignias.size)
@@ -135,10 +138,41 @@ class ProfesionalRepositoryImplTest {
     }
 
     @Test
+    fun `filtra por el campo tiposAtencion con el nombre del tipo, no por especialidades`() = runTest {
+        val profesionalesCollection = setUpFirestore(profesionalDocumentos = emptyList())
+
+        repository.buscarPorTipoAtencion(TipoAtencion.MASOTERAPIA)
+
+        verify { profesionalesCollection.whereArrayContains("tiposAtencion", "MASOTERAPIA") }
+        verify(exactly = 0) { profesionalesCollection.whereArrayContains("especialidades", any()) }
+    }
+
+    @Test
+    fun `ignora valores desconocidos de tiposAtencion y lo deja vacio si el campo falta`() = runTest {
+        coEvery { usuarioRepository.obtenerPorId("prof-1") } returns Result.Success(usuario)
+        coEvery { usuarioRepository.obtenerPorId("prof-legado") } returns
+            Result.Success(usuario.copy(id = "prof-legado"))
+        val conValorRaro = mockDocumentSnapshot(
+            id = "prof-1",
+            data = mapOf("tiposAtencion" to listOf("Kinesiologia", "KINESIOLOGIA", 42L)),
+        )
+        val sinCampo = mockDocumentSnapshot(id = "prof-legado", data = mapOf("especialidades" to listOf("Kinesiologia")))
+        setUpFirestore(
+            profesionalDocumentos = listOf(conValorRaro, sinCampo),
+            serviciosPorProfesionalId = mapOf("prof-1" to emptyList(), "prof-legado" to emptyList()),
+        )
+
+        val profesionales = (repository.buscarPorTipoAtencion(TipoAtencion.KINESIOLOGIA) as Result.Success).data
+
+        assertEquals(listOf(TipoAtencion.KINESIOLOGIA), profesionales[0].tiposAtencion)
+        assertTrue(profesionales[1].tiposAtencion.isEmpty())
+    }
+
+    @Test
     fun `retorna lista vacia cuando Firestore no devuelve documentos`() = runTest {
         setUpFirestore(profesionalDocumentos = emptyList())
 
-        val resultado = repository.buscarPorEspecialidad("KINESIOLOGIA")
+        val resultado = repository.buscarPorTipoAtencion(TipoAtencion.KINESIOLOGIA)
 
         assertTrue(resultado is Result.Success)
         assertTrue((resultado as Result.Success).data.isEmpty())
@@ -151,7 +185,7 @@ class ProfesionalRepositoryImplTest {
             queryException = FirebaseNetworkException("sin conexion"),
         )
 
-        val resultado = repository.buscarPorEspecialidad("KINESIOLOGIA")
+        val resultado = repository.buscarPorTipoAtencion(TipoAtencion.KINESIOLOGIA)
 
         assertTrue(resultado is Result.Error)
         assertEquals(ProfesionalError.SIN_INTERNET, (resultado as Result.Error).error)
@@ -164,7 +198,7 @@ class ProfesionalRepositoryImplTest {
             queryException = IllegalStateException("boom"),
         )
 
-        val resultado = repository.buscarPorEspecialidad("KINESIOLOGIA")
+        val resultado = repository.buscarPorTipoAtencion(TipoAtencion.KINESIOLOGIA)
 
         assertTrue(resultado is Result.Error)
         assertEquals(ProfesionalError.DESCONOCIDO, (resultado as Result.Error).error)
@@ -198,7 +232,7 @@ class ProfesionalRepositoryImplTest {
             serviciosPorProfesionalId = mapOf("prof-2" to emptyList()),
         )
 
-        val resultado = repository.buscarPorEspecialidad("KINESIOLOGIA")
+        val resultado = repository.buscarPorTipoAtencion(TipoAtencion.KINESIOLOGIA)
 
         assertTrue(resultado is Result.Success)
         val profesional = (resultado as Result.Success).data.first()
@@ -224,7 +258,7 @@ class ProfesionalRepositoryImplTest {
 
         setUpFirestore(profesionalDocumentos = listOf(profesionalDoc))
 
-        val resultado = repository.buscarPorEspecialidad("KINESIOLOGIA")
+        val resultado = repository.buscarPorTipoAtencion(TipoAtencion.KINESIOLOGIA)
 
         assertTrue(resultado is Result.Success)
         assertTrue((resultado as Result.Success).data.isEmpty())
@@ -357,7 +391,7 @@ class ProfesionalRepositoryImplTest {
 
     /**
      * Encadena los mocks de Firestore que recorre
-     * `ProfesionalRepositoryImpl.buscarPorEspecialidad`: la query sobre
+     * `ProfesionalRepositoryImpl.buscarPorTipoAtencion`: la query sobre
      * `profesionales` y la subcoleccion `profesionales/{id}/servicios`
      * (el usuario ahora se resuelve via `UsuarioRepository`, mockeado
      * aparte con `coEvery` en cada test).
@@ -366,7 +400,7 @@ class ProfesionalRepositoryImplTest {
         profesionalDocumentos: List<DocumentSnapshot>,
         serviciosPorProfesionalId: Map<String, List<DocumentSnapshot>> = emptyMap(),
         queryException: Exception? = null,
-    ) {
+    ): CollectionReference {
         val profesionalesCollection = mockk<CollectionReference>()
         val query = mockk<Query>()
         every { firestore.collection(COLECCION_PROFESIONALES) } returns profesionalesCollection
@@ -395,6 +429,7 @@ class ProfesionalRepositoryImplTest {
             coEvery { serviciosTask.await() } returns serviciosSnapshot
             every { serviciosCollection.get() } returns serviciosTask
         }
+        return profesionalesCollection
     }
 
     /** Mockea un `DocumentSnapshot` cuyos getters leen de un `Map` plano, en vez de repetir `every { }` por campo en cada test. */
