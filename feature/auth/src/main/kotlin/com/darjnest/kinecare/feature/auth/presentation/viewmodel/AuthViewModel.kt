@@ -3,6 +3,7 @@ package com.darjnest.kinecare.feature.auth.presentation.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.darjnest.kinecare.core.common.domain.model.RolUsuario
+import com.darjnest.kinecare.core.common.domain.model.TipoAtencion
 import com.darjnest.kinecare.core.common.domain.model.Usuario
 import com.darjnest.kinecare.core.common.domain.util.RutUtils
 import com.darjnest.kinecare.core.common.result.Result
@@ -35,6 +36,8 @@ data class AuthState(
     val password: String = "",
     val aceptaTerminos: Boolean = false,
     val rolSeleccionado: RolUsuario = RolUsuario.CLIENTE,
+    /** Disciplinas que ofrece el Profesional al registrarse; la busqueda filtra por ellas. */
+    val tiposAtencion: Set<TipoAtencion> = emptySet(),
     val recordarCuenta: Boolean = true,
     val cargando: Boolean = false,
     val verificandoSesion: Boolean = true,
@@ -48,6 +51,10 @@ data class AuthState(
     val passwordDebil: Boolean
         get() = modo == ModoAuth.REGISTRO && password.isNotEmpty() && password.length < LARGO_MINIMO_PASSWORD
 
+    /** Un Profesional sin tipo de atencion nunca apareceria en la busqueda: se exige al menos uno. */
+    val tiposAtencionCompletos: Boolean
+        get() = rolSeleccionado != RolUsuario.PROFESIONAL || tiposAtencion.isNotEmpty()
+
     val puedeEnviar: Boolean
         get() = RutUtils.esValido(rut) && password.isNotBlank() && (
             modo == ModoAuth.LOGIN ||
@@ -56,12 +63,14 @@ data class AuthState(
                         telefono.isNotBlank() &&
                         correo.isNotBlank() &&
                         aceptaTerminos &&
+                        tiposAtencionCompletos &&
                         password.length >= LARGO_MINIMO_PASSWORD
                     )
             )
 
     val puedeConfirmarPerfilGoogle: Boolean
-        get() = RutUtils.esValido(rut) && nombre.isNotBlank() && telefono.isNotBlank() && aceptaTerminos
+        get() = RutUtils.esValido(rut) && nombre.isNotBlank() && telefono.isNotBlank() && aceptaTerminos &&
+            tiposAtencionCompletos
 
     private companion object {
         const val LARGO_MINIMO_PASSWORD = 6
@@ -77,6 +86,7 @@ sealed interface AuthAction {
     data class CambiarPassword(val valor: String) : AuthAction
     data class CambiarAceptaTerminos(val valor: Boolean) : AuthAction
     data class SeleccionarRol(val rol: RolUsuario) : AuthAction
+    data class AlternarTipoAtencion(val tipo: TipoAtencion) : AuthAction
     data class CambiarRecordarCuenta(val valor: Boolean) : AuthAction
     data object Enviar : AuthAction
     data object CerrarSesion : AuthAction
@@ -95,6 +105,10 @@ private fun AuthError.aMensaje(): String = when (this) {
     AuthError.SIN_INTERNET -> "Sin conexión a internet. Intenta de nuevo."
     AuthError.DESCONOCIDO -> "Algo salió mal. Intenta de nuevo."
 }
+
+/** Un Cliente que alterno chips antes de cambiar de rol no arrastra tipos de atencion. */
+private fun AuthState.tiposAtencionDelRol(): Set<TipoAtencion> =
+    if (rolSeleccionado == RolUsuario.PROFESIONAL) tiposAtencion else emptySet()
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
@@ -133,6 +147,10 @@ class AuthViewModel @Inject constructor(
             is AuthAction.CambiarPassword -> _state.value = _state.value.copy(password = action.valor)
             is AuthAction.CambiarAceptaTerminos -> _state.value = _state.value.copy(aceptaTerminos = action.valor)
             is AuthAction.SeleccionarRol -> _state.value = _state.value.copy(rolSeleccionado = action.rol)
+            is AuthAction.AlternarTipoAtencion -> _state.value = _state.value.let {
+                val tipos = if (action.tipo in it.tiposAtencion) it.tiposAtencion - action.tipo else it.tiposAtencion + action.tipo
+                it.copy(tiposAtencion = tipos)
+            }
             is AuthAction.CambiarRecordarCuenta -> _state.value = _state.value.copy(recordarCuenta = action.valor)
             AuthAction.Enviar -> enviar()
             AuthAction.CerrarSesion -> viewModelScope.launch { authRepository.cerrarSesion() }
@@ -184,6 +202,7 @@ class AuthViewModel @Inject constructor(
                 correoContacto = pendiente.correoGoogle,
                 rol = actual.rolSeleccionado,
                 fotoUrl = pendiente.fotoUrl,
+                tiposAtencion = actual.tiposAtencionDelRol(),
             )
             when (resultado) {
                 is Result.Success -> _state.value = _state.value.copy(
@@ -223,6 +242,7 @@ class AuthViewModel @Inject constructor(
                     actual.rolSeleccionado,
                     actual.telefono,
                     actual.correo,
+                    actual.tiposAtencionDelRol(),
                 )
             }
 

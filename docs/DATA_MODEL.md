@@ -32,7 +32,8 @@ favoritos: array<string>            // ids de profesionales
 
 ### `profesionales/{usuarioId}` (doc 1:1 con `usuarios`)
 ```
-especialidades: array<string>
+tiposAtencion: array<"KINESIOLOGIA" | "MASOTERAPIA">  // lo único por lo que filtra la búsqueda
+especialidades: array<string>        // texto libre para mostrar; sin vocabulario fijo
 rnpi: string                         // Registro Nacional de Prestadores Individuales de Salud
 descripcion: string
 calificacionPromedio: number
@@ -44,8 +45,44 @@ disponibilidad: array<Disponibilidad>  // { diaSemana: "MONDAY".."SUNDAY", horaI
                                        //   reemplaza completo desde el panel profesional
 ubicacion: geopoint                  // para búsqueda por cercanía
 ```
-Índices compuestos sugeridos: `especialidades` (array-contains) +
-`calificacionPromedio` (desc); `especialidades` + `ubicacion` (geoquery).
+**Creación.** `AuthRepositoryImpl` (`:feature:auth`) crea el documento al
+registrarse un Profesional (RUT+contraseña o "completar perfil" de Google),
+en el **mismo `WriteBatch`** que `usuarios/{uid}`, con el contenido de
+`perfilProfesionalInicial()` (`:core:network/firebase`): `tiposAtencion`
+elegidos en el formulario (al menos uno), `especialidades`/`insignias`/
+`disponibilidad` vacíos, `rnpi`/`descripcion` en `""`,
+`calificacionPromedio: 0`, `totalResenas: 0` y
+`estadoVerificacionGeneral: "NO_SOLICITADO"`. Antes de esto la app solo
+creaba `usuarios/{uid}`: un profesional registrado desde la app no tenía
+este documento y nunca aparecía en la búsqueda.
+
+**Búsqueda.** `ProfesionalRepository.buscarPorTipoAtencion` filtra
+`tiposAtencion` (array-contains del `name` de `TipoAtencion`) ordenado por
+`calificacionPromedio` desc. No filtra `especialidades`: ahí convivían
+etiquetas de tipo (`KINESIOLOGIA`), variantes escritas a mano
+(`Kinesiologia`, `Kinesiología deportiva`) e ids de categoría
+(`kine-deportiva`), y solo el valor exacto matcheaba. Un documento sin
+`calificacionPromedio` tampoco aparece (Firestore excluye del `orderBy` los
+documentos sin ese campo), por eso el perfil inicial lo escribe en 0.
+
+**Security Rules.** `create`: solo el dueño, solo si `usuarios/{uid}.rol`
+queda en `PROFESIONAL` (`getAfter`, por el batch), claves exactamente las
+del perfil inicial, `tiposAtencion` no vacío y dentro del enum, y estado
+inicial obligatorio (sin insignias, `NO_SOLICITADO`, reputación en 0).
+`update`: el dueño no puede tocar `insignias`, `estadoVerificacionGeneral`,
+`calificacionPromedio` ni `totalResenas` (estas dos ordenan la búsqueda);
+si cambia `tiposAtencion` debe quedar válido. Perfiles legados sin
+`tiposAtencion` se pueden seguir actualizando en los demás campos.
+
+Índices compuestos: `tiposAtencion` (array-contains) +
+`calificacionPromedio` (desc) — reemplaza al de `especialidades`, que ya
+ninguna consulta usa. Futuro: `tiposAtencion` + `ubicacion` (geoquery).
+
+**Migración de datos existentes.** Los perfiles creados antes de este
+campo (sembrados o cargados a mano) no tienen `tiposAtencion` y dejan de
+aparecer en la búsqueda hasta rellenarlo (derivándolo de lo que diga
+`especialidades`: `KINESIOLOGIA`/`Kinesiologia`/`Kinesiología …` →
+`KINESIOLOGIA`; `MASOTERAPIA`/`Masoterapia` → `MASOTERAPIA`).
 
 #### Subcolección `profesionales/{id}/servicios/{servicioId}`
 ```
@@ -167,8 +204,7 @@ contra el proyecto Firebase real).
 
 > **`profesionales.calificacionPromedio` y `totalResenas` NO los actualiza
 > nada hoy.** El cliente no puede escribirlos (las reglas de `profesionales`
-> no lo permiten al dueño de forma segura y crear una reseña no toca ese
-> documento), así que seguirán en su valor sembrado aunque se creen reseñas.
+> se lo prohíben al dueño y crear una reseña no toca ese documento), así que seguirán en su valor sembrado aunque se creen reseñas.
 > Recalcularlos requiere una Cloud Function (trigger `onCreate` de
 > `resenas`), que exige plan Blaze — el mismo bloqueo que Firebase Storage.
 > Hasta entonces el promedio y el conteo mostrados en el perfil pueden no

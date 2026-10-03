@@ -11,4 +11,9 @@ data class Profesional(
     val totalResenas: Int,
     val descripcion: String,
     val estadoVerificacionGeneral: EstadoVerificacion,
+    /**
+     * Disciplinas que ofrece (`profesionales/{id}.tiposAtencion`), por las que
+     * filtra la busqueda. Distinto de [especialidades], que es texto libre.
+     */
+    val tiposAtencion: List<TipoAtencion> = emptyList(),
 )

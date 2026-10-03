@@ -10,6 +10,7 @@ import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
 import com.darjnest.kinecare.core.common.domain.model.Profesional
 import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.domain.model.Servicio
+import com.darjnest.kinecare.core.common.domain.model.TipoAtencion
 import com.darjnest.kinecare.core.common.domain.model.Usuario
 import com.darjnest.kinecare.core.common.result.Result
 import com.darjnest.kinecare.feature.search.data.repository.UbicacionRepository
@@ -37,7 +38,12 @@ class SearchViewModelTest {
     private fun crearViewModel(): SearchViewModel =
         SearchViewModel(ubicacionRepository, profesionalRepository)
 
-    private fun profesionalDePrueba(id: String = "prof-1", nombre: String = "Ana Soto"): Profesional = Profesional(
+    private fun profesionalDePrueba(
+        id: String = "prof-1",
+        nombre: String = "Ana Soto",
+        especialidades: List<String> = listOf("KINESIOLOGIA"),
+        descripcion: String = "desc",
+    ): Profesional = Profesional(
         usuario = Usuario(
             id = id,
             nombre = nombre,
@@ -49,7 +55,7 @@ class SearchViewModelTest {
             fotoUrl = null,
             fechaRegistro = Instant.fromEpochMilliseconds(0),
         ),
-        especialidades = listOf("KINESIOLOGIA"),
+        especialidades = especialidades,
         rnpi = "RNPI-1",
         servicios = listOf(
             Servicio(
@@ -65,13 +71,14 @@ class SearchViewModelTest {
         disponibilidad = emptyList(),
         calificacionPromedio = 4.5,
         totalResenas = 10,
-        descripcion = "desc",
+        descripcion = descripcion,
         estadoVerificacionGeneral = EstadoVerificacion.APROBADO,
+        tiposAtencion = listOf(TipoAtencion.KINESIOLOGIA),
     )
 
     @Test
     fun `al inicializar carga profesionales destacados de la especialidad por defecto`() = runTest {
-        coEvery { profesionalRepository.buscarPorEspecialidad("KINESIOLOGIA") } returns
+        coEvery { profesionalRepository.buscarPorTipoAtencion(TipoAtencion.KINESIOLOGIA) } returns
             Result.Success(listOf(profesionalDePrueba()))
 
         val viewModel = crearViewModel()
@@ -82,14 +89,14 @@ class SearchViewModelTest {
             assertEquals(1, estado.profesionalesDestacados.size)
             assertEquals("Ana Soto", estado.profesionalesDestacados.first().nombre)
         }
-        coVerify(exactly = 1) { profesionalRepository.buscarPorEspecialidad("KINESIOLOGIA") }
+        coVerify(exactly = 1) { profesionalRepository.buscarPorTipoAtencion(TipoAtencion.KINESIOLOGIA) }
     }
 
     @Test
     fun `cambiar tipo de atencion actualiza categorias sincronicamente y recarga profesionales de la nueva especialidad`() = runTest {
-        coEvery { profesionalRepository.buscarPorEspecialidad("KINESIOLOGIA") } returns
+        coEvery { profesionalRepository.buscarPorTipoAtencion(TipoAtencion.KINESIOLOGIA) } returns
             Result.Success(emptyList())
-        coEvery { profesionalRepository.buscarPorEspecialidad("MASOTERAPIA") } returns
+        coEvery { profesionalRepository.buscarPorTipoAtencion(TipoAtencion.MASOTERAPIA) } returns
             Result.Success(listOf(profesionalDePrueba(id = "prof-2", nombre = "Bruno Diaz")))
 
         val viewModel = crearViewModel()
@@ -104,14 +111,14 @@ class SearchViewModelTest {
             assertEquals(1, estado.profesionalesDestacados.size)
             assertEquals("Bruno Diaz", estado.profesionalesDestacados.first().nombre)
         }
-        coVerify(exactly = 1) { profesionalRepository.buscarPorEspecialidad("MASOTERAPIA") }
+        coVerify(exactly = 1) { profesionalRepository.buscarPorTipoAtencion(TipoAtencion.MASOTERAPIA) }
     }
 
     @Test
     fun `cuando el repositorio retorna error el estado queda sin profesionales y sin cargando`() = runTest {
-        coEvery { profesionalRepository.buscarPorEspecialidad("KINESIOLOGIA") } returns
+        coEvery { profesionalRepository.buscarPorTipoAtencion(TipoAtencion.KINESIOLOGIA) } returns
             Result.Success(listOf(profesionalDePrueba()))
-        coEvery { profesionalRepository.buscarPorEspecialidad("MASOTERAPIA") } returns
+        coEvery { profesionalRepository.buscarPorTipoAtencion(TipoAtencion.MASOTERAPIA) } returns
             Result.Error(ProfesionalError.SIN_INTERNET)
 
         val viewModel = crearViewModel()
@@ -128,6 +135,24 @@ class SearchViewModelTest {
             val estado = awaitItem()
             assertEquals(false, estado.cargandoProfesionales)
             assertTrue(estado.profesionalesDestacados.isEmpty())
+        }
+    }
+
+    @Test
+    fun `la especialidad de la tarjeta ignora los tags de tipo y usa la categoria conocida`() = runTest {
+        coEvery { profesionalRepository.buscarPorTipoAtencion(TipoAtencion.KINESIOLOGIA) } returns Result.Success(
+            listOf(
+                profesionalDePrueba(id = "prof-1", especialidades = listOf("KINESIOLOGIA", "kine-respiratoria")),
+                profesionalDePrueba(id = "prof-2", especialidades = listOf("MASOTERAPIA"), descripcion = "Bio libre"),
+            ),
+        )
+
+        val viewModel = crearViewModel()
+
+        viewModel.state.test {
+            val destacados = awaitItem().profesionalesDestacados
+            assertEquals("Kinesiología respiratoria", destacados[0].especialidad)
+            assertEquals("Bio libre", destacados[1].especialidad)
         }
     }
 

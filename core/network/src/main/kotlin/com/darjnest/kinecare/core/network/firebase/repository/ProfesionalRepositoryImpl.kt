@@ -11,6 +11,7 @@ import com.darjnest.kinecare.core.common.domain.model.Insignia
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
 import com.darjnest.kinecare.core.common.domain.model.Profesional
 import com.darjnest.kinecare.core.common.domain.model.Servicio
+import com.darjnest.kinecare.core.common.domain.model.TipoAtencion
 import com.darjnest.kinecare.core.common.domain.model.TipoInsignia
 import com.darjnest.kinecare.core.common.result.Result
 import com.google.firebase.FirebaseNetworkException
@@ -40,10 +41,10 @@ class ProfesionalRepositoryImpl @Inject constructor(
     private val usuarioRepository: UsuarioRepository,
 ) : ProfesionalRepository {
 
-    override suspend fun buscarPorEspecialidad(especialidad: String): Result<List<Profesional>, ProfesionalError> {
+    override suspend fun buscarPorTipoAtencion(tipo: TipoAtencion): Result<List<Profesional>, ProfesionalError> {
         return try {
             val documentos = firestore.collection(COLECCION_PROFESIONALES)
-                .whereArrayContains("especialidades", especialidad)
+                .whereArrayContains("tiposAtencion", tipo.name)
                 .orderBy("calificacionPromedio", Query.Direction.DESCENDING)
                 .limit(20)
                 .get()
@@ -123,6 +124,11 @@ class ProfesionalRepositoryImpl @Inject constructor(
             ?: emptyList()
 
         @Suppress("UNCHECKED_CAST")
+        val tiposAtencion = (get("tiposAtencion") as? List<Any?>)
+            ?.mapNotNull { valor -> TipoAtencion.entries.firstOrNull { it.name == valor } }
+            ?: emptyList()
+
+        @Suppress("UNCHECKED_CAST")
         val insignias = (get("insignias") as? List<Map<String, Any?>>)
             ?.mapNotNull { it.aInsigniaONull() }
             ?: emptyList()
@@ -145,6 +151,7 @@ class ProfesionalRepositoryImpl @Inject constructor(
             estadoVerificacionGeneral = runCatching {
                 EstadoVerificacion.valueOf(getString("estadoVerificacionGeneral") ?: "")
             }.getOrDefault(EstadoVerificacion.NO_SOLICITADO),
+            tiposAtencion = tiposAtencion,
         )
     }
 

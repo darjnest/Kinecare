@@ -484,11 +484,31 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       una cita confirmada (`CANCELADA_PROFESIONAL`/`CANCELADA_CLIENTE`),
       expirar solicitudes sin respuesta (función programada), notificar al
       cliente (FCM) y el contador de pendientes en el dashboard.
-- [ ] Un profesional registrado desde la app no aparece en la búsqueda:
+- [x] Un profesional registrado desde la app no aparece en la búsqueda:
       `:feature:search` filtra `especialidades` por la etiqueta
       `KINESIOLOGIA`/`MASOTERAPIA` (`TipoAtencion`), que hoy solo tienen los
       perfiles sembrados. Detectado con `profesionales/88154428`, al que se
-      le agregó la etiqueta a mano en QA para la prueba.
+      le agregó la etiqueta a mano en QA para la prueba. **Causa real:** el
+      registro solo creaba `usuarios/{uid}`, nunca `profesionales/{uid}`; y
+      en QA `especialidades` mezclaba `KINESIOLOGIA`, `Kinesiologia` y
+      `Kinesiología deportiva` (6 perfiles sembrados no aparecían).
+      **Arreglo:** campo nuevo `tiposAtencion` (enum `TipoAtencion`, movido a
+      `:core:common`), el único que filtra la búsqueda
+      (`ProfesionalRepository.buscarPorTipoAtencion`); el registro pide
+      "¿Qué atenciones ofreces?" (al menos una) y crea `profesionales/{uid}`
+      en el mismo batch que `usuarios/{uid}` (`perfilProfesionalInicial`).
+      Security Rules de `profesionales` endurecidas (el `create` exige
+      estado inicial y rol `PROFESIONAL`; el dueño ya no puede escribir
+      `calificacionPromedio`/`totalResenas`) e índice
+      `tiposAtencion` + `calificacionPromedio` en vez del de
+      `especialidades`. Detalle en [DATA_MODEL.md](DATA_MODEL.md). 15 tests
+      nuevos (`AuthRepositoryImplTest` 4 y `AuthViewModelTest` 5 — primeros
+      de `:feature:auth` —, `PerfilProfesionalInicialTest` 3,
+      `ProfesionalRepositoryImplTest` +2, `SearchViewModelTest` +1).
+- [ ] Desplegar en QA reglas e índice de `tiposAtencion` y rellenar
+      `tiposAtencion` en los 13 `profesionales` existentes (derivado de
+      `especialidades`); sin eso la búsqueda queda vacía en QA. Falta
+      también editar `tiposAtencion` desde el panel profesional.
 
 ## Fase 8 — QA, pulido y publicación
 - [ ] Cobertura de tests (JUnit5, MockK, Turbine, Compose UI Testing)

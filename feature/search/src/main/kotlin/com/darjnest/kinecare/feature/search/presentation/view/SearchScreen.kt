@@ -90,7 +90,7 @@ import com.darjnest.kinecare.feature.search.presentation.viewmodel.ProfesionalDe
 import com.darjnest.kinecare.feature.search.presentation.viewmodel.SearchAction
 import com.darjnest.kinecare.feature.search.presentation.viewmodel.SearchState
 import com.darjnest.kinecare.feature.search.presentation.viewmodel.SearchViewModel
-import com.darjnest.kinecare.feature.search.presentation.viewmodel.TipoAtencion
+import com.darjnest.kinecare.core.common.domain.model.TipoAtencion
 
 @Composable
 fun SearchRoot(
