@@ -364,22 +364,26 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       dispositivo).
 
 ## Fase 5 — Pago
-- [ ] Elegir pasarela (Transbank Webpay Plus / Flow / Mercado Pago).
-      **Recomendación, pendiente de confirmar:** Mercado Pago, Split de
-      Pagos 1:1 (Checkout Pro con `marketplace_fee`). Cada profesional
-      conecta su cuenta Mercado Pago por OAuth; el pago se crea con el token
-      del vendedor y KineCare cobra su comisión (`COMISION_PORCENTAJE`) como
-      fee, así la plata nunca pasa por una cuenta propia. Alternativas
-      descartadas: *Webpay Plus Mall* exige que cada profesional sea cliente
-      Transbank (empresa o persona con giro en el SII + cuenta corriente) —
-      inviable para profesionales independientes; *Flow* cobra al comercio
-      receptor y no mostró un split a terceros, así que los pagos a
-      profesionales serían un proceso manual aparte. **Sin verificar aún** (la
-      documentación de Mercado Pago devolvió 403 al leerla): tarifa exacta en
-      Chile, plazos de liberación del dinero, si se puede retener hasta
-      completar la cita ("custodia de pago" del panel profesional), manejo de
-      reembolsos/contracargos y la limitación de la Orders API con fees.
-      Validar esto con una cuenta de pruebas antes de comprometer la fase
+- [x] Elegir pasarela: **Mercado Pago, Split de Pagos 1:1** (Checkout Pro
+      con `marketplace_fee`), confirmado. Cada profesional conecta su cuenta
+      Mercado Pago por OAuth; el pago se crea con el token del vendedor y
+      KineCare cobra su comisión (`COMISION_PORCENTAJE`) como fee, así la
+      plata nunca pasa por una cuenta propia. Descartadas: *Webpay Plus Mall*
+      exige que cada profesional sea cliente Transbank (empresa o persona con
+      giro en el SII + cuenta corriente), inviable para independientes;
+      *Flow* cobra al comercio receptor y no mostró un split a terceros, así
+      que pagar a profesionales sería un proceso manual aparte.
+- [ ] Validar Mercado Pago con una cuenta de pruebas antes de construir
+      `:feature:payment` (la documentación devolvió 403 al leerla, así que
+      está **sin verificar**): tarifa exacta en Chile, plazos de liberación
+      del dinero, si se puede retener hasta completar la cita ("custodia de
+      pago" del panel profesional), reembolsos/contracargos, la limitación de
+      la Orders API con fees (`marketplace_fee` ignorado, `application_fee`
+      rechazado) y si cada profesional necesita cuenta verificada para
+      conectarse. Si algo no calza, reabrir la elección
+- [ ] Conectar la cuenta Mercado Pago del profesional (OAuth) y guardar sus
+      tokens solo en backend: pertenece al panel profesional y a una Cloud
+      Function, nunca al dispositivo
 - [ ] `:feature:payment`
 - [ ] Cloud Functions `iniciarPago`, `estadoPago` + webhook
 - [ ] Certificate pinning en llamadas de pago

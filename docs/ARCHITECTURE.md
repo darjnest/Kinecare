@@ -187,7 +187,9 @@ de Firebase (`firebase use qa` / `firebase use prod`) al proyecto correcto.
 - CI en GitHub Actions: build + lint + tests en cada PR.
 
 ## Integraciones externas (pendientes de decidir/implementar)
-- Pasarela de pago: Transbank Webpay Plus, Flow o Mercado Pago.
+- Pasarela de pago: **Mercado Pago** (Split de Pagos 1:1, OAuth por
+  profesional y comisión como `marketplace_fee`); detalle y pendientes de
+  validación en [TASKS.md](TASKS.md) (Fase 5).
 - Verificación de identidad: proveedor tipo Truora/Metamap/Didit — la app
   solo consume el estado (pendiente/aprobado/rechazado) vía Cloud Function.
 
