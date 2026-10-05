@@ -126,7 +126,9 @@ de Firebase (`firebase use qa` / `firebase use prod`) al proyecto correcto.
   Sin configurar todavía.
 - **Storage**: fotos de perfil y credenciales de profesionales. **Bloqueado
   en plan Spark** — Google ya no permite inicializar Storage en proyectos
-  nuevos sin plan Blaze. Subir a Blaze antes de la Fase 6.
+  nuevos sin plan Blaze. QA (Blaze) ya tiene `storage.rules` en el repo; falta
+  crear el bucket desde la consola. Producción debe subir a Blaze antes de la
+  Fase 6.
 - Acceso a Firestore/Storage/Auth vía SDK directo; acceso a Cloud Functions
   HTTP vía Retrofit (`:core:network`).
 - **Repositorios de Firestore compartidos por 2+ features**: interfaz en

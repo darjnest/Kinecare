@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.darjnest.kinecare.core.common.data.repository.ProfesionalRepository
 import com.darjnest.kinecare.core.common.domain.model.EstadoVerificacion
 import com.darjnest.kinecare.core.common.domain.model.Profesional
+import com.darjnest.kinecare.core.common.domain.model.TipoAtencion
 import com.darjnest.kinecare.core.common.domain.model.TipoInsignia
 import com.darjnest.kinecare.core.common.result.Result
 import com.google.firebase.auth.FirebaseAuth
@@ -89,6 +90,12 @@ data class MiPerfilProfesionalState(
     val borradorBiografia: String = "",
     val guardandoBiografia: Boolean = false,
     val errorGuardarBiografia: Boolean = false,
+    /** Disciplinas que ofrece (`tiposAtencion`), las que filtra la busqueda; en orden de [TipoAtencion]. */
+    val tiposAtencion: List<TipoAtencion> = emptyList(),
+    val editandoTiposAtencion: Boolean = false,
+    val borradorTiposAtencion: Set<TipoAtencion> = emptySet(),
+    val guardandoTiposAtencion: Boolean = false,
+    val errorGuardarTiposAtencion: Boolean = false,
 )
 
 sealed interface MiPerfilProfesionalAction {
@@ -98,6 +105,10 @@ sealed interface MiPerfilProfesionalAction {
     data class CambiarBorradorBiografia(val texto: String) : MiPerfilProfesionalAction
     data object GuardarBiografia : MiPerfilProfesionalAction
     data object CancelarEdicionBiografia : MiPerfilProfesionalAction
+    data object EditarTiposAtencion : MiPerfilProfesionalAction
+    data class AlternarTipoAtencion(val tipo: TipoAtencion) : MiPerfilProfesionalAction
+    data object GuardarTiposAtencion : MiPerfilProfesionalAction
+    data object CancelarEdicionTiposAtencion : MiPerfilProfesionalAction
     data object EditarPerfilYCredenciales : MiPerfilProfesionalAction
     data object PrevisualizarPerfilPublico : MiPerfilProfesionalAction
     data object VerTodasLasResenas : MiPerfilProfesionalAction
@@ -148,6 +159,26 @@ class MiPerfilProfesionalViewModel @Inject constructor(
             MiPerfilProfesionalAction.CancelarEdicionBiografia ->
                 _state.update { it.copy(editandoBiografia = false, errorGuardarBiografia = false) }
             MiPerfilProfesionalAction.GuardarBiografia -> guardarBiografia()
+            MiPerfilProfesionalAction.EditarTiposAtencion ->
+                _state.update {
+                    it.copy(
+                        editandoTiposAtencion = true,
+                        borradorTiposAtencion = it.tiposAtencion.toSet(),
+                        errorGuardarTiposAtencion = false,
+                    )
+                }
+            is MiPerfilProfesionalAction.AlternarTipoAtencion ->
+                _state.update {
+                    // Mientras guarda el borrador queda congelado (la vista tambien deshabilita las casillas).
+                    if (it.guardandoTiposAtencion) it
+                    else it.copy(
+                        borradorTiposAtencion = it.borradorTiposAtencion.alternar(action.tipo),
+                        errorGuardarTiposAtencion = false,
+                    )
+                }
+            MiPerfilProfesionalAction.CancelarEdicionTiposAtencion ->
+                _state.update { it.copy(editandoTiposAtencion = false, errorGuardarTiposAtencion = false) }
+            MiPerfilProfesionalAction.GuardarTiposAtencion -> guardarTiposAtencion()
             // Volver atras y ver todas las resenas (usa `state.profesionalId`)
             // los resuelve el Root contra el NavGraph. Editar credenciales y
             // previsualizar el perfil publico dependen de pantallas que no
@@ -180,6 +211,7 @@ class MiPerfilProfesionalViewModel @Inject constructor(
                                 totalResenas = profesional.totalResenas,
                             ),
                             biografia = profesional.descripcion,
+                            tiposAtencion = profesional.tiposAtencion.ordenados(),
                             especialidades = profesional.especialidades.map {
                                 Especialidad(nombre = it, icono = Icons.Filled.MedicalServices)
                             },
@@ -207,4 +239,33 @@ class MiPerfilProfesionalViewModel @Inject constructor(
             }
         }
     }
+
+    private fun guardarTiposAtencion() {
+        val uid = firebaseAuth.currentUser?.uid ?: return
+        val estado = _state.value
+        if (estado.guardandoTiposAtencion) return
+        // Sin ninguna disciplina el profesional dejaria de aparecer en la busqueda
+        // (y la Security Rule lo rechaza): la vista deshabilita "Guardar" igual.
+        val nuevos = estado.borradorTiposAtencion.ordenados()
+        if (nuevos.isEmpty()) return
+        viewModelScope.launch {
+            _state.update { it.copy(guardandoTiposAtencion = true, errorGuardarTiposAtencion = false) }
+            when (profesionalRepository.actualizarTiposAtencion(uid, nuevos)) {
+                is Result.Success -> _state.update {
+                    it.copy(guardandoTiposAtencion = false, editandoTiposAtencion = false, tiposAtencion = nuevos)
+                }
+                // El dialogo sigue abierto con la seleccion para reintentar.
+                is Result.Error -> _state.update {
+                    it.copy(guardandoTiposAtencion = false, errorGuardarTiposAtencion = true)
+                }
+            }
+        }
+    }
 }
+
+private fun Set<TipoAtencion>.alternar(tipo: TipoAtencion): Set<TipoAtencion> =
+    if (tipo in this) this - tipo else this + tipo
+
+/** Orden estable (el del enum) para que lo mostrado y lo persistido no dependan del orden de seleccion. */
+private fun Collection<TipoAtencion>.ordenados(): List<TipoAtencion> =
+    TipoAtencion.entries.filter { it in this }

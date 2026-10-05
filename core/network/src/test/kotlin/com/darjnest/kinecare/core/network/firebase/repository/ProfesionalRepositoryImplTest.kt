@@ -389,6 +389,40 @@ class ProfesionalRepositoryImplTest {
         assertEquals(ProfesionalError.DESCONOCIDO, (resultado as Result.Error).error)
     }
 
+    @Test
+    fun `actualizarTiposAtencion escribe los nombres del enum sin repetidos`() = runTest {
+        val profesionales = mockk<CollectionReference>()
+        val docRef = mockk<DocumentReference>()
+        every { firestore.collection(COLECCION_PROFESIONALES) } returns profesionales
+        every { profesionales.document("prof-1") } returns docRef
+        val task = mockk<Task<Void>>()
+        coEvery { task.await() } returns mockk()
+        every { docRef.update("tiposAtencion", listOf("KINESIOLOGIA", "MASOTERAPIA")) } returns task
+
+        val resultado = repository.actualizarTiposAtencion(
+            "prof-1",
+            listOf(TipoAtencion.KINESIOLOGIA, TipoAtencion.MASOTERAPIA, TipoAtencion.KINESIOLOGIA),
+        )
+
+        assertTrue(resultado is Result.Success)
+        verify { docRef.update("tiposAtencion", listOf("KINESIOLOGIA", "MASOTERAPIA")) }
+    }
+
+    @Test
+    fun `actualizarTiposAtencion retorna DESCONOCIDO ante un error inesperado`() = runTest {
+        val profesionales = mockk<CollectionReference>()
+        val docRef = mockk<DocumentReference>()
+        every { firestore.collection(COLECCION_PROFESIONALES) } returns profesionales
+        every { profesionales.document("prof-1") } returns docRef
+        val task = mockk<Task<Void>>()
+        coEvery { task.await() } throws IllegalStateException("permiso denegado")
+        every { docRef.update("tiposAtencion", any<List<String>>()) } returns task
+
+        val resultado = repository.actualizarTiposAtencion("prof-1", listOf(TipoAtencion.MASOTERAPIA))
+
+        assertEquals(ProfesionalError.DESCONOCIDO, (resultado as Result.Error).error)
+    }
+
     /**
      * Encadena los mocks de Firestore que recorre
      * `ProfesionalRepositoryImpl.buscarPorTipoAtencion`: la query sobre

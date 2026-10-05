@@ -1,0 +1,31 @@
+rules_version = '2';
+
+// Layout y motivos en docs/DATA_MODEL.md#firebase-storage. Todo lo que no
+// aparece aqui queda denegado.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Foto de perfil del profesional: se muestra en su perfil publico (lo
+    // lee cualquiera) y solo el dueno la escribe. Sin deletes desde el cliente:
+    // reemplazar es sobreescribir. Maximo 5 MB y solo JPEG.
+    match /profesionales/{usuarioId}/foto-perfil.jpg {
+      allow read: if true;
+      allow create, update: if request.auth != null
+        && request.auth.uid == usuarioId
+        && request.resource.contentType == 'image/jpeg'
+        && request.resource.size < 5 * 1024 * 1024;
+      allow delete: if false;
+    }
+
+    // Documentos de credenciales: contienen datos de identidad/titulos. No los
+    // lee ni los escribe la app; los maneja el backend / proveedor de
+    // verificacion (Admin SDK ignora estas reglas). Fase 6 define el flujo.
+    match /profesionales/{usuarioId}/credenciales/{archivo=**} {
+      allow read, write: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -48,6 +49,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -72,6 +74,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.darjnest.kinecare.core.common.domain.model.TipoAtencion
 import com.darjnest.kinecare.core.designsystem.theme.AzulPetroleo30
 import com.darjnest.kinecare.core.designsystem.theme.InicioDorado
 import com.darjnest.kinecare.core.designsystem.theme.KineCareSpacing
@@ -132,6 +135,9 @@ fun MiPerfilProfesionalScreen(
     if (state.editandoBiografia) {
         DialogoEditarBiografia(state = state, onAction = onAction)
     }
+    if (state.editandoTiposAtencion) {
+        DialogoEditarTiposAtencion(state = state, onAction = onAction)
+    }
 
     Scaffold(
         modifier = modifier,
@@ -169,6 +175,11 @@ fun MiPerfilProfesionalScreen(
                         compromisoKineCare = state.compromisoKineCare,
                         onAction = onAction,
                     )
+                }
+
+                // Siempre visible: de esto depende aparecer en la busqueda.
+                if (state.identidad != null) {
+                    TarjetaTiposAtencion(tiposAtencion = state.tiposAtencion, onAction = onAction)
                 }
 
                 if (state.especialidades.isNotEmpty()) {
@@ -668,6 +679,135 @@ private fun TarjetaBiografia(
                         style = MaterialTheme.typography.labelSmall,
                         color = LoginGrisTexto,
                     )
+                }
+            }
+        }
+    }
+}
+
+private fun TipoAtencion.etiqueta(): String = when (this) {
+    TipoAtencion.KINESIOLOGIA -> "Kinesiología"
+    TipoAtencion.MASOTERAPIA -> "Masoterapia"
+}
+
+@Composable
+private fun DialogoEditarTiposAtencion(
+    state: MiPerfilProfesionalState,
+    onAction: (MiPerfilProfesionalAction) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = { onAction(MiPerfilProfesionalAction.CancelarEdicionTiposAtencion) },
+        title = { Text("¿Qué atenciones ofreces?") },
+        text = {
+            Column {
+                TipoAtencion.entries.forEach { tipo ->
+                    val marcado = tipo in state.borradorTiposAtencion
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .toggleable(
+                                value = marcado,
+                                enabled = !state.guardandoTiposAtencion,
+                                role = Role.Checkbox,
+                                onValueChange = { onAction(MiPerfilProfesionalAction.AlternarTipoAtencion(tipo)) },
+                            )
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        // El `toggleable` de la fila maneja el toque y la accesibilidad.
+                        Checkbox(checked = marcado, onCheckedChange = null, enabled = !state.guardandoTiposAtencion)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(text = tipo.etiqueta(), style = MaterialTheme.typography.bodyLarge, color = TextoPrincipal)
+                    }
+                }
+                Text(
+                    text = "Define en qué búsquedas apareces. Elige al menos una.",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = LoginGrisTexto,
+                )
+                if (state.errorGuardarTiposAtencion) {
+                    Text(
+                        text = "No pudimos guardar tus atenciones. Inténtalo de nuevo.",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onAction(MiPerfilProfesionalAction.GuardarTiposAtencion) },
+                enabled = !state.guardandoTiposAtencion && state.borradorTiposAtencion.isNotEmpty(),
+            ) { Text(if (state.guardandoTiposAtencion) "Guardando..." else "Guardar") }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = { onAction(MiPerfilProfesionalAction.CancelarEdicionTiposAtencion) },
+                enabled = !state.guardandoTiposAtencion,
+            ) { Text("Cancelar") }
+        },
+    )
+}
+
+@Composable
+private fun TarjetaTiposAtencion(
+    tiposAtencion: List<TipoAtencion>,
+    onAction: (MiPerfilProfesionalAction) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.HealthAndSafety, contentDescription = null, tint = LoginPrimarioOscuro, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Atenciones que ofreces",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = TextoPrincipal,
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(LoginGrisClaro)
+                        .clickable { onAction(MiPerfilProfesionalAction.EditarTiposAtencion) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Filled.Edit, contentDescription = "Editar atenciones que ofreces", tint = LoginGrisTexto, modifier = Modifier.size(16.dp))
+                }
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            if (tiposAtencion.isEmpty()) {
+                Text(
+                    text = "Elige qué atenciones ofreces para aparecer en la búsqueda de los pacientes.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = LoginGrisTexto,
+                )
+            } else {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    tiposAtencion.forEach { tipo ->
+                        Text(
+                            text = tipo.etiqueta(),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = TextoPrincipal,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(LoginMenta)
+                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                        )
+                    }
                 }
             }
         }

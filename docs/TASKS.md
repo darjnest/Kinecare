@@ -84,7 +84,15 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       nuevos con plan Spark (Google lo restringió a Blaze). **QA
       (`kinecare-cl-qa`) ya está en Blaze**, así que se puede inicializar
       ahí; producción (`kinecare-cl`) sigue en Spark. Necesario antes de la
-      Fase 6 (fotos de perfil, credenciales de verificación)
+      Fase 6 (fotos de perfil, credenciales de verificación).
+      **Avance:** `storage.rules` escrito y validado, y `firebase.json`
+      apunta a él (ver [DATA_MODEL.md](DATA_MODEL.md#firebase-storage)).
+      **Falta, y solo se puede en la consola:** crear el bucket de QA
+      ("Get Started" en
+      `console.firebase.google.com/project/kinecare-cl-qa/storage`; elige la
+      ubicación y acepta los términos — la ubicación no se puede cambiar
+      después). Luego `firebase deploy --only storage -P qa` (el intento actual
+      falla con "Storage has not been set up")
 - [x] Cliente: al iniciar sesión o registrarse (rol `CLIENTE`), el `NavHost`
       de `:app` navega automáticamente a `SearchRoute` y saca `AuthRoute`
       del back stack (`KineCareNavHost.kt`, callback
@@ -356,7 +364,22 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       dispositivo).
 
 ## Fase 5 — Pago
-- [ ] Elegir pasarela (Transbank Webpay Plus / Flow / Mercado Pago)
+- [ ] Elegir pasarela (Transbank Webpay Plus / Flow / Mercado Pago).
+      **Recomendación, pendiente de confirmar:** Mercado Pago, Split de
+      Pagos 1:1 (Checkout Pro con `marketplace_fee`). Cada profesional
+      conecta su cuenta Mercado Pago por OAuth; el pago se crea con el token
+      del vendedor y KineCare cobra su comisión (`COMISION_PORCENTAJE`) como
+      fee, así la plata nunca pasa por una cuenta propia. Alternativas
+      descartadas: *Webpay Plus Mall* exige que cada profesional sea cliente
+      Transbank (empresa o persona con giro en el SII + cuenta corriente) —
+      inviable para profesionales independientes; *Flow* cobra al comercio
+      receptor y no mostró un split a terceros, así que los pagos a
+      profesionales serían un proceso manual aparte. **Sin verificar aún** (la
+      documentación de Mercado Pago devolvió 403 al leerla): tarifa exacta en
+      Chile, plazos de liberación del dinero, si se puede retener hasta
+      completar la cita ("custodia de pago" del panel profesional), manejo de
+      reembolsos/contracargos y la limitación de la Orders API con fees.
+      Validar esto con una cuenta de pruebas antes de comprometer la fase
 - [ ] `:feature:payment`
 - [ ] Cloud Functions `iniciarPago`, `estadoPago` + webhook
 - [ ] Certificate pinning en llamadas de pago
@@ -505,16 +528,24 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       nuevos (`AuthRepositoryImplTest` 4 y `AuthViewModelTest` 5 — primeros
       de `:feature:auth` —, `PerfilProfesionalInicialTest` 3,
       `ProfesionalRepositoryImplTest` +2, `SearchViewModelTest` +1).
-- [ ] Desplegar en QA reglas e índice de `tiposAtencion` y rellenar
-      `tiposAtencion` en los 13 `profesionales` existentes (derivado de
-      `especialidades`); sin eso la búsqueda queda vacía en QA. Falta
-      también editar `tiposAtencion` desde el panel profesional.
-      **Rellenado hecho en QA:** los 13 perfiles ya tienen `tiposAtencion`
-      (8 `KINESIOLOGIA`, 5 `MASOTERAPIA`). **Falta desplegar** reglas e
-      índice (`firebase deploy --only firestore -P qa`): hasta entonces la
-      consulta de búsqueda falla con `FAILED_PRECONDITION` (índice
-      `tiposAtencion` + `calificacionPromedio` inexistente). Al desplegar,
-      verificar con una consulta `array-contains` sobre `tiposAtencion`.
+- [x] Reglas e índice de `tiposAtencion` **desplegados en QA**
+      (`firebase deploy --only firestore`, índice `tiposAtencion` +
+      `calificacionPromedio` en `READY`); verificado con una consulta
+      `array-contains` sobre `tiposAtencion` = `KINESIOLOGIA` (8 resultados,
+      ordenados por calificación). Los 13 `profesionales` de QA ya tenían
+      `tiposAtencion` rellenado (8 `KINESIOLOGIA`, 5 `MASOTERAPIA`). El índice
+      viejo de `especialidades` sigue en QA (sin uso; borrarlo es opcional).
+- [x] Editar `tiposAtencion` desde "Mi perfil profesional"
+      (`:feature:professional-panel`): tarjeta "Atenciones que ofreces" con
+      lápiz y diálogo de casillas Kinesiología/Masoterapia.
+      `ProfesionalRepository.actualizarTiposAtencion` (solo escribe el campo,
+      sin repetidos; 2 tests) y 7 tests nuevos en
+      `MiPerfilProfesionalViewModelTest`. No se puede guardar sin ninguna
+      disciplina (la regla exige 1–2 valores y el profesional dejaría de
+      aparecer en la búsqueda): "Guardar" queda deshabilitado y el
+      `ViewModel` lo ignora igual. Si falla, el diálogo sigue abierto con la
+      selección. **No verificado visualmente** (compila y pasa
+      `:app:assembleQaDebug` y los tests).
 
 ## Fase 8 — QA, pulido y publicación
 - [ ] Cobertura de tests (JUnit5, MockK, Turbine, Compose UI Testing)

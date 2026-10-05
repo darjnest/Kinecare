@@ -36,4 +36,15 @@ interface ProfesionalRepository {
 
     /** Actualiza la biografia (`descripcion`) de `profesionales/{id}`; solo el dueno puede escribirla. */
     suspend fun actualizarDescripcion(id: String, descripcion: String): Result<Unit, ProfesionalError>
+
+    /**
+     * Reemplaza `tiposAtencion` de `profesionales/{id}`, el campo por el que
+     * filtra la busqueda. Solo lo puede escribir el dueno y la Security Rule
+     * exige entre 1 y 2 valores validos: con una lista vacia el profesional
+     * desapareceria de la busqueda, asi que el llamador debe validarlo antes.
+     */
+    suspend fun actualizarTiposAtencion(
+        id: String,
+        tiposAtencion: List<TipoAtencion>,
+    ): Result<Unit, ProfesionalError>
 }

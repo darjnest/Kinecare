@@ -100,6 +100,22 @@ class ProfesionalRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun actualizarTiposAtencion(
+        id: String,
+        tiposAtencion: List<TipoAtencion>,
+    ): Result<Unit, ProfesionalError> {
+        return try {
+            firestore.collection(COLECCION_PROFESIONALES).document(id)
+                .update("tiposAtencion", tiposAtencion.distinct().map { it.name })
+                .await()
+            Result.Success(Unit)
+        } catch (e: FirebaseNetworkException) {
+            Result.Error(ProfesionalError.SIN_INTERNET)
+        } catch (e: Exception) {
+            Result.Error(ProfesionalError.DESCONOCIDO)
+        }
+    }
+
     private fun Disponibilidad.aMapa(): Map<String, Any> = mapOf(
         "diaSemana" to diaSemana.name,
         "horaInicio" to horaInicio.aHoraMinuto(),
