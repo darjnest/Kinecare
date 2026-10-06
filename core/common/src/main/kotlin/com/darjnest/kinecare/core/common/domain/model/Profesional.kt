@@ -16,4 +16,10 @@ data class Profesional(
      * filtra la busqueda. Distinto de [especialidades], que es texto libre.
      */
     val tiposAtencion: List<TipoAtencion> = emptyList(),
+    /**
+     * `true` si vinculo su cuenta de Mercado Pago y puede cobrar
+     * (`profesionales/{id}.mercadoPagoConectado`, docs/DATA_MODEL.md). Lo
+     * escribe solo el backend al terminar el OAuth; el cliente nunca lo cambia.
+     */
+    val mercadoPagoConectado: Boolean = false,
 )

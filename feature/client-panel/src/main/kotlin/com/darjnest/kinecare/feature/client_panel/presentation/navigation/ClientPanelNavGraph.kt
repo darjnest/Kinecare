@@ -18,10 +18,12 @@ fun NavGraphBuilder.client_panelGraph(
     onCerrarSesion: () -> Unit = {},
     onProfesionalClick: (String) -> Unit = {},
     onDejarResena: (reservaId: String, profesionalId: String) -> Unit = { _, _ -> },
+    onPagar: (reservaId: String, titulo: String, montoClp: Long) -> Unit = { _, _, _ -> },
 ) {
     composable<MisCitasRoute> {
         MisCitasRoot(
             onDejarResena = onDejarResena,
+            onPagar = onPagar,
             // Pantalla de esta misma feature: navegacion interna, sin pasar por `:app`.
             onReportarProblema = { reservaId, profesionalId ->
                 navController.navigate(ReportarProblemaRoute(reservaId, profesionalId))

@@ -5,6 +5,7 @@ package com.darjnest.kinecare.feature.client_panel.presentation.viewmodel
 import com.darjnest.kinecare.core.common.data.repository.ProfesionalRepository
 import com.darjnest.kinecare.core.common.data.repository.ResenaRepository
 import com.darjnest.kinecare.core.common.data.repository.ReservaRepository
+import com.darjnest.kinecare.core.common.domain.model.EstadoPago
 import com.darjnest.kinecare.core.common.domain.model.EstadoReserva
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
 import com.darjnest.kinecare.core.common.domain.model.Profesional
@@ -67,12 +68,24 @@ data class CitaProxima(
     /** `true` mientras el profesional no responde la solicitud (`SOLICITADA`); `false` si ya la confirmo. */
     val porConfirmar: Boolean = false,
     /**
+     * Estado del pago de la reserva, solo si el profesional ya la confirmo
+     * (`CONFIRMADA`); `null` mientras sigue `SOLICITADA`: aun no corresponde pagar.
+     */
+    val estadoPago: EstadoPago? = null,
+    /**
      * Estado del reporte de problema de esta reserva; `null` si no tiene o si
      * no se pudo comprobar (sin red): se ofrece "Reportar un problema" igual y
      * la pantalla del reporte vuelve a comprobar.
      */
     val estadoReporte: EstadoReporte? = null,
-)
+) {
+    /**
+     * Solo una reserva `CONFIRMADA` con el pago `PENDIENTE` o `RECHAZADO` se
+     * puede pagar (el backend lo vuelve a validar en `iniciarPago`).
+     */
+    val puedePagar: Boolean
+        get() = estadoPago == EstadoPago.PENDIENTE || estadoPago == EstadoPago.RECHAZADO
+}
 
 /** Sesion completada, mostrada en "Historial Reciente & Reembolsos". */
 data class CitaHistorial(
@@ -126,6 +139,13 @@ sealed interface MisCitasAction {
 
     /** Navegacion a `:feature:reviews` (formulario de resena): la resuelve el `Root` via callback. */
     data class DejarResena(val reservaId: String, val profesionalId: String) : MisCitasAction
+
+    /**
+     * Navegacion a `:feature:payment` (pagar una reserva `CONFIRMADA`): la
+     * resuelve el `Root` via callback. [titulo] y [montoClp] son solo
+     * informativos para esa pantalla; el monto real lo fija el backend.
+     */
+    data class Pagar(val reservaId: String, val titulo: String, val montoClp: Long) : MisCitasAction
 
     /** Navegacion al formulario de reporte (`ReportarProblemaRoute`): la resuelve el `Root` via callback. */
     data class ReportarProblema(val reservaId: String, val profesionalId: String) : MisCitasAction
@@ -202,6 +222,7 @@ private fun Reserva.aCitaProxima(
         tipoSesion = servicio?.nombre ?: "Sesión",
         precioTotal = pago.monto,
         porConfirmar = estado == EstadoReserva.SOLICITADA,
+        estadoPago = if (estado == EstadoReserva.CONFIRMADA) pago.estado else null,
         estadoReporte = reportes[id],
     )
 }
@@ -277,6 +298,7 @@ class MisCitasViewModel @Inject constructor(
             // Dejar resena y reportar problema son navegacion: el Root las resuelve contra el NavGraph.
             is MisCitasAction.DejarResena,
             is MisCitasAction.ReportarProblema,
+            is MisCitasAction.Pagar,
             -> Unit
             // Seguir en vivo/chat, reprogramar, ver pauta digital, agregar a
             // Google Calendar, ver preparacion, descargar boleta y chatear

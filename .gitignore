@@ -17,3 +17,9 @@ build/
 .externalNativeBuild
 .cxx
 local.properties
+
+# Secretos y estado del asistente de Mercado Pago
+.env
+.env.*
+!.env.example
+.mp-integrate-progress.md

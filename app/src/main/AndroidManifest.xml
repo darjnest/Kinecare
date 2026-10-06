@@ -16,12 +16,42 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
+            android:launchMode="singleTask"
             android:theme="@style/Theme.Kinecare"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!--
+                Retorno desde el Custom Tab de Mercado Pago (pago y OAuth del profesional).
+                `singleTask` entrega estos deep links a la Activity ya abierta (`onNewIntent`)
+                en vez de apilar otra. Ver KineCareNavHost.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:host="pago"
+                    android:path="/resultado"
+                    android:scheme="kinecare" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:host="mp"
+                    android:scheme="kinecare" />
+                <data android:path="/conectado" />
+                <data android:path="/error" />
             </intent-filter>
         </activity>
     </application>

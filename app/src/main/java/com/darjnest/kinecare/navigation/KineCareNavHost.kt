@@ -1,7 +1,16 @@
 package com.darjnest.kinecare.navigation
 
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.Intent
+import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.util.Consumer
+import androidx.navigation.NavController
+import androidx.navigation.navOptions
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
@@ -16,6 +25,8 @@ import com.darjnest.kinecare.feature.client_panel.presentation.navigation.Favori
 import com.darjnest.kinecare.feature.client_panel.presentation.navigation.MiPerfilClienteRoute
 import com.darjnest.kinecare.feature.client_panel.presentation.navigation.MisCitasRoute
 import com.darjnest.kinecare.feature.client_panel.presentation.navigation.client_panelGraph
+import com.darjnest.kinecare.feature.payment.presentation.navigation.ConectarMercadoPagoRoute
+import com.darjnest.kinecare.feature.payment.presentation.navigation.PaymentRoute
 import com.darjnest.kinecare.feature.payment.presentation.navigation.paymentGraph
 import com.darjnest.kinecare.feature.professional_panel.presentation.navigation.ProfessionalPanelRoute
 import com.darjnest.kinecare.feature.professional_panel.presentation.navigation.professional_panelGraph
@@ -39,6 +50,7 @@ import com.darjnest.kinecare.feature.verification.presentation.navigation.verifi
 fun KineCareNavHost(modifier: Modifier = Modifier) {
     val navController = rememberNavController()
     val authViewModel: AuthViewModel = hiltViewModel()
+    EntregarDeepLinksNuevos(navController)
 
     NavHost(
         navController = navController,
@@ -83,6 +95,9 @@ fun KineCareNavHost(modifier: Modifier = Modifier) {
             onDejarResena = { reservaId, profesionalId ->
                 navController.navigate(CrearResenaRoute(reservaId, profesionalId))
             },
+            onPagar = { reservaId, titulo, montoClp ->
+                navController.navigate(PaymentRoute(reservaId, titulo, montoClp))
+            },
         )
         val onCerrarSesionProfesional: () -> Unit = {
             authViewModel.onAction(AuthAction.CerrarSesion)
@@ -111,13 +126,82 @@ fun KineCareNavHost(modifier: Modifier = Modifier) {
                 }
             },
         )
-        paymentGraph()
+        paymentGraph(
+            navController = navController,
+            onVolver = { navController.popBackStack() },
+            // Si el cliente salio de Mis Citas para pagar, vuelve a la que ya esta en el back
+            // stack (que se recarga al reanudar); si llego por un deep link en frio, no hay
+            // ninguna y se abre como raiz.
+            onIrAMisCitas = {
+                if (!navController.popBackStack<MisCitasRoute>(inclusive = false)) {
+                    navController.navigate(MisCitasRoute) { popUpTo(navController.graph.id) { inclusive = true } }
+                }
+            },
+            // Un pago rechazado se reintenta desde la pantalla Pagar, que sigue debajo en el
+            // back stack; sin ella (deep link en frio) se reintenta desde Mis Citas.
+            onReintentarPago = {
+                if (!navController.popBackStack<PaymentRoute>(inclusive = false)) {
+                    navController.navigate(MisCitasRoute) { popUpTo(navController.graph.id) { inclusive = true } }
+                }
+            },
+            onIrAlPanelProfesional = {
+                if (!navController.popBackStack<ProfessionalPanelRoute>(inclusive = false)) {
+                    navController.navigate(ProfessionalPanelRoute) {
+                        popUpTo(navController.graph.id) { inclusive = true }
+                    }
+                }
+            },
+            // Sin sesion lo unico util es el login; al iniciar sesion `AuthRoute` lleva al home del rol.
+            onIniciarSesion = {
+                navController.navigate(AuthRoute) { popUpTo(navController.graph.id) { inclusive = true } }
+            },
+        )
         verificationGraph()
         professional_panelGraph(
             navController,
             onCerrarSesion = onCerrarSesionProfesional,
             onVerResenas = onVerResenas,
+            onConectarMercadoPago = { navController.navigate(ConectarMercadoPagoRoute) },
         )
         reviewsGraph(onVolver = { navController.popBackStack() })
     }
+}
+
+/**
+ * Navigation Compose procesa el deep link de la Activity solo al crear el
+ * grafo (arranque en frio); no reacciona a `onNewIntent`. Como `MainActivity`
+ * es `singleTask`, el retorno desde el Custom Tab (`kinecare://pago/...`,
+ * `kinecare://mp/...`) llega a la Activity ya abierta por `onNewIntent`, asi
+ * que se entrega aqui al `NavController`.
+ *
+ * Se navega con `navigate(uri)` y no con `handleDeepLink(intent)`: este ultimo
+ * (con `FLAG_ACTIVITY_NEW_TASK`) reinicia la Activity y vacia el back stack, y el
+ * cliente perderia Mis Citas bajo la pantalla de resultado. Un deep link sin
+ * destino conocido se ignora, y no depende de que haya sesion (cada pantalla
+ * de resultado consulta al backend y maneja `SIN_SESION`).
+ */
+@Composable
+private fun EntregarDeepLinksNuevos(navController: NavController) {
+    val activity = LocalContext.current.buscarActivity() ?: return
+    DisposableEffect(navController, activity) {
+        val oyente = Consumer<Intent> { intent ->
+            val uri = intent.data ?: return@Consumer
+            if (uri.scheme == ESQUEMA_DEEP_LINK && navController.graph.hasDeepLink(uri)) {
+                navController.navigate(uri, navOptions { launchSingleTop = true })
+            }
+        }
+        activity.addOnNewIntentListener(oyente)
+        onDispose { activity.removeOnNewIntentListener(oyente) }
+    }
+}
+
+private const val ESQUEMA_DEEP_LINK = "kinecare"
+
+private fun Context.buscarActivity(): ComponentActivity? {
+    var contexto: Context? = this
+    while (contexto is ContextWrapper) {
+        if (contexto is ComponentActivity) return contexto
+        contexto = contexto.baseContext
+    }
+    return null
 }

@@ -44,6 +44,9 @@ disponibilidad: array<Disponibilidad>  // { diaSemana: "MONDAY".."SUNDAY", horaI
                                        //   horaFin: "HH:mm", activo: boolean } — el dueno lo
                                        //   reemplaza completo desde el panel profesional
 ubicacion: geopoint                  // para búsqueda por cercanía
+mercadoPagoConectado: boolean?       // true si vinculó su cuenta de Mercado Pago (puede cobrar);
+                                     // lo escribe SOLO la Cloud Function del callback OAuth
+                                     // (las Security Rules impiden que el dueño lo toque)
 ```
 **Creación.** `AuthRepositoryImpl` (`:feature:auth`) crea el documento al
 registrarse un Profesional (RUT+contraseña o "completar perfil" de Google),
@@ -114,8 +117,9 @@ respondidaEn: timestamp?             // lo escribe responderReserva al aceptar/r
                                      // ausente mientras la reserva sigue SOLICITADA
 ```
 `pago` lo inicializa `crearReserva` como `{ id: null, monto: servicio.precio,
-estado: "PENDIENTE" }`: **`pago.id` es `null` hasta la Fase 5**, cuando
-`iniciarPago` crea el documento en `pagos` y escribe su id aquí. El `monto`
+estado: "PENDIENTE" }`: **`pago.id` es `null` hasta que el cliente paga**:
+`iniciarPago` crea el documento en `pagos` y escribe su id aquí, y el webhook
+mantiene `pago.estado`. El `monto`
 siempre sale del documento del servicio, nunca del cliente.
 
 Estados que **ocupan agenda** (bloquean el horario): `SOLICITADA`,
@@ -157,16 +161,47 @@ profesional (ver [Cloud Functions](#cloud-functions) → concurrencia).
 ### `pagos/{pagoId}`
 ```
 reservaId: string
-monto: number
-metodo: MetodoPagoRef
+clienteId: string                // copiado de la reserva
+profesionalId: string            // vendedor que recibe el pago
+monto: number                    // CLP enteros; copiado de reservas.pago.monto (nunca del cliente)
+comision: number                 // CLP; = round(monto × comisionPorcentaje). Es el marketplace_fee
+metodo: { tipo: "TARJETA" | "TRANSFERENCIA", ultimosDigitos: string? }?  // null hasta que MP informa el pago
 estado: "PENDIENTE" | "AUTORIZADO" | "RECHAZADO" | "REEMBOLSADO"
-idTransaccionPasarela: string?
+idTransaccionPasarela: string?   // id del pago en Mercado Pago (payment_id)
+preferenceId: string?            // preferencia de Checkout Pro
+initPoint: string?               // URL de pago de Mercado Pago (siempre init_point, nunca sandbox)
 creadoEn: timestamp
 actualizadoEn: timestamp
 ```
-Escrito **solo** por Cloud Functions (`iniciarPago`, webhook de la
-pasarela). El cliente Android tiene permiso de lectura únicamente
-(Security Rules).
+Escrito **solo** por Cloud Functions (`iniciarPago`, `webhookMercadoPago`,
+`estadoPago`). El cliente Android y el profesional de la reserva tienen
+permiso de lectura únicamente (Security Rules). Un mismo `pagos/{id}` es un
+intento de cobro: si Mercado Pago lo rechaza, un nuevo `iniciarPago` crea otro
+documento y `reservas.pago.id` pasa a apuntar al nuevo. `external_reference`
+de la preferencia es este id.
+
+### `cuentasMercadoPago/{profesionalId}`
+```
+userId: string                   // user_id de Mercado Pago del vendedor
+scope: string
+accessTokenCifrado: string       // AES-256-GCM, AAD = profesionalId; formato v1.<iv>.<tag>.<ct>
+refreshTokenCifrado: string
+expiraEn: timestamp              // vencimiento del access token
+version: number                  // compare-and-set del refresh (el refresh rota ambos tokens)
+requiereReautorizacion: boolean  // true si el refresh falló: el profesional debe reconectar
+conectadaEn / actualizadaEn: timestamp
+```
+Tokens OAuth del vendedor. **Solo Admin SDK**: las Security Rules deniegan
+todo acceso (no hay `match`, default-deny). Nunca se loguean ni salen en una
+respuesta. La clave de cifrado es el secreto `MP_TOKEN_ENCRYPTION_KEY`.
+
+### `oauthEstados/{state}`
+```
+profesionalId: string
+creadoEn / expiraEn: timestamp   // vigencia 10 min
+```
+`state` OAuth (48 hex aleatorios) de un solo uso: lo crea `conectarMercadoPago`
+y lo consume (borra) `mercadoPagoOAuthCallback` en una transacción. Solo Admin SDK.
 
 ### `resenas/{resenaId}`
 ```
@@ -380,6 +415,70 @@ Pruebas: `test/unit/responderReserva.test.ts` (validación del payload) y
 Firestore Emulator: camino feliz, cada `motivo`, reserva ajena, concurrencia).
 Desplegada con `firebase deploy --only functions:responderReserva -P qa`;
 verificado que sin sesión responde 401 `SIN_SESION`.
+
+### Pagos con Mercado Pago (Marketplace + Checkout Pro) — **sin desplegar**
+Modelo: cada profesional vincula su cuenta de Mercado Pago por OAuth; el cliente
+paga en la página de Mercado Pago (Custom Tabs) y el dinero llega **directo al
+profesional**, que cede la comisión (`marketplace_fee`, 10 %) a la plataforma.
+Ningún dato de tarjeta pasa por la app ni por el backend. Se paga una reserva
+`CONFIRMADA` (después de que el profesional acepta), no antes.
+
+| Función | Tipo | Quién | Qué hace |
+|---|---|---|---|
+| `conectarMercadoPago` | callable | profesional | Devuelve `{ authorizationUrl }` con un `state` de un solo uso (10 min) |
+| `mercadoPagoOAuthCallback` | HTTP GET | navegador (Mercado Pago) | Consume `state`, canjea `code`, guarda tokens cifrados, 302 a `kinecare://mp/conectado` o `kinecare://mp/error?motivo=` (`estado_invalido`, `cancelado`, `sin_codigo`, `pasarela`) |
+| `iniciarPago` | callable | cliente | `{ reservaId }` → `{ pagoId, initPoint }` |
+| `estadoPago` | callable | cliente o profesional de la reserva | `{ pagoId }` → `{ estado }`; si sigue `PENDIENTE` relee Mercado Pago |
+| `webhookMercadoPago` | HTTP POST | Mercado Pago | Valida `x-signature` (HMAC-SHA256), relee el pago con el token del vendedor y lo aplica. 401 firma inválida, 500 falla transitoria (MP reintenta), 200 el resto |
+| `retornoPago` | HTTP GET | navegador | `back_urls` (MP exige HTTPS) → 302 a `kinecare://pago/resultado?pagoId=` |
+
+`iniciarPago`: el cliente **solo** envía `reservaId`. Monto = `reservas.pago.monto`,
+comisión = `reservas.comisionPorcentaje`, vendedor = `reservas.profesionalId`; se
+cobra con el token OAuth del profesional (sin cuenta conectada falla; jamás cae al
+token de la plataforma). Un reintento con el pago `PENDIENTE` reutiliza el mismo
+`pagos/{id}` y la misma preferencia (`idempotencyKey = pagoId`).
+
+| `status` (HTTP) | `motivo` | Cuándo |
+|---|---|---|
+| `UNAUTHENTICATED` (401) | `SIN_SESION` | Sin sesión |
+| `INVALID_ARGUMENT` (400) | `DATOS_INVALIDOS` | Payload mal formado |
+| `PERMISSION_DENIED` (403) | `ROL_INVALIDO` | `iniciarPago`: rol != CLIENTE; `conectarMercadoPago`: rol != PROFESIONAL |
+| `NOT_FOUND` (404) | `RESERVA_NO_ENCONTRADA` | La reserva no existe o es de otro cliente |
+| `NOT_FOUND` (404) | `PAGO_NO_ENCONTRADO` | `estadoPago`: el pago no existe o no es suyo |
+| `FAILED_PRECONDITION` (400) | `RESERVA_NO_PAGABLE` | `estado != "CONFIRMADA"` |
+| `FAILED_PRECONDITION` (400) | `PAGO_YA_REALIZADO` | `pago.estado` `AUTORIZADO` o `REEMBOLSADO` |
+| `FAILED_PRECONDITION` (400) | `PROFESIONAL_SIN_CUENTA_MP` | El profesional no conectó Mercado Pago, o hay que reautorizar |
+| `FAILED_PRECONDITION` (400) | `MONTO_INVALIDO` | Monto no entero/positivo o comisión ≥ monto |
+| `UNAVAILABLE` (503) | `PASARELA_NO_DISPONIBLE` | Mercado Pago no respondió |
+
+Reglas de detalle:
+- **Estados.** `approved → AUTORIZADO`, `rejected|cancelled → RECHAZADO`,
+  `refunded|charged_back → REEMBOLSADO`, el resto `PENDIENTE`. Las
+  notificaciones llegan repetidas y desordenadas: `AUTORIZADO` solo avanza a
+  `REEMBOLSADO`; `RECHAZADO` puede pasar a `AUTORIZADO` (reintento sobre la misma
+  preferencia). Un intento viejo no pisa `reservas.pago.estado` si la reserva ya
+  apunta a otro `pagoId`.
+- **Defensas del webhook.** Nada de la notificación se toma como verdad: solo
+  trae un id y se relee el pago a Mercado Pago. No se autoriza si
+  `external_reference != pagoId` o si el monto aprobado difiere del cobrado
+  (queda en el log). La URL de notificación lleva `?pagoId=` para saber qué
+  vendedor/token usar.
+- **Procesar antes de responder.** En Cloud Functions la CPU se congela al
+  responder, así que (a diferencia de la guía genérica "responde 200 primero") el
+  webhook procesa y luego responde; ante falla transitoria responde 500.
+- **Refresh del token.** Vence-pronto (< 5 min) → se renueva con compare-and-set
+  sobre `version`; si falla se marca `requiereReautorizacion` y
+  `profesionales.mercadoPagoConectado = false`.
+- **Configuración** (`firebase functions:secrets:set`): `MP_CLIENT_SECRET`,
+  `MP_WEBHOOK_SECRET`, `MP_TOKEN_ENCRYPTION_KEY` (32 bytes en base64); parámetro
+  `MP_APP_ID` (`functions/.env.<proyecto>`, ver `.env.example`). La *Redirect URI*
+  del panel de Mercado Pago debe ser exactamente
+  `https://us-central1-<projectId>.cloudfunctions.net/mercadoPagoOAuthCallback`, y el
+  webhook (tema `payment`) `…/webhookMercadoPago`. Requiere plan **Blaze**.
+- Pruebas: `test/unit/{cifrado,firma,estados,pagos}.test.ts` y
+  `test/integration/pagos.integration.test.ts` (contra el Firestore Emulator con
+  una pasarela falsa, `test/fakePasarela.ts`). **No probado contra Mercado Pago
+  real**: falta la prueba con usuarios de prueba (vendedor y comprador).
 
 ## Firebase Storage
 

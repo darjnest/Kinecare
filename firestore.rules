@@ -48,11 +48,13 @@ service cloud.firestore {
         && request.resource.data.insignias == []
         && request.resource.data.disponibilidad is list;
       // Reputacion (calificacionPromedio/totalResenas) ordena la busqueda: no
-      // la escribe el dueno. tiposAtencion es opcional en perfiles legados,
+      // la escribe el dueno. mercadoPagoConectado lo escribe solo la Cloud Function
+      // del callback OAuth (el dueno no puede autoproclamarse "cobrable"). tiposAtencion es opcional en perfiles legados,
       // pero si se toca tiene que quedar valido.
       allow update: if esDueno(usuarioId)
         && !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['insignias', 'estadoVerificacionGeneral', 'calificacionPromedio', 'totalResenas'])
+            .hasAny(['insignias', 'estadoVerificacionGeneral', 'calificacionPromedio', 'totalResenas',
+                     'mercadoPagoConectado'])
         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['tiposAtencion'])
             || tiposAtencionValidos(request.resource.data));
       allow delete: if false;

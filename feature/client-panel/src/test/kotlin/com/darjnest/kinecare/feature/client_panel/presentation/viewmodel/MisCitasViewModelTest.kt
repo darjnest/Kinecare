@@ -398,4 +398,80 @@ class MisCitasViewModelTest {
 
         assertEquals(antes, viewModel.state.value)
     }
+
+    // --- pagar con Mercado Pago ---
+
+    private fun cargarReservaConfirmadaConPago(estadoPago: EstadoPago, estado: EstadoReserva = EstadoReserva.CONFIRMADA): CitaProxima {
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns
+            Result.Success(listOf(reservaDePrueba("r-pago", "prof-1", estado, estadoPago = estadoPago)))
+        coEvery { profesionalRepository.obtenerPorId("prof-1") } returns
+            Result.Success(profesionalDePrueba("prof-1", "Bruno Diaz"))
+        return crearViewModel().state.value.proximasCitas.single()
+    }
+
+    @Test
+    fun `una reserva CONFIRMADA con pago PENDIENTE o RECHAZADO se puede pagar`() = runTest {
+        assertTrue(cargarReservaConfirmadaConPago(EstadoPago.PENDIENTE).puedePagar)
+        assertTrue(cargarReservaConfirmadaConPago(EstadoPago.RECHAZADO).puedePagar)
+    }
+
+    @Test
+    fun `una reserva CONFIRMADA ya pagada o reembolsada no ofrece pagar y expone su estado`() = runTest {
+        val pagada = cargarReservaConfirmadaConPago(EstadoPago.AUTORIZADO)
+        val reembolsada = cargarReservaConfirmadaConPago(EstadoPago.REEMBOLSADO)
+
+        assertFalse(pagada.puedePagar)
+        assertEquals(EstadoPago.AUTORIZADO, pagada.estadoPago)
+        assertFalse(reembolsada.puedePagar)
+        assertEquals(EstadoPago.REEMBOLSADO, reembolsada.estadoPago)
+    }
+
+    @Test
+    fun `una reserva SOLICITADA todavia no se puede pagar aunque su pago este PENDIENTE`() = runTest {
+        val cita = cargarReservaConfirmadaConPago(EstadoPago.PENDIENTE, estado = EstadoReserva.SOLICITADA)
+
+        assertFalse(cita.puedePagar)
+        assertNull(cita.estadoPago)
+    }
+
+    @Test
+    fun `la cita pagable lleva el nombre del servicio y el monto para la pantalla de pago`() = runTest {
+        val cita = cargarReservaConfirmadaConPago(EstadoPago.PENDIENTE)
+
+        assertEquals("r-pago", cita.id)
+        assertEquals("Sesion de rehabilitacion", cita.tipoSesion)
+        assertEquals(18000L, cita.precioTotal)
+    }
+
+    @Test
+    fun `Pagar es navegacion y no cambia el estado`() = runTest {
+        cargarReservaConfirmadaConPago(EstadoPago.PENDIENTE)
+        val viewModel = crearViewModel()
+        val antes = viewModel.state.value
+
+        viewModel.onAction(MisCitasAction.Pagar("r-pago", "Sesion de rehabilitacion", 18000L))
+
+        assertEquals(antes, viewModel.state.value)
+        coVerify(exactly = 2) { reservaRepository.obtenerPorCliente(uid) }
+    }
+
+    @Test
+    fun `Recargar al volver del pago refleja el nuevo estado del pago`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId("prof-1") } returns
+            Result.Success(profesionalDePrueba("prof-1", "Bruno Diaz"))
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns Result.Success(
+            listOf(reservaDePrueba("r-pago", "prof-1", EstadoReserva.CONFIRMADA, estadoPago = EstadoPago.PENDIENTE)),
+        )
+        val viewModel = crearViewModel()
+        assertTrue(viewModel.state.value.proximasCitas.single().puedePagar)
+
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns Result.Success(
+            listOf(reservaDePrueba("r-pago", "prof-1", EstadoReserva.CONFIRMADA, estadoPago = EstadoPago.AUTORIZADO)),
+        )
+        viewModel.onAction(MisCitasAction.Recargar)
+
+        val cita = viewModel.state.value.proximasCitas.single()
+        assertFalse(cita.puedePagar)
+        assertEquals(EstadoPago.AUTORIZADO, cita.estadoPago)
+    }
 }

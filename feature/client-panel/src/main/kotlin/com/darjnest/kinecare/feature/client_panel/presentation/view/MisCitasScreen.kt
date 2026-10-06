@@ -1,5 +1,6 @@
 package com.darjnest.kinecare.feature.client_panel.presentation.view
 
+import com.darjnest.kinecare.core.common.domain.model.EstadoPago
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
 import com.darjnest.kinecare.core.designsystem.theme.KineCareSpacing
 import androidx.compose.ui.semantics.Role
@@ -65,6 +66,8 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.darjnest.kinecare.core.designsystem.components.bar.KineCareBottomNavBar
 import com.darjnest.kinecare.core.designsystem.components.bar.PestanaClienteInferior
+import com.darjnest.kinecare.core.designsystem.components.button.KineCarePrimaryButton
+import com.darjnest.kinecare.core.designsystem.components.label.BadgeTono
 import com.darjnest.kinecare.core.designsystem.components.label.KineCareBadge
 import com.darjnest.kinecare.core.designsystem.theme.InicioDorado
 import com.darjnest.kinecare.core.designsystem.theme.KineCareTheme
@@ -96,6 +99,7 @@ fun MisCitasRoot(
     onIrAMiPerfil: () -> Unit = {},
     onDejarResena: (reservaId: String, profesionalId: String) -> Unit = { _, _ -> },
     onReportarProblema: (reservaId: String, profesionalId: String) -> Unit = { _, _ -> },
+    onPagar: (reservaId: String, titulo: String, montoClp: Long) -> Unit = { _, _, _ -> },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
@@ -114,6 +118,8 @@ fun MisCitasRoot(
             when (accion) {
                 is MisCitasAction.DejarResena -> onDejarResena(accion.reservaId, accion.profesionalId)
                 is MisCitasAction.ReportarProblema -> onReportarProblema(accion.reservaId, accion.profesionalId)
+                // Pagar es navegacion hacia `:feature:payment`, tambien por callback desde `:app`.
+                is MisCitasAction.Pagar -> onPagar(accion.reservaId, accion.titulo, accion.montoClp)
                 else -> viewModel.onAction(accion)
             }
         },
@@ -764,6 +770,7 @@ private fun TarjetaCitaProxima(
                 color = if (cita.porConfirmar) LoginGrisTexto else LoginPrimarioOscuro,
                 modifier = Modifier.padding(top = 4.dp),
             )
+            EstadoPagoCita(cita = cita, onAction = onAction)
             Spacer(modifier = Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(
@@ -801,6 +808,44 @@ private fun TarjetaCitaProxima(
                 modifier = Modifier.padding(top = 4.dp),
             )
         }
+    }
+}
+
+/**
+ * Pago de una reserva `CONFIRMADA`: boton "Pagar con Mercado Pago" mientras el
+ * pago esta `PENDIENTE` o `RECHAZADO`, o el indicador "Pagada"/"Reembolsada".
+ * Una reserva aun `SOLICITADA` no muestra nada (todavia no corresponde pagar).
+ */
+@Composable
+private fun EstadoPagoCita(
+    cita: CitaProxima,
+    onAction: (MisCitasAction) -> Unit,
+) {
+    if (cita.puedePagar) {
+        Column(
+            modifier = Modifier.padding(top = KineCareSpacing.m),
+            verticalArrangement = Arrangement.spacedBy(KineCareSpacing.s),
+        ) {
+            if (cita.estadoPago == EstadoPago.RECHAZADO) {
+                KineCareBadge(texto = "Tu último pago fue rechazado", tono = BadgeTono.ERROR)
+            }
+            KineCarePrimaryButton(
+                text = "Pagar con Mercado Pago",
+                onClick = { onAction(MisCitasAction.Pagar(cita.id, cita.tipoSesion, cita.precioTotal)) },
+            )
+        }
+    } else when (cita.estadoPago) {
+        EstadoPago.AUTORIZADO -> KineCareBadge(
+            texto = "Pagada",
+            tono = BadgeTono.EXITO,
+            modifier = Modifier.padding(top = KineCareSpacing.m),
+        )
+        EstadoPago.REEMBOLSADO -> KineCareBadge(
+            texto = "Reembolsada",
+            tono = BadgeTono.NEUTRO,
+            modifier = Modifier.padding(top = KineCareSpacing.m),
+        )
+        else -> Unit
     }
 }
 
@@ -1079,5 +1124,32 @@ private fun formatearClp(monto: Long): String {
 private fun MisCitasScreenPreview() {
     KineCareTheme {
         MisCitasScreen(state = MisCitasState())
+    }
+}
+
+@Preview(showBackground = true, heightDp = 1400)
+@Composable
+private fun MisCitasScreenPagosPreview() {
+    val base = CitaProxima(
+        id = "res-1",
+        profesionalId = "prof-1",
+        modalidad = ModalidadServicio.DOMICILIO,
+        lugar = "Providencia, Santiago",
+        fechaHoraTexto = "12/10/2026 10:00",
+        profesionalNombre = "Ana Soto",
+        tipoSesion = "Kinesiología deportiva",
+        precioTotal = 25_000,
+    )
+    KineCareTheme {
+        MisCitasScreen(
+            state = MisCitasState(
+                proximasCitas = listOf(
+                    base.copy(estadoPago = EstadoPago.PENDIENTE),
+                    base.copy(id = "res-2", estadoPago = EstadoPago.RECHAZADO),
+                    base.copy(id = "res-3", estadoPago = EstadoPago.AUTORIZADO),
+                    base.copy(id = "res-4", porConfirmar = true),
+                ),
+            ),
+        )
     }
 }
