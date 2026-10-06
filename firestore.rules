@@ -136,5 +136,21 @@ service cloud.firestore {
       allow read: if request.auth != null && request.auth.uid == resource.data.profesionalId;
       allow write: if false;
     }
+
+    // Conexion OAuth del profesional con Mercado Pago. Todo lo escriben las Cloud Functions
+    // (Admin SDK, que ignora estas reglas). Los tokens y los `state` nunca los lee el cliente.
+    match /mercadoPagoTokens/{profesionalId} {
+      allow read, write: if false;
+    }
+
+    match /mercadoPagoOAuthStates/{state} {
+      allow read, write: if false;
+    }
+
+    // Estado publico para el dueno ("conectada o no"); un documento ausente = no conectada.
+    match /mercadoPagoEstados/{profesionalId} {
+      allow read: if esDueno(profesionalId);
+      allow write: if false;
+    }
   }
 }

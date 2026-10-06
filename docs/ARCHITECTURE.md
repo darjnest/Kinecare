@@ -190,6 +190,12 @@ de Firebase (`firebase use qa` / `firebase use prod`) al proyecto correcto.
 - Pasarela de pago: **Mercado Pago** (Split de Pagos 1:1, OAuth por
   profesional y comisión como `marketplace_fee`); detalle y pendientes de
   validación en [TASKS.md](TASKS.md) (Fase 5).
+  Conexión de la cuenta del profesional: la app pide la URL de
+  autorización a la callable `iniciarConexionMercadoPago`, la abre en el
+  navegador y relee `mercadoPagoEstados/{uid}` (solo lectura) al volver a
+  primer plano; `desconectarMercadoPago` la revoca. El flujo OAuth y los
+  tokens viven solo en Cloud Functions: la app nunca ve el access token
+  (`MercadoPagoRepository` en `:core:common`, impl en `:core:network`).
 - Verificación de identidad: proveedor tipo Truora/Metamap/Didit — la app
   solo consume el estado (pendiente/aprobado/rechazado) vía Cloud Function.
 

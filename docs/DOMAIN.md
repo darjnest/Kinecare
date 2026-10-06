@@ -125,6 +125,18 @@ Resuelto exclusivamente por las Cloud Functions `iniciarPago` / `estadoPago`
 - `ultimosDigitos: String?`
 - `tokenPasarela: String` (nunca el número de tarjeta completo)
 
+## EstadoMercadoPago
+Si el profesional conectó su cuenta de Mercado Pago (OAuth) para cobrar sus
+atenciones. Solo expone el estado de la conexión, nunca tokens: estos viven
+únicamente en Cloud Functions.
+- `conectado: Boolean`
+- `conectadoEn: Instant?`
+
+Se lee de `mercadoPagoEstados/{uid}`; documento ausente = no conectada
+(`EstadoMercadoPago.NoConectada`). Conectar y desconectar pasan por las
+Cloud Functions `iniciarConexionMercadoPago` / `desconectarMercadoPago`
+(`MercadoPagoRepository`).
+
 ## Resena
 - `id: String`
 - `reservaId: String`

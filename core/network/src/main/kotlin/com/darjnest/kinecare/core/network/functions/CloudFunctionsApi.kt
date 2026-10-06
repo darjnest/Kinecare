@@ -4,6 +4,9 @@ import com.darjnest.kinecare.core.network.functions.dto.CallableRequest
 import com.darjnest.kinecare.core.network.functions.dto.CallableResponse
 import com.darjnest.kinecare.core.network.functions.dto.CrearReservaRequestDto
 import com.darjnest.kinecare.core.network.functions.dto.CrearReservaResultadoDto
+import com.darjnest.kinecare.core.network.functions.dto.DesconectarMercadoPagoResultadoDto
+import com.darjnest.kinecare.core.network.functions.dto.IniciarConexionMercadoPagoResultadoDto
+import com.darjnest.kinecare.core.network.functions.dto.MercadoPagoSinDatosDto
 import com.darjnest.kinecare.core.network.functions.dto.ResponderReservaRequestDto
 import com.darjnest.kinecare.core.network.functions.dto.ResponderReservaResultadoDto
 import retrofit2.Response
@@ -32,4 +35,17 @@ interface CloudFunctionsApi {
         @Header("Authorization") autorizacion: String,
         @Body cuerpo: CallableRequest<ResponderReservaRequestDto>,
     ): Response<CallableResponse<ResponderReservaResultadoDto>>
+
+    /** Devuelve la URL de autorizacion OAuth de Mercado Pago del profesional autenticado. */
+    @POST("iniciarConexionMercadoPago")
+    suspend fun iniciarConexionMercadoPago(
+        @Header("Authorization") autorizacion: String,
+        @Body cuerpo: CallableRequest<MercadoPagoSinDatosDto>,
+    ): Response<CallableResponse<IniciarConexionMercadoPagoResultadoDto>>
+
+    @POST("desconectarMercadoPago")
+    suspend fun desconectarMercadoPago(
+        @Header("Authorization") autorizacion: String,
+        @Body cuerpo: CallableRequest<MercadoPagoSinDatosDto>,
+    ): Response<CallableResponse<DesconectarMercadoPagoResultadoDto>>
 }

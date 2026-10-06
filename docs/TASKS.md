@@ -381,9 +381,32 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       la Orders API con fees (`marketplace_fee` ignorado, `application_fee`
       rechazado) y si cada profesional necesita cuenta verificada para
       conectarse. Si algo no calza, reabrir la elección
-- [ ] Conectar la cuenta Mercado Pago del profesional (OAuth) y guardar sus
-      tokens solo en backend: pertenece al panel profesional y a una Cloud
-      Function, nunca al dispositivo
+- [x] Conectar la cuenta Mercado Pago del profesional (OAuth), tokens solo en
+      backend. **Código listo, sin desplegar ni probar contra Mercado Pago
+      real.** Cloud Functions `iniciarConexionMercadoPago` (state aleatorio de
+      un solo uso, 10 min, devuelve la URL de autorización),
+      `mercadoPagoCallback` (GET: consume el state, canjea el `code` y guarda
+      los tokens) y `desconectarMercadoPago`; contrato y colecciones
+      (`mercadoPagoTokens`/`mercadoPagoOAuthStates` cerradas al cliente,
+      `mercadoPagoEstados/{uid}` solo lectura del dueño) en
+      [DATA_MODEL.md](DATA_MODEL.md). 72 tests nuevos de backend (162 en
+      total con `npm run test:emulator`, canje con un `fetch` falso) y reglas
+      probadas contra el emulador. Android: `MercadoPagoRepository`
+      (`:core:common`, impl en `:core:network` con un helper `CallableInvoker`
+      reutilizable) y tarjeta "Cobros con Mercado Pago" en "Liquidaciones y
+      finanzas": conectar abre el navegador, se relee el estado al volver a la
+      app, desconectar pide confirmación (49 tests nuevos). **No verificado
+      visualmente** (sin emulador). **Para probarlo en QA, falta (lo hace una
+      persona):** (1) crear la aplicación en el panel de Mercado Pago y
+      registrar `https://us-central1-kinecare-cl-qa.cloudfunctions.net/mercadoPagoCallback`
+      como Redirect URI; (2) `firebase functions:secrets:set MP_CLIENT_SECRET -P qa`
+      y definir `MP_CLIENT_ID` (p. ej. `functions/.env.kinecare-cl-qa`);
+      (3) `firebase deploy --only functions,firestore -P qa`. Las URLs y el
+      formato de respuesta de Mercado Pago están **sin verificar** (viven en
+      `functions/src/constantes.ts`). **Fuera de alcance:** refrescar el
+      access token (expira ~180 días; `expiraEn` ya se guarda), revocar la
+      autorización en Mercado Pago, PKCE, y bloquear los cobros de un
+      profesional que no haya conectado su cuenta (lo decide `:feature:payment`)
 - [ ] `:feature:payment`
 - [ ] Cloud Functions `iniciarPago`, `estadoPago` + webhook
 - [ ] Certificate pinning en llamadas de pago

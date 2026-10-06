@@ -38,23 +38,37 @@ import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.darjnest.kinecare.core.common.data.error.MercadoPagoError
+import com.darjnest.kinecare.core.designsystem.components.button.KineCarePrimaryButton
+import com.darjnest.kinecare.core.designsystem.components.button.KineCareSecondaryButton
+import com.darjnest.kinecare.core.designsystem.components.dialog.KineCareConfirmDialog
 import com.darjnest.kinecare.core.designsystem.theme.AzulPetroleo30
+import com.darjnest.kinecare.core.designsystem.theme.KineCareSpacing
 import com.darjnest.kinecare.core.designsystem.theme.KineCareTheme
 import com.darjnest.kinecare.core.designsystem.theme.LiquidacionesCelesteRenta
 import com.darjnest.kinecare.core.designsystem.theme.LiquidacionesCelesteRentaTexto
@@ -69,6 +83,7 @@ import com.darjnest.kinecare.core.designsystem.theme.LoginPrimario
 import com.darjnest.kinecare.core.designsystem.theme.LoginPrimarioOscuro
 import com.darjnest.kinecare.core.designsystem.theme.RojoError40
 import com.darjnest.kinecare.core.designsystem.theme.TextoPrincipal
+import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.CobrosMercadoPago
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.CuentaBancaria
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.EstadoPago
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.LiquidacionesYFinanzasAction
@@ -77,6 +92,7 @@ import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.L
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.PagoHistorico
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.ResumenFinanciero
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.ResumenMensual
+import kotlinx.coroutines.CancellationException
 import java.util.Locale
 
 @Composable
@@ -86,6 +102,28 @@ fun LiquidacionesYFinanzasRoot(
     onVolver: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val uriHandler = LocalUriHandler.current
+
+    // Mercado Pago redirige a una pagina del backend (sin deep link): al volver
+    // a la app hay que releer si la cuenta quedo conectada.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        viewModel.onAction(LiquidacionesYFinanzasAction.PantallaReanudada)
+    }
+
+    // La URL de autorizacion llega por el state y se abre una sola vez: despues
+    // se limpia (o se avisa que no se pudo abrir) para no reabrirla al recomponer.
+    LaunchedEffect(state.urlConexionPendiente) {
+        val url = state.urlConexionPendiente ?: return@LaunchedEffect
+        try {
+            uriHandler.openUri(url)
+            viewModel.onAction(LiquidacionesYFinanzasAction.UrlConexionMercadoPagoAbierta)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            viewModel.onAction(LiquidacionesYFinanzasAction.UrlConexionMercadoPagoNoSePudoAbrir)
+        }
+    }
+
     LiquidacionesYFinanzasScreen(state = state, onAction = viewModel::onAction, onVolver = onVolver, modifier = modifier)
 }
 
@@ -111,6 +149,9 @@ fun LiquidacionesYFinanzasScreen(
         ) {
             Spacer(modifier = Modifier.height(4.dp))
             FilaTituloYEstadoSii(siiConectado = state.siiConectado)
+
+            Spacer(modifier = Modifier.height(KineCareSpacing.l))
+            TarjetaCobrosMercadoPago(state = state, onAction = onAction)
 
             state.resumenFinanciero?.let { resumenFinanciero ->
                 Spacer(modifier = Modifier.height(16.dp))
@@ -219,6 +260,143 @@ private fun FilaTituloYEstadoSii(siiConectado: Boolean) {
             }
         }
     }
+}
+
+@Composable
+private fun TarjetaCobrosMercadoPago(
+    state: LiquidacionesYFinanzasState,
+    onAction: (LiquidacionesYFinanzasAction) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = KineCareSpacing.xs / 2),
+    ) {
+        Column(modifier = Modifier.padding(KineCareSpacing.l)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Filled.Payments,
+                    contentDescription = null,
+                    tint = AzulPetroleo30,
+                    modifier = Modifier.size(KineCareSpacing.icono),
+                )
+                Spacer(modifier = Modifier.width(KineCareSpacing.s))
+                Text(
+                    text = "Cobros con Mercado Pago",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = TextoPrincipal,
+                    modifier = Modifier.semantics { heading() },
+                )
+            }
+            Spacer(modifier = Modifier.height(KineCareSpacing.m))
+
+            when (val cobros = state.cobrosMercadoPago) {
+                CobrosMercadoPago.Cargando -> Row(
+                    modifier = Modifier.semantics(mergeDescendants = true) {},
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(KineCareSpacing.icono))
+                    Spacer(modifier = Modifier.width(KineCareSpacing.m))
+                    Text(
+                        text = "Revisando el estado de tu cuenta…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = LoginGrisTexto,
+                    )
+                }
+
+                CobrosMercadoPago.NoConectada -> {
+                    Text(
+                        text = "Conecta tu cuenta de Mercado Pago para recibir los pagos de tus atenciones.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = LoginGrisTexto,
+                    )
+                    Spacer(modifier = Modifier.height(KineCareSpacing.m))
+                    KineCarePrimaryButton(
+                        text = if (state.operacionMercadoPagoEnCurso) "Conectando…" else "Conectar Mercado Pago",
+                        onClick = { onAction(LiquidacionesYFinanzasAction.ConectarMercadoPago) },
+                        enabled = !state.mercadoPagoOcupado,
+                    )
+                }
+
+                CobrosMercadoPago.Conectada -> {
+                    Row(
+                        modifier = Modifier.semantics(mergeDescendants = true) {},
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Filled.CheckCircle,
+                            contentDescription = null,
+                            tint = LoginPrimario,
+                            modifier = Modifier.size(KineCareSpacing.icono),
+                        )
+                        Spacer(modifier = Modifier.width(KineCareSpacing.s))
+                        Text(
+                            text = "Cuenta conectada",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = LoginPrimarioOscuro,
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(KineCareSpacing.m))
+                    KineCareSecondaryButton(
+                        text = if (state.operacionMercadoPagoEnCurso) "Desconectando…" else "Desconectar",
+                        onClick = { onAction(LiquidacionesYFinanzasAction.PedirDesconectarMercadoPago) },
+                        enabled = !state.mercadoPagoOcupado,
+                    )
+                }
+
+                is CobrosMercadoPago.Error -> {
+                    MensajeErrorMercadoPago(texto = cobros.error.mensaje())
+                    Spacer(modifier = Modifier.height(KineCareSpacing.m))
+                    KineCareSecondaryButton(
+                        text = "Reintentar",
+                        onClick = { onAction(LiquidacionesYFinanzasAction.ReintentarMercadoPago) },
+                    )
+                }
+            }
+
+            // Fallo de conectar/desconectar: el estado de la cuenta no cambio y el boton sirve de reintento.
+            state.errorOperacionMercadoPago?.let {
+                Spacer(modifier = Modifier.height(KineCareSpacing.s))
+                MensajeErrorMercadoPago(texto = it.mensaje())
+            }
+            if (state.errorAbrirNavegadorMercadoPago) {
+                Spacer(modifier = Modifier.height(KineCareSpacing.s))
+                MensajeErrorMercadoPago(texto = "No pudimos abrir el navegador. Intenta nuevamente.")
+            }
+        }
+    }
+
+    if (state.confirmandoDesconexionMercadoPago) {
+        KineCareConfirmDialog(
+            titulo = "Desconectar Mercado Pago",
+            mensaje = "Dejarás de recibir los pagos de tus atenciones en tu cuenta de Mercado Pago hasta que la vuelvas a conectar.",
+            textoConfirmar = "Desconectar",
+            textoCancelar = "Cancelar",
+            onConfirmar = { onAction(LiquidacionesYFinanzasAction.ConfirmarDesconectarMercadoPago) },
+            onCancelar = { onAction(LiquidacionesYFinanzasAction.CancelarDesconectarMercadoPago) },
+        )
+    }
+}
+
+/** `liveRegion` para que un lector de pantalla anuncie el error apenas aparece. */
+@Composable
+private fun MensajeErrorMercadoPago(texto: String) {
+    Text(
+        text = texto,
+        style = MaterialTheme.typography.bodyMedium,
+        color = RojoError40,
+        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+    )
+}
+
+private fun MercadoPagoError.mensaje(): String = when (this) {
+    MercadoPagoError.SIN_SESION -> "Tu sesión expiró. Vuelve a iniciar sesión para continuar."
+    MercadoPagoError.SIN_INTERNET -> "Sin conexión a internet. Revisa tu red e intenta nuevamente."
+    MercadoPagoError.ROL_INVALIDO -> "Solo las cuentas de profesional pueden conectar Mercado Pago."
+    MercadoPagoError.DESCONOCIDO -> "No pudimos completar la operación. Intenta nuevamente."
 }
 
 @Composable
@@ -728,5 +906,37 @@ private fun formatearClp(monto: Long, incluirPrefijo: Boolean = true): String {
 private fun LiquidacionesYFinanzasScreenPreview() {
     KineCareTheme {
         LiquidacionesYFinanzasScreen(state = LiquidacionesYFinanzasState())
+    }
+}
+
+@Preview(showBackground = true, heightDp = 400)
+@Composable
+private fun CobrosMercadoPagoNoConectadaPreview() {
+    KineCareTheme {
+        LiquidacionesYFinanzasScreen(
+            state = LiquidacionesYFinanzasState(cobrosMercadoPago = CobrosMercadoPago.NoConectada),
+        )
+    }
+}
+
+@Preview(showBackground = true, heightDp = 400)
+@Composable
+private fun CobrosMercadoPagoConectadaPreview() {
+    KineCareTheme {
+        LiquidacionesYFinanzasScreen(
+            state = LiquidacionesYFinanzasState(cobrosMercadoPago = CobrosMercadoPago.Conectada),
+        )
+    }
+}
+
+@Preview(showBackground = true, heightDp = 400)
+@Composable
+private fun CobrosMercadoPagoErrorPreview() {
+    KineCareTheme {
+        LiquidacionesYFinanzasScreen(
+            state = LiquidacionesYFinanzasState(
+                cobrosMercadoPago = CobrosMercadoPago.Error(MercadoPagoError.SIN_INTERNET),
+            ),
+        )
     }
 }

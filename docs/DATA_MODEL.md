@@ -264,6 +264,48 @@ Escrito por Cloud Functions (`solicitarVerificacion`, `estadoVerificacion`).
 Nunca contiene documentos de identidad ni biometría — esos se suben a
 Storage y el proveedor externo los procesa fuera de Firestore.
 
+### `mercadoPagoTokens/{profesionalId}` (solo backend)
+```
+accessToken: string
+refreshToken: string
+mpUserId: string              // id del vendedor en Mercado Pago (llega numérico, se guarda string)
+publicKey: string             // "" si MP no la envía
+scope: string                 // "" si MP no lo envía
+liveMode: boolean             // false si MP no lo envía
+expiraEn: timestamp           // ahora + expires_in al canjear el code
+actualizadoEn: timestamp      // hora del servidor
+```
+Tokens OAuth del profesional (id del documento = `profesionalId`). Los escribe
+`mercadoPagoCallback` y los borra `desconectarMercadoPago`, ambos con Admin SDK.
+Reglas: `allow read, write: if false` — **ni el dueño puede leerlos**. Nunca
+llegan al cliente ni a los logs. Reconectar sobrescribe el documento.
+
+### `mercadoPagoOAuthStates/{state}` (solo backend)
+```
+profesionalId: string
+creadoEn: timestamp
+expiraEn: timestamp           // creadoEn + 10 min
+```
+El id del documento es el `state` del flujo OAuth (32 bytes aleatorios en hex,
+64 caracteres). Uso único: `mercadoPagoCallback` lo lee y lo borra en una
+transacción (también si está vencido). `iniciarConexionMercadoPago` borra los
+pendientes del mismo profesional antes de crear uno nuevo, y
+`desconectarMercadoPago` los descarta también. Los vencidos que nadie canjea
+quedan hasta que el mismo profesional vuelva a iniciar o desconectar (no hay
+limpieza programada; el volumen es de un documento por profesional).
+Reglas: `allow read, write: if false`.
+
+### `mercadoPagoEstados/{profesionalId}`
+```
+conectado: boolean            // siempre true: el documento ausente = cuenta no conectada
+mpUserId: string
+conectadoEn: timestamp        // hora del servidor
+```
+Proyección pública de la conexión, sin ningún token: es lo que lee la app para
+mostrar "Cuenta conectada". Solo el backend escribe
+(`mercadoPagoCallback` la crea, `desconectarMercadoPago` la borra). Reglas:
+`allow read: if request.auth.uid == profesionalId; allow write: if false`.
+
 ## Cloud Functions
 
 Código en `functions/` (TypeScript, Node 22, `firebase-functions` v2,
@@ -380,6 +422,108 @@ Pruebas: `test/unit/responderReserva.test.ts` (validación del payload) y
 Firestore Emulator: camino feliz, cada `motivo`, reserva ajena, concurrencia).
 Desplegada con `firebase deploy --only functions:responderReserva -P qa`;
 verificado que sin sesión responde 401 `SIN_SESION`.
+
+### Conexión de Mercado Pago (OAuth del profesional) — **sin desplegar**
+Tres funciones en `us-central1` (`functions/src/mercadoPago.ts`, wrappers en
+`index.ts`). Cada profesional conecta su cuenta de Mercado Pago por OAuth; los
+tokens quedan solo en `mercadoPagoTokens/{profesionalId}` (ver arriba). Es el
+requisito previo del Split de Pagos 1:1 (el pago se creará con el token del
+vendedor; eso aún no existe).
+
+**Flujo.** (1) La app llama a `iniciarConexionMercadoPago` y abre
+`urlAutorizacion` en el navegador. (2) El profesional autoriza en Mercado Pago.
+(3) Mercado Pago redirige a `mercadoPagoCallback?code=&state=`; la función
+canjea el `code`, guarda tokens y estado, y muestra una página "Cuenta
+conectada, vuelve a KineCare". (4) La app, al volver, lee
+`mercadoPagoEstados/{uid}` directo de Firestore.
+
+#### `iniciarConexionMercadoPago` (callable)
+`data` se ignora (`{}`). Solo `usuarios/{uid}.rol == "PROFESIONAL"`. Genera un
+`state` (`crypto.randomBytes(32)` en hex), guarda
+`mercadoPagoOAuthStates/{state}` con TTL de 10 minutos y devuelve
+`{ urlAutorizacion }`:
+`https://auth.mercadopago.cl/authorization?client_id=<id>&response_type=code&platform_id=mp&state=<state>&redirect_uri=<redirectUri>`
+(query codificada con `URLSearchParams`). Antes de crear el nuevo, borra los
+pendientes del mismo profesional (misma transacción).
+
+#### `mercadoPagoCallback` (HTTP, solo GET; otro método → 405)
+Recibe `?code=&state=` o `?error=`. Siempre responde HTML mínimo en español,
+autocontenido (sin JS ni recursos externos) y **sin interpolar nada del
+request**. Cabeceras: `Cache-Control: no-store`,
+`Content-Type: text/html; charset=utf-8`, `Referrer-Policy: no-referrer`,
+`X-Content-Type-Options: nosniff` y una CSP restrictiva.
+
+Pasos: `state` con forma de 64 hex (evita rutas arbitrarias) → transacción que
+lo lee, lo **borra** (uso único) y comprueba que no expiró → re-verifica que el
+dueño siga siendo `PROFESIONAL` → `POST https://api.mercadopago.com/oauth/token`
+(JSON `{client_id, client_secret, grant_type: "authorization_code", code,
+redirect_uri}`, `Accept: application/json`, timeout 10 s) → valida la
+respuesta → batch que escribe `mercadoPagoTokens` y `mercadoPagoEstados`.
+El state se consume **antes** del canje: si MP lo rechaza o falla la red, no
+se escribe nada y el profesional debe reiniciar el flujo.
+
+| Status | Página | Cuándo |
+|---|---|---|
+| 200 | "Cuenta conectada" | Conexión completada |
+| 400 | "Cancelaste la conexión" | `error=access_denied` (el state, si es válido, se consume) |
+| 400 | "No pudimos conectar tu cuenta" | Cualquier otro caso: otro `error=`, `code`/`state` ausentes o mal formados, state inexistente/vencido/ya usado, dueño ya no profesional, canje rechazado o fallo de red, respuesta de token inválida, fallo al escribir |
+| 405 | texto plano | Método distinto de GET |
+
+La respuesta de token debe traer `access_token`, `refresh_token` (texto no
+vacío), `user_id` (entero positivo, número o texto numérico) y `expires_in`
+(número > 0); `public_key`, `scope` y `live_mode` son opcionales (si vienen,
+con su tipo). Cualquier otra cosa → error, no se guarda nada.
+
+**Secretos.** Nunca se loguean `code`, tokens ni `client_secret`, ni el cuerpo
+de las respuestas de MP: los logs llevan solo mensajes fijos, el status HTTP o
+el nombre del tipo de error (cubierto por tests).
+
+#### `desconectarMercadoPago` (callable)
+`data` se ignora. Solo `PROFESIONAL`. Borra `mercadoPagoTokens/{uid}`,
+`mercadoPagoEstados/{uid}` y los states pendientes (idempotente: sin conexión
+previa también responde ok). Devuelve `{ desconectado: true }`. **No revoca la
+autorización en Mercado Pago**: solo olvida los tokens.
+
+| `status` (HTTP) | `motivo` | Cuándo (iniciar y desconectar) |
+|---|---|---|
+| `UNAUTHENTICATED` (401) | `SIN_SESION` | Sin sesión |
+| `PERMISSION_DENIED` (403) | `ROL_INVALIDO` | `usuarios/{uid}.rol != "PROFESIONAL"` (o sin documento) |
+
+**Configuración.** `MP_CLIENT_ID` (`defineString`) y `MP_CLIENT_SECRET`
+(`defineSecret`, enlazado con `secrets:` en `mercadoPagoCallback`). La
+`redirectUri` es
+`https://us-central1-<projectId>.cloudfunctions.net/mercadoPagoCallback`
+(`urlCallbackMercadoPago` en `constantes.ts`, con `GCLOUD_PROJECT`) y **debe
+registrarse como Redirect URI en la aplicación de Mercado Pago**; tiene que ser
+idéntica en la autorización y en el canje.
+
+**Sin verificar.** Los endpoints (`auth.mercadopago.cl/authorization`,
+`api.mercadopago.com/oauth/token`), los parámetros y el formato de la respuesta
+salieron de memoria, no de la documentación oficial. Están centralizados en
+`functions/src/constantes.ts` para corregirlos en un solo lugar. Hasta
+probarlos con una cuenta de pruebas de Mercado Pago, el flujo real no está
+validado.
+
+**Índices.** Solo consultas de igualdad por un campo
+(`mercadoPagoOAuthStates` donde `profesionalId == uid`): usan el índice
+automático de campo único; no hace falta índice compuesto.
+
+**Fuera de alcance (pendiente).** Refrescar el access token (expira en ~180
+días; `expiraEn` ya se guarda), crear pagos con el token del vendedor, revocar
+la autorización en MP, PKCE, y el despliegue (crear la app en el panel de
+Mercado Pago, `firebase functions:secrets:set MP_CLIENT_SECRET -P qa` y definir
+`MP_CLIENT_ID`).
+
+Pruebas: `test/unit/mercadoPago.test.ts` y `test/unit/paginaMercadoPago.test.ts`
+(URL de autorización, validación de la respuesta de token, expiración del
+state, escape del HTML) y `test/integration/mercadoPago.integration.test.ts`
+(Firestore Emulator con `fetch` falso: camino feliz, state reutilizado/
+expirado/inexistente, `error=access_denied`, canje rechazado, fallo de red,
+roles, desconexión idempotente, ausencia de secretos en HTML/logs/errores). Las
+reglas de las tres colecciones se comprobaron contra el emulador (dueño lee su
+estado; otro usuario y anónimo no; nadie escribe; tokens y states ilegibles).
+Nada de esto se ejecutó contra Mercado Pago ni contra un proyecto Firebase
+real.
 
 ## Firebase Storage
 

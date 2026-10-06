@@ -35,3 +35,35 @@ export const MAX_LARGO_ID = 128;
 
 /** Coleccion de documentos-candado por profesional (ver crearReserva.ts). */
 export const COLECCION_BLOQUEOS_AGENDA = "bloqueosAgenda";
+
+// --- Mercado Pago (OAuth del profesional) -------------------------------------------------
+// OJO: las URLs y el formato de la respuesta salen de memoria y NO estan verificados contra la
+// documentacion oficial de Mercado Pago. Si el flujo falla en QA, corregirlos aqui (un solo lugar).
+
+/** Pagina de autorizacion a la que se redirige al profesional (dominio de Chile). */
+export const MP_URL_AUTORIZACION = "https://auth.mercadopago.cl/authorization";
+
+/** Endpoint donde se canjea el `code` (y mas adelante se refresca el token). */
+export const MP_URL_TOKEN = "https://api.mercadopago.com/oauth/token";
+
+/** Vigencia del `state` del flujo OAuth: es de un solo uso y expira rapido. */
+export const OAUTH_STATE_TTL_MINUTOS = 10;
+
+/** Tiempo maximo de espera al canjear el `code` en Mercado Pago. */
+export const MP_TIMEOUT_CANJE_MS = 10_000;
+
+/** Region de todas las Cloud Functions de KineCare. */
+export const REGION_FUNCTIONS = "us-central1";
+
+export const COLECCION_MP_OAUTH_STATES = "mercadoPagoOAuthStates";
+export const COLECCION_MP_TOKENS = "mercadoPagoTokens";
+export const COLECCION_MP_ESTADOS = "mercadoPagoEstados";
+
+/**
+ * Redirect URI de la funcion `mercadoPagoCallback`. Debe registrarse tal cual en la aplicacion
+ * de Mercado Pago (panel de desarrolladores) y coincidir byte a byte entre la autorizacion y
+ * el canje del `code`.
+ */
+export function urlCallbackMercadoPago(projectId: string): string {
+  return `https://${REGION_FUNCTIONS}-${projectId}.cloudfunctions.net/mercadoPagoCallback`;
+}
