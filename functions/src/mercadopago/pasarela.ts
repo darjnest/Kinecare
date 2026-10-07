@@ -55,10 +55,19 @@ export interface ConfigPasarela {
   clientSecret: string;
   /** Debe coincidir EXACTO con la "Redirect URI" configurada en el panel de Mercado Pago. */
   redirectUri: string;
+  /** Pagina de autorizacion OAuth. Por defecto la del SDK oficial; configurable por si Chile exige `.cl`. */
+  hostAutorizacion?: string;
 }
 
+/**
+ * Mercado Pago rechazo el refresh token (400/401: revocado, vencido o ya rotado). Es el UNICO
+ * fallo que justifica pedirle al profesional que vuelva a vincular su cuenta; un timeout o un
+ * 5xx es transitorio y no debe desconectarlo.
+ */
+export class TokenRechazadoError extends Error {}
+
 const API = "https://api.mercadopago.com";
-const AUTH = "https://auth.mercadopago.com/authorization";
+const HOST_AUTORIZACION_POR_DEFECTO = "https://auth.mercadopago.com";
 
 function pasarelaNoDisponible(): never {
   throw errorDeNegocio("unavailable", "PASARELA_NO_DISPONIBLE", "No pudimos comunicarnos con Mercado Pago. Intenta de nuevo.");
@@ -119,13 +128,16 @@ export function crearPasarelaMP(config: ConfigPasarela, ahora: () => Date = () =
       body: new URLSearchParams({ client_id: config.appId, client_secret: config.clientSecret, ...parametros }),
       signal: AbortSignal.timeout(8000),
     });
-    if (!respuesta.ok) throw new Error(`/oauth/token respondio ${respuesta.status}`);
+    if (!respuesta.ok) {
+      const mensaje = `/oauth/token respondio ${respuesta.status}`;
+      throw respuesta.status === 400 || respuesta.status === 401 ? new TokenRechazadoError(mensaje) : new Error(mensaje);
+    }
     return aTokens((await respuesta.json()) as RespuestaToken, ahora());
   }
 
   return {
     urlAutorizacion(state) {
-      const url = new URL(AUTH);
+      const url = new URL(`${config.hostAutorizacion ?? HOST_AUTORIZACION_POR_DEFECTO}/authorization`);
       url.search = new URLSearchParams({
         client_id: config.appId,
         response_type: "code",

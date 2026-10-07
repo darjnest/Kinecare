@@ -8,6 +8,8 @@ import { Timestamp, getFirestore, type Firestore } from "firebase-admin/firestor
 import { conectarMercadoPagoHandler, oauthCallbackHandler } from "../../src/conectarMercadoPago.js";
 import { iniciarPagoHandler, type DepsPago } from "../../src/iniciarPago.js";
 import { descifrar } from "../../src/mercadopago/cifrado.js";
+import { guardarCuenta } from "../../src/mercadopago/cuentas.js";
+import { TokenRechazadoError } from "../../src/mercadopago/pasarela.js";
 import { estadoPagoHandler, webhookHandler } from "../../src/pagos.js";
 import { FakePasarela, pagoMP, tokens } from "../fakePasarela.js";
 import { esperarError } from "../helpers.js";
@@ -204,6 +206,15 @@ describe("iniciarPago: errores", () => {
     }
   });
 
+  it("RESERVA_NO_PAGABLE si la hora de la cita ya paso (no se cobra algo que nadie atendio)", async () => {
+    await sembrarCuenta();
+    const reservaId = await sembrarReserva();
+    await db.collection("reservas").doc(reservaId).update({ fechaHora: Timestamp.fromDate(new Date("2026-09-30T13:00:00Z")) });
+    await esperarError(() => pagar(reservaId), "failed-precondition", "RESERVA_NO_PAGABLE");
+    assert.equal((await db.collection("pagos").get()).size, 0);
+    assert.equal(pasarela.preferencias.length, 0);
+  });
+
   it("PAGO_YA_REALIZADO si ya esta autorizado o reembolsado", async () => {
     await sembrarCuenta();
     for (const estado of ["AUTORIZADO", "REEMBOLSADO"]) {
@@ -222,11 +233,43 @@ describe("iniciarPago: errores", () => {
 
   it("si la renovacion del token falla, marca la cuenta para reautorizar", async () => {
     await sembrarCuenta({ expiraEn: new Date(AHORA.getTime() - 1000) });
-    pasarela.tokensAlRefrescar = new Error("invalid_grant");
+    pasarela.tokensAlRefrescar = new TokenRechazadoError("invalid_grant");
     const reservaId = await sembrarReserva();
     await esperarError(() => pagar(reservaId), "failed-precondition", "PROFESIONAL_SIN_CUENTA_MP");
     assert.equal((await db.collection("cuentasMercadoPago").doc(PRO).get()).get("requiereReautorizacion"), true);
     assert.equal((await db.collection("profesionales").doc(PRO).get()).get("mercadoPagoConectado"), false);
+  });
+
+  it("un fallo TRANSITORIO al renovar el token (timeout/5xx) NO desconecta al profesional", async () => {
+    await sembrarCuenta({ expiraEn: new Date(AHORA.getTime() - 1000) });
+    pasarela.tokensAlRefrescar = new Error("/oauth/token respondio 503");
+    const reservaId = await sembrarReserva();
+    await esperarError(() => pagar(reservaId), "unavailable", "PASARELA_NO_DISPONIBLE");
+    const cuenta = (await db.collection("cuentasMercadoPago").doc(PRO).get()).data()!;
+    assert.equal(cuenta.requiereReautorizacion, false);
+    assert.equal(cuenta.version, 1);
+    assert.equal(pasarela.preferencias.length, 0);
+  });
+
+  it("si el refresh se rechaza porque OTRA instancia ya roto el token, se usa el token nuevo sin desconectar", async () => {
+    await sembrarCuenta({ expiraEn: new Date(AHORA.getTime() - 1000) });
+    const { cifrar } = await import("../../src/mercadopago/cifrado.js");
+    // Simula la carrera: mientras esta instancia refresca, la otra ya guardo su resultado (version 2).
+    pasarela.tokensAlRefrescar = new TokenRechazadoError("invalid_grant");
+    const refrescar = pasarela.refrescar.bind(pasarela);
+    pasarela.refrescar = async (refresh: string) => {
+      await db.collection("cuentasMercadoPago").doc(PRO).update({
+        accessTokenCifrado: cifrar("access-de-la-otra-instancia", CLAVE, PRO),
+        expiraEn: Timestamp.fromDate(new Date("2027-01-01T00:00:00Z")),
+        version: 2,
+      });
+      return refrescar(refresh);
+    };
+    const reservaId = await sembrarReserva();
+    await pagar(reservaId);
+
+    assert.equal(pasarela.preferencias[0]!.accessToken, "access-de-la-otra-instancia");
+    assert.equal((await db.collection("cuentasMercadoPago").doc(PRO).get()).get("requiereReautorizacion"), false);
   });
 
   it("MONTO_INVALIDO si el monto de la reserva no es un entero positivo", async () => {
@@ -385,12 +428,33 @@ describe("conexion OAuth del profesional", () => {
 
   it("el state es aleatorio, queda atado al profesional y vence a los 10 minutos", async () => {
     const a = await pedirState();
-    const b = await pedirState();
     assert.match(a, /^[0-9a-f]{48}$/);
-    assert.notEqual(a, b);
     const doc = (await db.collection("oauthEstados").doc(a).get()).data()!;
     assert.equal(doc.profesionalId, PRO);
     assert.equal(doc.expiraEn.toMillis() - doc.creadoEn.toMillis(), 10 * 60_000);
+    assert.notEqual(a, await pedirState());
+  });
+
+  it("pedir otra URL reemplaza el state anterior del profesional (no se acumulan)", async () => {
+    const primero = await pedirState();
+    const segundo = await pedirState();
+    const tercero = await pedirState();
+    assert.notEqual(segundo, tercero);
+    const vigentes = await db.collection("oauthEstados").where("profesionalId", "==", PRO).get();
+    assert.deepEqual(vigentes.docs.map((d) => d.id), [tercero]);
+    assert.equal((await db.collection("oauthEstados").doc(primero).get()).exists, false);
+  });
+
+  it("si el perfil profesional no existe NO se crea uno fantasma ni se guarda la cuenta", async () => {
+    await db.collection("profesionales").doc(PRO).delete();
+    await assert.rejects(guardarCuenta(db, CLAVE, PRO, tokens("a", "r")));
+    assert.equal((await db.collection("profesionales").doc(PRO).get()).exists, false);
+    assert.equal((await db.collection("cuentasMercadoPago").doc(PRO).get()).exists, false);
+
+    const state = await pedirState();
+    const r = await oauthCallbackHandler(db, conexion(), { code: "c", state }, AHORA);
+    assert.equal(r.redirect, "kinecare://mp/error?motivo=pasarela");
+    assert.equal((await db.collection("profesionales").doc(PRO).get()).exists, false);
   });
 
   it("el callback canjea el codigo, guarda los tokens CIFRADOS y marca al profesional como conectado", async () => {

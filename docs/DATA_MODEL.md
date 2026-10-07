@@ -202,6 +202,9 @@ creadoEn / expiraEn: timestamp   // vigencia 10 min
 ```
 `state` OAuth (48 hex aleatorios) de un solo uso: lo crea `conectarMercadoPago`
 y lo consume (borra) `mercadoPagoOAuthCallback` en una transacción. Solo Admin SDK.
+Hay **un solo `state` vigente por profesional**: pedir otra URL borra los anteriores
+(así los abandonados no se acumulan), y `firestore.indexes.json` declara una política
+TTL sobre `expiraEn` (se aplica con `firebase deploy --only firestore:indexes`).
 
 ### `resenas/{resenaId}`
 ```
@@ -445,7 +448,7 @@ token de la plataforma). Un reintento con el pago `PENDIENTE` reutiliza el mismo
 | `PERMISSION_DENIED` (403) | `ROL_INVALIDO` | `iniciarPago`: rol != CLIENTE; `conectarMercadoPago`: rol != PROFESIONAL |
 | `NOT_FOUND` (404) | `RESERVA_NO_ENCONTRADA` | La reserva no existe o es de otro cliente |
 | `NOT_FOUND` (404) | `PAGO_NO_ENCONTRADO` | `estadoPago`: el pago no existe o no es suyo |
-| `FAILED_PRECONDITION` (400) | `RESERVA_NO_PAGABLE` | `estado != "CONFIRMADA"` |
+| `FAILED_PRECONDITION` (400) | `RESERVA_NO_PAGABLE` | `estado != "CONFIRMADA"`, o la hora de la cita (`fechaHora`) ya pasó: no se cobra algo que nadie atendió (no hay flujo de reembolso todavía) |
 | `FAILED_PRECONDITION` (400) | `PAGO_YA_REALIZADO` | `pago.estado` `AUTORIZADO` o `REEMBOLSADO` |
 | `FAILED_PRECONDITION` (400) | `PROFESIONAL_SIN_CUENTA_MP` | El profesional no conectó Mercado Pago, o hay que reautorizar |
 | `FAILED_PRECONDITION` (400) | `MONTO_INVALIDO` | Monto no entero/positivo o comisión ≥ monto |
@@ -467,15 +470,25 @@ Reglas de detalle:
   responder, así que (a diferencia de la guía genérica "responde 200 primero") el
   webhook procesa y luego responde; ante falla transitoria responde 500.
 - **Refresh del token.** Vence-pronto (< 5 min) → se renueva con compare-and-set
-  sobre `version`; si falla se marca `requiereReautorizacion` y
-  `profesionales.mercadoPagoConectado = false`.
+  sobre `version`. Solo un **400/401** de `/oauth/token` (token revocado o ya rotado)
+  marca `requiereReautorizacion` y `profesionales.mercadoPagoConectado = false`; un
+  timeout o 5xx es transitorio y responde `PASARELA_NO_DISPONIBLE` **sin desconectar**.
+  Si el refresh se rechaza porque otra instancia ya lo rotó (`version` distinta), se
+  usa el token que esa instancia guardó.
+- **Perfil ausente.** Marcar `mercadoPagoConectado` usa `update`: si
+  `profesionales/{id}` no existe la vinculación falla en vez de crear un perfil fantasma.
 - **Configuración** (`firebase functions:secrets:set`): `MP_CLIENT_SECRET`,
   `MP_WEBHOOK_SECRET`, `MP_TOKEN_ENCRYPTION_KEY` (32 bytes en base64); parámetro
-  `MP_APP_ID` (`functions/.env.<proyecto>`, ver `.env.example`). La *Redirect URI*
+  `MP_APP_ID` (`functions/.env.<proyecto>`, ver `.env.example`); opcional `MP_AUTH_HOST`
+  (por defecto `https://auth.mercadopago.com`, el del SDK oficial; si Chile exige
+  `https://auth.mercadopago.cl` se cambia aquí sin tocar código). La *Redirect URI*
   del panel de Mercado Pago debe ser exactamente
   `https://us-central1-<projectId>.cloudfunctions.net/mercadoPagoOAuthCallback`, y el
   webhook (tema `payment`) `…/webhookMercadoPago`. Requiere plan **Blaze**.
 - Pruebas: `test/unit/{cifrado,firma,estados,pagos}.test.ts` y
+  `test/unit/pasarela.test.ts` (la pasarela real contra un `fetch` simulado: URL de
+  autorización, form de `/oauth/token`, payload de la preferencia con
+  `marketplace_fee`/`back_urls`/idempotencia) y
   `test/integration/pagos.integration.test.ts` (contra el Firestore Emulator con
   una pasarela falsa, `test/fakePasarela.ts`). **No probado contra Mercado Pago
   real**: falta la prueba con usuarios de prueba (vendedor y comprador).

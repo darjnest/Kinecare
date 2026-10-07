@@ -45,12 +45,19 @@ export async function conectarMercadoPagoHandler(
     throw errorDeNegocio("permission-denied", "ROL_INVALIDO", "Solo un profesional puede conectar una cuenta para cobrar.");
   }
 
+  // Un solo `state` vigente por profesional: los que se abandonaron (cerro el Custom Tab) se
+  // reemplazan, asi la coleccion no crece sin tope aunque se llame la funcion en bucle.
+  const estados = db.collection(COLECCION_ESTADOS_OAUTH);
+  const anteriores = await estados.where("profesionalId", "==", uid).get();
   const state = randomBytes(24).toString("hex");
-  await db.collection(COLECCION_ESTADOS_OAUTH).doc(state).set({
+  const batch = db.batch();
+  anteriores.forEach((anterior) => batch.delete(anterior.ref));
+  batch.set(estados.doc(state), {
     profesionalId: uid,
     creadoEn: Timestamp.fromDate(ahora),
     expiraEn: Timestamp.fromDate(new Date(ahora.getTime() + OAUTH_STATE_VIGENCIA_MINUTOS * MS_MINUTO)),
   });
+  await batch.commit();
   return { authorizationUrl: deps.pasarela.urlAutorizacion(state) };
 }
 

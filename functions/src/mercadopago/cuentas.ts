@@ -3,7 +3,7 @@ import { logger } from "firebase-functions/v2";
 import { COLECCION_CUENTAS_MP, REFRESCO_ANTICIPADO_MINUTOS } from "../constantes.js";
 import { errorDeNegocio } from "../errores.js";
 import { cifrar, descifrar } from "./cifrado.js";
-import type { Pasarela, TokensVendedor } from "./pasarela.js";
+import { TokenRechazadoError, type Pasarela, type TokensVendedor } from "./pasarela.js";
 
 const MS_MINUTO = 60_000;
 
@@ -37,7 +37,9 @@ export async function guardarCuenta(
     actualizadaEn: FieldValue.serverTimestamp(),
   });
   // Bandera publica de solo lectura para la UI (las Security Rules impiden que el dueno la escriba).
-  batch.set(profesionalRef, { mercadoPagoConectado: true }, { merge: true });
+  // `update` y no `set merge`: si el perfil no existe falla (y el batch entero se descarta) en vez
+  // de crear un documento `profesionales/{id}` incompleto que aparecería en la búsqueda.
+  batch.update(profesionalRef, { mercadoPagoConectado: true });
   await batch.commit();
 }
 
@@ -69,14 +71,22 @@ export async function tokenVigente(
   try {
     nuevos = await pasarela.refrescar(descifrar(cuenta.get("refreshTokenCifrado") as string, clave, profesionalId));
   } catch (e) {
-    logger.error("Mercado Pago: fallo renovar token del vendedor", {
-      profesionalId,
-      mensaje: e instanceof Error ? e.message : String(e),
-    });
-    await db.batch()
-      .update(cuentaRef, { requiereReautorizacion: true, actualizadaEn: FieldValue.serverTimestamp() })
-      .set(db.collection("profesionales").doc(profesionalId), { mercadoPagoConectado: false }, { merge: true })
-      .commit();
+    const mensaje = e instanceof Error ? e.message : String(e);
+    if (!(e instanceof TokenRechazadoError)) {
+      // Timeout o 5xx de Mercado Pago: transitorio. NO se desconecta al profesional.
+      logger.error("Mercado Pago: fallo transitorio al renovar el token del vendedor", { profesionalId, mensaje });
+      throw errorDeNegocio("unavailable", "PASARELA_NO_DISPONIBLE", "No pudimos comunicarnos con Mercado Pago. Intenta de nuevo.");
+    }
+    // El refresh token se rechazo. Si otra instancia ya lo roto (version distinta) su token es
+    // valido y se usa; si no, de verdad hay que reautorizar.
+    const actual = await cuentaRef.get();
+    if (actual.get("version") !== version && actual.get("requiereReautorizacion") !== true) {
+      return descifrar(actual.get("accessTokenCifrado") as string, clave, profesionalId);
+    }
+    logger.error("Mercado Pago: refresh token rechazado; la cuenta requiere reautorizar", { profesionalId, mensaje });
+    await cuentaRef.update({ requiereReautorizacion: true, actualizadaEn: FieldValue.serverTimestamp() });
+    // Si el perfil ya no existe no hay bandera que bajar: se ignora, no se crea un perfil vacio.
+    await db.collection("profesionales").doc(profesionalId).update({ mercadoPagoConectado: false }).catch(() => undefined);
     throw sinCuenta();
   }
 

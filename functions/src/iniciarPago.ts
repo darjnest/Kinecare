@@ -1,4 +1,4 @@
-import { FieldValue, type Firestore } from "firebase-admin/firestore";
+import { FieldValue, Timestamp, type Firestore } from "firebase-admin/firestore";
 import { COLECCION_PAGOS, COMISION_PORCENTAJE } from "./constantes.js";
 import { errorDeNegocio } from "./errores.js";
 import { tokenVigente } from "./mercadopago/cuentas.js";
@@ -76,6 +76,12 @@ export async function iniciarPagoHandler(
         "RESERVA_NO_PAGABLE",
         "Solo puedes pagar una reserva que el profesional ya confirmó.",
       );
+    }
+
+    const fechaHora = reserva.get("fechaHora");
+    if (!(fechaHora instanceof Timestamp) || fechaHora.toMillis() <= ahora.getTime()) {
+      // Una cita confirmada que nadie atendio no se cobra: no hay flujo de reembolso todavia.
+      throw errorDeNegocio("failed-precondition", "RESERVA_NO_PAGABLE", "La hora de esta cita ya pasó; no se puede pagar.");
     }
 
     const pagoRef = reserva.get("pago") as { id: string | null; monto: number; estado: EstadoPago } | undefined;

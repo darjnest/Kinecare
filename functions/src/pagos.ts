@@ -108,6 +108,14 @@ export async function webhookHandler(
       secreto,
     })
   ) {
+    // Diagnostico sin datos sensibles: que llego y de que largo es el secreto configurado
+    // (la clave de Webhooks del panel mide 64 caracteres; otro largo = secreto mal cargado).
+    logger.warn("Mercado Pago: firma de webhook invalida", {
+      tieneFirma: cabecera(peticion.headers, "x-signature") !== undefined,
+      tieneRequestId: cabecera(peticion.headers, "x-request-id") !== undefined,
+      dataIdDesde: dataIdQuery !== undefined ? "query" : dataIdCuerpo !== undefined ? "cuerpo" : "ninguno",
+      largoSecreto: secreto.length,
+    });
     return { status: 401 };
   }
 
