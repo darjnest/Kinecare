@@ -480,8 +480,9 @@ Reglas de detalle:
 - **Configuración** (`firebase functions:secrets:set`): `MP_CLIENT_SECRET`,
   `MP_WEBHOOK_SECRET`, `MP_TOKEN_ENCRYPTION_KEY` (32 bytes en base64); parámetro
   `MP_APP_ID` (`functions/.env.<proyecto>`, ver `.env.example`); opcional `MP_AUTH_HOST`
-  (por defecto `https://auth.mercadopago.com`, el del SDK oficial; si Chile exige
-  `https://auth.mercadopago.cl` se cambia aquí sin tocar código). La *Redirect URI*
+  (por defecto `https://auth.mercadopago.cl`). Probado: el host `.com` del SDK
+  muestra antes una página "Seleccione el país", mientras que `.cl` va directo a la
+  pantalla de autorización de la app (que es lo que valida App ID, Redirect URL y permisos). La *Redirect URI*
   del panel de Mercado Pago debe ser exactamente
   `https://us-central1-<projectId>.cloudfunctions.net/mercadoPagoOAuthCallback`, y el
   webhook (tema `payment`) `…/webhookMercadoPago`. Requiere plan **Blaze**.
