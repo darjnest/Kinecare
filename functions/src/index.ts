@@ -24,8 +24,9 @@ export const responderReserva = onCall({ region: "us-central1" }, (request) =>
 // ── Mercado Pago (Marketplace + Checkout Pro) ────────────────────────────────────────────────
 // Secretos: `firebase functions:secrets:set <NOMBRE>`. MP_APP_ID no es secreto (parametro).
 const MP_APP_ID = defineString("MP_APP_ID");
-// Pagina de autorizacion OAuth. Por defecto la del SDK; si Chile exige `.cl`, se cambia sin tocar codigo.
-const MP_AUTH_HOST = defineString("MP_AUTH_HOST", { default: "https://auth.mercadopago.com" });
+// Pagina de autorizacion OAuth (opcional). Se lee del entorno (functions/.env.<proyecto>) y no con
+// `defineString`: el CLI exige un valor para todo parametro declarado aunque tenga default.
+const HOST_AUTORIZACION_POR_DEFECTO = "https://auth.mercadopago.com";
 const MP_CLIENT_SECRET = defineSecret("MP_CLIENT_SECRET");
 const MP_WEBHOOK_SECRET = defineSecret("MP_WEBHOOK_SECRET");
 const MP_TOKEN_ENCRYPTION_KEY = defineSecret("MP_TOKEN_ENCRYPTION_KEY");
@@ -46,7 +47,7 @@ function depsMercadoPago(): DepsPago {
       appId: MP_APP_ID.value(),
       clientSecret: MP_CLIENT_SECRET.value(),
       redirectUri: `${base}/mercadoPagoOAuthCallback`,
-      hostAutorizacion: MP_AUTH_HOST.value(),
+      hostAutorizacion: process.env.MP_AUTH_HOST?.trim() || HOST_AUTORIZACION_POR_DEFECTO,
     }),
     clave: parseClave(MP_TOKEN_ENCRYPTION_KEY.value()),
     urlBase: base,
