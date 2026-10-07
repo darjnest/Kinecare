@@ -1,9 +1,9 @@
-package com.darjnest.kinecare.core.common.data.error
+package com.darjnest.kinecare.feature.payment.domain
 
 import com.darjnest.kinecare.core.common.result.Error
 
 /**
- * Errores de [com.darjnest.kinecare.core.common.data.repository.PagoRepository.iniciar].
+ * Errores de [com.darjnest.kinecare.feature.payment.data.repository.PagoRepository.iniciar].
  * Salvo [SIN_INTERNET] y [DESCONOCIDO], cada valor corresponde 1:1 a un
  * `details.motivo` de la Cloud Function `iniciarPago` (docs/DATA_MODEL.md).
  */

@@ -35,11 +35,12 @@ android {
 dependencies {
     implementation(project(":core:common"))
     implementation(project(":core:designsystem"))
-    // `PagoRepository`/`ProfesionalRepository` son interfaces de
-    // `:core:common`; sus implementaciones viven en `:core:network` y Hilt las
-    // agrega al grafo de `:app`. Esta dependencia (igual que en
-    // `:feature:booking`) es solo para inyectar `FirebaseAuth` y resolver el
-    // uid del profesional que vuelve de vincular su cuenta de Mercado Pago.
+    // `PagoRepositoryImpl` vive en esta feature (solo la usa `:feature:payment`)
+    // y usa de `:core:network` la interfaz Retrofit `CloudFunctionsApi`, sus
+    // DTOs y el helper `llamarCallable`. `ProfesionalRepository` es una
+    // interfaz de `:core:common` cuya implementacion vive en `:core:network`.
+    // Ademas se inyecta `FirebaseAuth` para resolver el uid del profesional que
+    // vuelve de vincular su cuenta de Mercado Pago.
     implementation(project(":core:network"))
 
     implementation(platform(libs.firebase.bom))
@@ -59,6 +60,8 @@ dependencies {
     // Custom Tabs: el pago y el OAuth de Mercado Pago se abren en el navegador
     // del sistema (nunca en un WebView), ver docs/ARCHITECTURE.md.
     implementation(libs.androidx.browser)
+    // `Response<CallableResponse<T>>` de `CloudFunctionsApi` (Retrofit).
+    implementation(libs.retrofit.core)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
 
@@ -71,6 +74,10 @@ dependencies {
     testImplementation(libs.mockk)
     testImplementation(libs.turbine)
     testImplementation(libs.kotlinx.coroutines.test)
+    // `PagoRepositoryImplTest`: `Task.await()` mockeado y cuerpos de error de
+    // Retrofit (`ResponseBody`).
+    testImplementation(libs.kotlinx.coroutines.play.services)
+    testImplementation(libs.okhttp.core)
 }
 
 tasks.withType<Test> {

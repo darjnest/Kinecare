@@ -1,9 +1,9 @@
-package com.darjnest.kinecare.core.common.data.error
+package com.darjnest.kinecare.feature.payment.domain
 
 import com.darjnest.kinecare.core.common.result.Error
 
 /**
- * Errores de [com.darjnest.kinecare.core.common.data.repository.PagoRepository.consultarEstado].
+ * Errores de [com.darjnest.kinecare.feature.payment.data.repository.PagoRepository.consultarEstado].
  * Salvo [SIN_INTERNET] y [DESCONOCIDO], 1:1 con los `details.motivo` de `estadoPago`.
  */
 enum class EstadoPagoError : Error {

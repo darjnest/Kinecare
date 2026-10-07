@@ -74,7 +74,10 @@ duplicada entre módulos.
 ### Deep links y Custom Tabs (Mercado Pago)
 - El pago y el OAuth del profesional se abren en **Custom Tabs**
   (`androidx.browser`), nunca en un WebView; la URL llega por un
-  `Flow<Event>` del `ViewModel` y no se registra en logs.
+  `Flow<Event>` del `ViewModel` y no se registra en logs. Solo se abre si es
+  `https` y su host es de Mercado Pago (`mercadopago.cl|com`,
+  `mercadolibre.cl|com` y subdominios; `esUrlDeMercadoPago` parsea la URL y
+  rechaza userinfo y otros hosts).
 - El retorno es un deep link `kinecare://pago/resultado?pagoId=`,
   `kinecare://mp/conectado` o `kinecare://mp/error?motivo=`.
   `MainActivity` es `singleTask` con sus `intent-filter`, y como Navigation
@@ -145,6 +148,11 @@ de Firebase (`firebase use qa` / `firebase use prod`) al proyecto correcto.
   nuevos sin plan Blaze. Subir a Blaze antes de la Fase 6.
 - Acceso a Firestore/Storage/Auth vía SDK directo; acceso a Cloud Functions
   HTTP vía Retrofit (`:core:network`).
+- **Llamadas a Cloud Functions `onCall`**: el helper público
+  `llamarCallable` (`:core:network`, `functions/CallableCall.kt`) agrega el ID
+  token, mapea `IOException`/`FirebaseNetworkException` a `SIN_INTERNET` y
+  parsea el cuerpo de error; lo usan `ReservaRepositoryImpl` y
+  `PagoRepositoryImpl` (cada uno traduce el error a su propio enum).
 - **Repositorios de Firestore compartidos por 2+ features**: interfaz en
   `:core:common` (`data/repository`, junto a su enum de error en
   `data/error`) + implementación con el SDK de Firebase en `:core:network`
@@ -158,7 +166,10 @@ de Firebase (`firebase use qa` / `firebase use prod`) al proyecto correcto.
   (ej. `UbicacionRepository` de `:feature:search`, que no toca Firestore, o
   `ReporteProblemaRepository` de `:feature:client-panel`, que sí: interfaz
   en `data/repository`, impl Firestore en `data/repository_impl` y binding
-  en el `di/` de la feature, igual que `AuthRepository`) se queda dentro de
+  en el `di/` de la feature, igual que `AuthRepository`; o `PagoRepository`
+  de `:feature:payment`, que habla con Cloud Functions: sus errores e
+  `IntentoPago` van en `domain/`, y de `:core:network` solo usa
+  `CloudFunctionsApi`, sus DTOs y el helper `llamarCallable`) se queda dentro de
   esa feature — no todo repositorio sube a `:core:*`,
   solo el que 2+ features necesitan de verdad (sin abstracciones para
   casos hipotéticos que no existen hoy).

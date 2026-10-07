@@ -2,10 +2,10 @@ package com.darjnest.kinecare.feature.payment.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.darjnest.kinecare.core.common.data.error.ConectarMercadoPagoError
-import com.darjnest.kinecare.core.common.data.repository.PagoRepository
+import com.darjnest.kinecare.feature.payment.domain.ConectarMercadoPagoError
+import com.darjnest.kinecare.feature.payment.data.repository.PagoRepository
 import com.darjnest.kinecare.core.common.result.Result
-import com.darjnest.kinecare.feature.payment.presentation.util.esUrlHttps
+import com.darjnest.kinecare.feature.payment.presentation.util.esUrlDeMercadoPago
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -74,7 +74,7 @@ class ConectarMercadoPagoViewModel @Inject constructor(
             when (val resultado = pagoRepository.obtenerUrlConexion()) {
                 is Result.Success -> {
                     val url = resultado.data
-                    if (esUrlHttps(url)) {
+                    if (esUrlDeMercadoPago(url)) {
                         _state.update { it.copy(cargando = false) }
                         _events.send(ConectarMercadoPagoEvent.AbrirAutorizacion(url))
                     } else {

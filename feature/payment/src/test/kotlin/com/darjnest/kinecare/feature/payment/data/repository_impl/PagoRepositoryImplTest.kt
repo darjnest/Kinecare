@@ -1,10 +1,10 @@
-package com.darjnest.kinecare.core.network.firebase.repository
+package com.darjnest.kinecare.feature.payment.data.repository_impl
 
-import com.darjnest.kinecare.core.common.data.error.ConectarMercadoPagoError
-import com.darjnest.kinecare.core.common.data.error.EstadoPagoError
-import com.darjnest.kinecare.core.common.data.error.IniciarPagoError
+import com.darjnest.kinecare.feature.payment.domain.ConectarMercadoPagoError
+import com.darjnest.kinecare.feature.payment.domain.EstadoPagoError
+import com.darjnest.kinecare.feature.payment.domain.IniciarPagoError
 import com.darjnest.kinecare.core.common.domain.model.EstadoPago
-import com.darjnest.kinecare.core.common.domain.model.IntentoPago
+import com.darjnest.kinecare.feature.payment.domain.IntentoPago
 import com.darjnest.kinecare.core.common.result.Result
 import com.darjnest.kinecare.core.network.functions.CloudFunctionsApi
 import com.darjnest.kinecare.core.network.functions.dto.CallableRequest
@@ -83,11 +83,11 @@ class PagoRepositoryImplTest {
         val autorizacion = slot<String>()
         val cuerpo = slot<CallableRequest<IniciarPagoRequestDto>>()
         coEvery { api.iniciarPago(capture(autorizacion), capture(cuerpo)) } returns
-            Response.success(CallableResponse(IniciarPagoResultadoDto("pago-1", "https://mp.test/checkout")))
+            Response.success(CallableResponse(IniciarPagoResultadoDto("pago-1", "https://www.mercadopago.cl/checkout/v1/redirect?pref_id=1")))
 
         val resultado = repository.iniciar("res-1")
 
-        assertEquals(Result.Success(IntentoPago("pago-1", "https://mp.test/checkout")), resultado)
+        assertEquals(Result.Success(IntentoPago("pago-1", "https://www.mercadopago.cl/checkout/v1/redirect?pref_id=1")), resultado)
         assertEquals("Bearer token-123", autorizacion.captured)
         assertEquals(IniciarPagoRequestDto("res-1"), cuerpo.captured.data)
     }

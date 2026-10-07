@@ -1,8 +1,8 @@
 package com.darjnest.kinecare.feature.payment.presentation.viewmodel
 
 import androidx.lifecycle.SavedStateHandle
-import com.darjnest.kinecare.core.common.data.error.EstadoPagoError
-import com.darjnest.kinecare.core.common.data.repository.PagoRepository
+import com.darjnest.kinecare.feature.payment.domain.EstadoPagoError
+import com.darjnest.kinecare.feature.payment.data.repository.PagoRepository
 import com.darjnest.kinecare.core.common.domain.model.EstadoPago
 import com.darjnest.kinecare.core.common.result.Result
 import com.darjnest.kinecare.feature.payment.presentation.navigation.ARG_PAGO_ID

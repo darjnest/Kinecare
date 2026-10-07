@@ -654,6 +654,7 @@ private fun TarjetaCitaEnCurso(
                 }
             }
 
+            IndicadorEstadoPago(cita.estadoPago, Modifier.padding(top = 8.dp))
             AccionReportarProblema(
                 estadoReporte = cita.estadoReporte,
                 onClick = { onAction(MisCitasAction.ReportarProblema(cita.id, cita.profesionalId)) },
@@ -813,7 +814,8 @@ private fun TarjetaCitaProxima(
 
 /**
  * Pago de una reserva `CONFIRMADA`: boton "Pagar con Mercado Pago" mientras el
- * pago esta `PENDIENTE` o `RECHAZADO`, o el indicador "Pagada"/"Reembolsada".
+ * pago esta `PENDIENTE` o `RECHAZADO` y la cita aun no comienza, o el
+ * indicador "Pagada"/"Reembolsada".
  * Una reserva aun `SOLICITADA` no muestra nada (todavia no corresponde pagar).
  */
 @Composable
@@ -834,17 +836,22 @@ private fun EstadoPagoCita(
                 onClick = { onAction(MisCitasAction.Pagar(cita.id, cita.tipoSesion, cita.precioTotal)) },
             )
         }
-    } else when (cita.estadoPago) {
-        EstadoPago.AUTORIZADO -> KineCareBadge(
-            texto = "Pagada",
-            tono = BadgeTono.EXITO,
-            modifier = Modifier.padding(top = KineCareSpacing.m),
-        )
-        EstadoPago.REEMBOLSADO -> KineCareBadge(
-            texto = "Reembolsada",
-            tono = BadgeTono.NEUTRO,
-            modifier = Modifier.padding(top = KineCareSpacing.m),
-        )
+    } else {
+        IndicadorEstadoPago(cita.estadoPago, Modifier.padding(top = KineCareSpacing.m))
+    }
+}
+
+/**
+ * Indicador "Pagada"/"Reembolsada" de una reserva; no muestra nada con el pago
+ * `PENDIENTE`/`RECHAZADO` ni sin estado. Se repite en las citas en curso,
+ * historial y canceladas para que el estado del pago no se pierda al avanzar
+ * la reserva.
+ */
+@Composable
+private fun IndicadorEstadoPago(estadoPago: EstadoPago?, modifier: Modifier = Modifier) {
+    when (estadoPago) {
+        EstadoPago.AUTORIZADO -> KineCareBadge(texto = "Pagada", tono = BadgeTono.EXITO, modifier = modifier)
+        EstadoPago.REEMBOLSADO -> KineCareBadge(texto = "Reembolsada", tono = BadgeTono.NEUTRO, modifier = modifier)
         else -> Unit
     }
 }
@@ -973,6 +980,7 @@ private fun TarjetaCitaHistorial(
                     color = TextoPrincipal,
                 )
             }
+            IndicadorEstadoPago(cita.estadoPago, Modifier.padding(top = 8.dp))
             AccionReportarProblema(
                 estadoReporte = cita.estadoReporte,
                 onClick = { onAction(MisCitasAction.ReportarProblema(cita.id, cita.profesionalId)) },
@@ -1014,6 +1022,7 @@ private fun TarjetaCitaCancelada(
                     modifier = Modifier.padding(top = 2.dp),
                 )
             }
+            IndicadorEstadoPago(cita.estadoPago, Modifier.padding(top = 8.dp))
             AccionReportarProblema(
                 estadoReporte = cita.estadoReporte,
                 onClick = { onAction(MisCitasAction.ReportarProblema(cita.id, cita.profesionalId)) },

@@ -1,8 +1,8 @@
 package com.darjnest.kinecare.feature.payment.presentation.util
 
-import com.darjnest.kinecare.core.common.data.error.ConectarMercadoPagoError
-import com.darjnest.kinecare.core.common.data.error.EstadoPagoError
-import com.darjnest.kinecare.core.common.data.error.IniciarPagoError
+import com.darjnest.kinecare.feature.payment.domain.ConectarMercadoPagoError
+import com.darjnest.kinecare.feature.payment.domain.EstadoPagoError
+import com.darjnest.kinecare.feature.payment.domain.IniciarPagoError
 
 private const val MENSAJE_SIN_INTERNET = "Sin conexión a internet. Revisa tu red e inténtalo de nuevo."
 

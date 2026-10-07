@@ -3,13 +3,13 @@ package com.darjnest.kinecare.feature.payment.presentation.viewmodel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.darjnest.kinecare.core.common.data.error.IniciarPagoError
-import com.darjnest.kinecare.core.common.data.repository.PagoRepository
+import com.darjnest.kinecare.feature.payment.domain.IniciarPagoError
+import com.darjnest.kinecare.feature.payment.data.repository.PagoRepository
 import com.darjnest.kinecare.core.common.result.Result
 import com.darjnest.kinecare.feature.payment.presentation.navigation.ARG_MONTO_CLP
 import com.darjnest.kinecare.feature.payment.presentation.navigation.ARG_RESERVA_ID
 import com.darjnest.kinecare.feature.payment.presentation.navigation.ARG_TITULO
-import com.darjnest.kinecare.feature.payment.presentation.util.esUrlHttps
+import com.darjnest.kinecare.feature.payment.presentation.util.esUrlDeMercadoPago
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -91,7 +91,7 @@ class PaymentViewModel @Inject constructor(
             when (val resultado = pagoRepository.iniciar(reservaId)) {
                 is Result.Success -> {
                     val url = resultado.data.urlPago
-                    if (esUrlHttps(url)) {
+                    if (esUrlDeMercadoPago(url)) {
                         _state.update { it.copy(cargando = false) }
                         _events.send(PaymentEvent.AbrirPago(url))
                     } else {

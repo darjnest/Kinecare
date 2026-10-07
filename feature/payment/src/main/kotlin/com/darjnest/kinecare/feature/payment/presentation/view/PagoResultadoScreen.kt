@@ -19,7 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.darjnest.kinecare.core.common.data.error.EstadoPagoError
+import com.darjnest.kinecare.feature.payment.domain.EstadoPagoError
 import com.darjnest.kinecare.core.designsystem.components.bar.KineCareTopBar
 import com.darjnest.kinecare.core.designsystem.components.button.KineCarePrimaryButton
 import com.darjnest.kinecare.core.designsystem.components.button.KineCareSecondaryButton

@@ -22,7 +22,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
-import com.darjnest.kinecare.core.common.data.error.IniciarPagoError
+import com.darjnest.kinecare.feature.payment.domain.IniciarPagoError
 import com.darjnest.kinecare.core.common.util.formatComoClp
 import com.darjnest.kinecare.core.designsystem.components.bar.KineCareTopBar
 import com.darjnest.kinecare.core.designsystem.components.button.KineCarePrimaryButton

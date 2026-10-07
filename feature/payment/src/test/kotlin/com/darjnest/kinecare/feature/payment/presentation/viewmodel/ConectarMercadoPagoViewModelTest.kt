@@ -1,8 +1,8 @@
 package com.darjnest.kinecare.feature.payment.presentation.viewmodel
 
 import app.cash.turbine.test
-import com.darjnest.kinecare.core.common.data.error.ConectarMercadoPagoError
-import com.darjnest.kinecare.core.common.data.repository.PagoRepository
+import com.darjnest.kinecare.feature.payment.domain.ConectarMercadoPagoError
+import com.darjnest.kinecare.feature.payment.data.repository.PagoRepository
 import com.darjnest.kinecare.core.common.result.Result
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -73,6 +73,19 @@ class ConectarMercadoPagoViewModelTest {
             assertEquals(error, viewModel.state.value.error, "error $error")
             assertFalse(viewModel.state.value.cargando, "error $error")
         }
+    }
+
+    @Test
+    fun `una URL https de otro host no se abre y se muestra como error`() = runTest {
+        coEvery { pagoRepository.obtenerUrlConexion() } returns Result.Success("https://mercadopago.cl.evil.com/authorization")
+        val viewModel = crearViewModel()
+
+        viewModel.events.test {
+            viewModel.onAction(ConectarMercadoPagoAction.Conectar)
+
+            expectNoEvents()
+        }
+        assertEquals(ConectarMercadoPagoError.DESCONOCIDO, viewModel.state.value.error)
     }
 
     @Test

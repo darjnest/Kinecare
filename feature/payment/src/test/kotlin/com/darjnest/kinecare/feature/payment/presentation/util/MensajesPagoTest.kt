@@ -1,8 +1,8 @@
 package com.darjnest.kinecare.feature.payment.presentation.util
 
-import com.darjnest.kinecare.core.common.data.error.ConectarMercadoPagoError
-import com.darjnest.kinecare.core.common.data.error.EstadoPagoError
-import com.darjnest.kinecare.core.common.data.error.IniciarPagoError
+import com.darjnest.kinecare.feature.payment.domain.ConectarMercadoPagoError
+import com.darjnest.kinecare.feature.payment.domain.EstadoPagoError
+import com.darjnest.kinecare.feature.payment.domain.IniciarPagoError
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
@@ -54,14 +54,5 @@ class MensajesPagoTest {
         assertEquals(mensajeMotivoVinculacion(null), mensajeMotivoVinculacion("cualquier-cosa"))
         assertNotEquals("", mensajeMotivoVinculacion(null))
         assertTrue(mensajeMotivoVinculacion(null).startsWith("No pudimos vincular"))
-    }
-
-    @Test
-    fun `solo se abren URLs https`() {
-        assertTrue(esUrlHttps("https://www.mercadopago.cl/checkout/v1/redirect?pref_id=1"))
-        assertFalse(esUrlHttps("http://www.mercadopago.cl"))
-        assertFalse(esUrlHttps("intent://scan/#Intent;scheme=zxing;end"))
-        assertFalse(esUrlHttps("kinecare://pago/resultado"))
-        assertFalse(esUrlHttps(""))
     }
 }

@@ -1,10 +1,10 @@
-package com.darjnest.kinecare.core.common.data.repository
+package com.darjnest.kinecare.feature.payment.data.repository
 
-import com.darjnest.kinecare.core.common.data.error.ConectarMercadoPagoError
-import com.darjnest.kinecare.core.common.data.error.EstadoPagoError
-import com.darjnest.kinecare.core.common.data.error.IniciarPagoError
+import com.darjnest.kinecare.feature.payment.domain.ConectarMercadoPagoError
+import com.darjnest.kinecare.feature.payment.domain.EstadoPagoError
+import com.darjnest.kinecare.feature.payment.domain.IniciarPagoError
 import com.darjnest.kinecare.core.common.domain.model.EstadoPago
-import com.darjnest.kinecare.core.common.domain.model.IntentoPago
+import com.darjnest.kinecare.feature.payment.domain.IntentoPago
 import com.darjnest.kinecare.core.common.result.Result
 
 /**

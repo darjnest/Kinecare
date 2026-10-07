@@ -28,6 +28,7 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import javax.inject.Inject
+import kotlin.time.Clock
 
 /** Pestana segmentada seleccionada en "Mis Citas". */
 enum class TabMisCitas { PROXIMAS, HISTORIAL, CANCELADAS }
@@ -53,6 +54,8 @@ data class CitaEnCurso(
     val ubicacionTexto: String,
     /** Estado del reporte de problema de esta reserva; `null` si no tiene (ver [CitaProxima.estadoReporte]). */
     val estadoReporte: EstadoReporte? = null,
+    /** Ver [CitaProxima.estadoPago]: la cita en curso conserva el indicador "Pagada"/"Reembolsada". */
+    val estadoPago: EstadoPago? = null,
 )
 
 /** Cita agendada en dias proximos, distinta de la cita de hoy. */
@@ -68,10 +71,17 @@ data class CitaProxima(
     /** `true` mientras el profesional no responde la solicitud (`SOLICITADA`); `false` si ya la confirmo. */
     val porConfirmar: Boolean = false,
     /**
-     * Estado del pago de la reserva, solo si el profesional ya la confirmo
-     * (`CONFIRMADA`); `null` mientras sigue `SOLICITADA`: aun no corresponde pagar.
+     * Estado del pago de la reserva; `null` mientras sigue `SOLICITADA`: aun
+     * no corresponde pagar. Desde que el profesional confirma se informa en
+     * todos los estados siguientes (`EN_CURSO`, `COMPLETADA`, canceladas), para
+     * que "Pagada"/"Reembolsada" no desaparezca de la pantalla.
      */
     val estadoPago: EstadoPago? = null,
+    /**
+     * `true` si la hora de la cita ya paso (`fechaHora` <= ahora al cargar):
+     * ya no se puede pagar, el backend responde `RESERVA_NO_PAGABLE`.
+     */
+    val yaComenzo: Boolean = false,
     /**
      * Estado del reporte de problema de esta reserva; `null` si no tiene o si
      * no se pudo comprobar (sin red): se ofrece "Reportar un problema" igual y
@@ -80,11 +90,13 @@ data class CitaProxima(
     val estadoReporte: EstadoReporte? = null,
 ) {
     /**
-     * Solo una reserva `CONFIRMADA` con el pago `PENDIENTE` o `RECHAZADO` se
-     * puede pagar (el backend lo vuelve a validar en `iniciarPago`).
+     * Solo una reserva `CONFIRMADA` (no `SOLICITADA`) que aun no comienza, con
+     * el pago `PENDIENTE` o `RECHAZADO`, se puede pagar (el backend lo vuelve
+     * a validar en `iniciarPago`).
      */
     val puedePagar: Boolean
-        get() = estadoPago == EstadoPago.PENDIENTE || estadoPago == EstadoPago.RECHAZADO
+        get() = !porConfirmar && !yaComenzo &&
+            (estadoPago == EstadoPago.PENDIENTE || estadoPago == EstadoPago.RECHAZADO)
 }
 
 /** Sesion completada, mostrada en "Historial Reciente & Reembolsos". */
@@ -105,6 +117,8 @@ data class CitaHistorial(
     val puedeResenar: Boolean = false,
     /** Ver [CitaProxima.estadoReporte]. */
     val estadoReporte: EstadoReporte? = null,
+    /** Ver [CitaProxima.estadoPago]: el historial conserva el indicador "Pagada"/"Reembolsada". */
+    val estadoPago: EstadoPago? = null,
 )
 
 /** Cita cancelada por el cliente o el profesional. */
@@ -116,6 +130,8 @@ data class CitaCancelada(
     val motivo: String?,
     /** Ver [CitaProxima.estadoReporte]. */
     val estadoReporte: EstadoReporte? = null,
+    /** Ver [CitaProxima.estadoPago]: una cita pagada y luego cancelada sigue mostrando "Pagada"/"Reembolsada". */
+    val estadoPago: EstadoPago? = null,
 )
 
 data class MisCitasState(
@@ -172,6 +188,10 @@ private fun Instant.aFechaTexto(): String {
 
 private fun Instant.aFechaHoraTexto(): String = "${aFechaTexto()} ${aHoraTexto()}"
 
+/** Estado del pago a mostrar: `null` mientras la reserva sigue `SOLICITADA` (aun no corresponde pagar). */
+private fun Reserva.estadoPagoVisible(): EstadoPago? =
+    if (estado == EstadoReserva.SOLICITADA) null else pago.estado
+
 /**
  * Mapea la `Reserva` real a la tarjeta hero de la cita en curso. Sin
  * seguimiento en tiempo real conectado todavia (`profesionalEnCaminoMinutos`)
@@ -202,12 +222,14 @@ private fun Reserva.aCitaEnCurso(
             listOf("${d.calle} ${d.numero}".trim(), d.comuna).filter { it.isNotBlank() }.joinToString(", ")
         } ?: modalidad.aTexto(),
         estadoReporte = reportes[id],
+        estadoPago = estadoPagoVisible(),
     )
 }
 
 private fun Reserva.aCitaProxima(
     profesionales: Map<String, Profesional>,
     reportes: Map<String, EstadoReporte>,
+    ahora: Instant,
 ): CitaProxima {
     val profesional = profesionales[profesionalId]
     val servicio = profesional?.servicios?.firstOrNull { it.id == servicioId }
@@ -222,7 +244,8 @@ private fun Reserva.aCitaProxima(
         tipoSesion = servicio?.nombre ?: "Sesión",
         precioTotal = pago.monto,
         porConfirmar = estado == EstadoReserva.SOLICITADA,
-        estadoPago = if (estado == EstadoReserva.CONFIRMADA) pago.estado else null,
+        estadoPago = estadoPagoVisible(),
+        yaComenzo = fechaHora <= ahora,
         estadoReporte = reportes[id],
     )
 }
@@ -249,6 +272,7 @@ internal fun Reserva.aCitaHistorial(
         calificacion = resena?.calificacion ?: 0,
         puedeResenar = resena == null,
         estadoReporte = estadoReporte,
+        estadoPago = estadoPagoVisible(),
     )
 }
 
@@ -269,6 +293,7 @@ private fun Reserva.aCitaCancelada(
             else -> null
         },
         estadoReporte = reportes[id],
+        estadoPago = estadoPagoVisible(),
     )
 }
 
@@ -279,6 +304,7 @@ class MisCitasViewModel @Inject constructor(
     private val resenaRepository: ResenaRepository,
     private val reporteProblemaRepository: ReporteProblemaRepository,
     private val firebaseAuth: FirebaseAuth,
+    private val clock: Clock,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(MisCitasState())
@@ -357,11 +383,12 @@ class MisCitasViewModel @Inject constructor(
             }
         }
 
+        val ahora = clock.now()
         val citaEnCurso = reservas.firstOrNull { it.estado == EstadoReserva.EN_CURSO }
             ?.aCitaEnCurso(profesionales, reportes)
         val proximasCitas = reservas
             .filter { it.estado == EstadoReserva.SOLICITADA || it.estado == EstadoReserva.CONFIRMADA }
-            .map { it.aCitaProxima(profesionales, reportes) }
+            .map { it.aCitaProxima(profesionales, reportes, ahora) }
         val historial = reservas
             .filter { it.estado == EstadoReserva.COMPLETADA }
             .map { it.aCitaHistorial(profesionales, resenas[it.id], reportes[it.id]) }

@@ -1,4 +1,4 @@
-package com.darjnest.kinecare.core.common.domain.model
+package com.darjnest.kinecare.feature.payment.domain
 
 /**
  * Intento de cobro creado por la Cloud Function `iniciarPago`: [pagoId] es el

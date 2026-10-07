@@ -2,9 +2,9 @@ package com.darjnest.kinecare.feature.payment.presentation.viewmodel
 
 import androidx.lifecycle.SavedStateHandle
 import app.cash.turbine.test
-import com.darjnest.kinecare.core.common.data.error.IniciarPagoError
-import com.darjnest.kinecare.core.common.data.repository.PagoRepository
-import com.darjnest.kinecare.core.common.domain.model.IntentoPago
+import com.darjnest.kinecare.feature.payment.domain.IniciarPagoError
+import com.darjnest.kinecare.feature.payment.data.repository.PagoRepository
+import com.darjnest.kinecare.feature.payment.domain.IntentoPago
 import com.darjnest.kinecare.core.common.result.Result
 import com.darjnest.kinecare.feature.payment.presentation.navigation.ARG_MONTO_CLP
 import com.darjnest.kinecare.feature.payment.presentation.navigation.ARG_RESERVA_ID
@@ -116,6 +116,20 @@ class PaymentViewModelTest {
             assertEquals(urlPago, (awaitItem() as PaymentEvent.AbrirPago).url)
         }
         assertNull(viewModel.state.value.error)
+    }
+
+    @Test
+    fun `una URL https de otro host no se abre y se muestra como error`() = runTest {
+        coEvery { pagoRepository.iniciar(reservaId) } returns
+            Result.Success(IntentoPago("pago-1", "https://evil.com/?x=mercadopago.cl"))
+        val viewModel = crearViewModel()
+
+        viewModel.events.test {
+            viewModel.onAction(PaymentAction.Pagar)
+
+            expectNoEvents()
+        }
+        assertEquals(IniciarPagoError.DESCONOCIDO, viewModel.state.value.error)
     }
 
     @Test

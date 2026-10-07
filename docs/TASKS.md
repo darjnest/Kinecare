@@ -383,7 +383,11 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       `Profesional.mercadoPagoConectado` nuevo en dominio y en
       `ProfesionalRepositoryImpl`. "Mis Citas" ofrece "Pagar con Mercado Pago"
       en reservas `CONFIRMADA` con pago `PENDIENTE`/`RECHAZADO` e indica
-      "Pagada"/"Reembolsada"; el panel profesional muestra "Cobros con
+      "Pagada"/"Reembolsada" (también en cita en curso, historial y canceladas;
+      no se puede pagar una cita cuya hora ya pasó). `PagoRepository` e
+      `IntentoPago` viven dentro de `:feature:payment` (no en `:core:*`; ver
+      ARCHITECTURE.md); las URLs de pago solo se abren si son `https` de
+      Mercado Pago; el panel profesional muestra "Cobros con
       Mercado Pago" (Conectada/No conectada). `:app`: `MainActivity` es
       `singleTask` con intent-filters `kinecare://pago` y `kinecare://mp`, y
       `KineCareNavHost` entrega `onNewIntent` a Navigation (la librería solo
