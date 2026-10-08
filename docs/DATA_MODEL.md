@@ -240,13 +240,12 @@ desplegadas**): además de auth (`clienteId == request.auth.uid`), reserva
 `delete` está denegado. Validadas contra el Firestore Emulator local (no
 contra el proyecto Firebase real).
 
-> **`profesionales.calificacionPromedio` y `totalResenas` NO los actualiza
-> nada hoy.** El cliente no puede escribirlos (las reglas de `profesionales`
-> se lo prohíben al dueño y crear una reseña no toca ese documento), así que seguirán en su valor sembrado aunque se creen reseñas.
-> Recalcularlos requiere una Cloud Function (trigger `onCreate` de
-> `resenas`), que exige plan Blaze — el mismo bloqueo que Firebase Storage.
-> Hasta entonces el promedio y el conteo mostrados en el perfil pueden no
-> coincidir con el listado real de reseñas.
+> **`profesionales.calificacionPromedio` y `totalResenas` los mantiene la
+> Cloud Function `recalcularCalificacion`** (ver [Cloud Functions](#cloud-functions)).
+> El cliente no puede escribirlos (las reglas de `profesionales` se lo
+> prohíben al dueño y crear una reseña no toca ese documento). **Hasta que la
+> función se despliegue** (hoy solo existe en el repo) siguen en su valor
+> sembrado y pueden no coincidir con el listado real de reseñas.
 
 ### `reportesProblema/{reporteId}`
 ```
@@ -418,6 +417,37 @@ Pruebas: `test/unit/responderReserva.test.ts` (validación del payload) y
 Firestore Emulator: camino feliz, cada `motivo`, reserva ajena, concurrencia).
 Desplegada con `firebase deploy --only functions:responderReserva -P qa`;
 verificado que sin sesión responde 401 `SIN_SESION`.
+
+### `recalcularCalificacion` (trigger Firestore) — **sin desplegar**
+`onDocumentWritten` sobre `resenas/{resenaId}` (`us-central1`, `retry: true`).
+Mantiene `profesionales/{profesionalId}.calificacionPromedio` y
+`totalResenas`, que las reglas no dejan escribir al cliente.
+
+- **Recalcula, no incrementa:** cuenta y promedia las reseñas del profesional
+  con agregaciones de Firestore (`count` + `average` sobre `calificacion`,
+  filtro de igualdad por `profesionalId`, sin índice compuesto). Es idempotente:
+  un evento repetido, reintentado o desordenado converge al mismo valor, y
+  corrige también los valores sembrados a mano (al llegar la primera reseña de
+  un perfil de muestra, su `4.9 / 120` pasa a reflejar solo las reseñas reales).
+- **Una transacción** hace la agregación y la escritura: dos reseñas
+  simultáneas se serializan y nunca gana un promedio calculado con datos más
+  viejos.
+- **Qué eventos recalculan:** crear o borrar una reseña (borrar solo lo hace
+  soporte desde la consola; las reglas lo deniegan al cliente) y editar su
+  `calificacion`. Responder (`respuestaProfesional`) no recalcula ni escribe:
+  es el caso más frecuente tras crear una reseña. Si el `profesionalId` cambia,
+  se recalculan los dos.
+- Promedio redondeado a 2 decimales; `0` / `0` sin reseñas. Solo escribe si el
+  valor cambió. Un perfil inexistente (reseña huérfana) se omite sin error ni
+  reintento. Nunca crea documentos.
+- Tests: 11 unitarios (`calificacion.test.ts`) y 11 de integración contra el
+  Firestore Emulator (`calificacion.integration.test.ts`, incluida una carrera
+  de 8 eventos simultáneos); además probado de punta a punta con el emulador de
+  Functions (reseña escrita → perfil actualizado; responder no lo toca; borrar
+  lo baja).
+- **Por desplegar:** `firebase deploy --only functions:recalcularCalificacion -P qa`.
+  Es la primera función disparada por eventos del proyecto: el primer despliegue
+  puede pedir habilitar APIs de Eventarc/Pub/Sub. Producción sigue en Spark.
 
 ### Pagos con Mercado Pago (Marketplace + Checkout Pro) — **sin desplegar**
 Modelo: cada profesional vincula su cuenta de Mercado Pago por OAuth; el cliente

@@ -257,15 +257,35 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       35 tests en `:feature:reviews` + los de los módulos tocados.
       **Fuera de alcance:** responder reseñas (el bloque de respuesta solo
       se muestra), editar/borrar reseñas, paginación de más de 100.
-      **Limitación conocida:** `profesionales.calificacionPromedio`/
-      `totalResenas` no se actualizan al crear una reseña (recalcular
-      requiere una Cloud Function → plan Blaze, mismo bloqueo que Storage):
-      el encabezado del perfil público y "Mi perfil profesional" siguen
-      mostrando los valores guardados, que pueden no coincidir con el
-      listado. **No verificado visualmente** (sin emulador/dispositivo
+      **Limitación conocida (resuelta en el repo, falta desplegar — ver el
+      ítem siguiente):** `profesionales.calificacionPromedio`/
+      `totalResenas` no se actualizan al crear una reseña: el encabezado del
+      perfil público y "Mi perfil profesional" muestran los valores guardados,
+      que pueden no coincidir con el listado. **No verificado visualmente** (sin emulador/dispositivo
       disponible en el cambio); compila y pasa `:app:assembleDebug`. Hoy la
       colección `reservas` está vacía en la práctica (la reserva es Fase 4),
       así que "Dejar reseña" no aparece con datos reales todavía.
+- [x] Cloud Function `recalcularCalificacion` (trigger `onDocumentWritten` de
+      `resenas/{id}`, `functions/src/calificacion.ts`): mantiene
+      `profesionales.calificacionPromedio`/`totalResenas`, que el cliente no
+      puede escribir. Recalcula desde las reseñas con agregaciones
+      (idempotente, tolera eventos repetidos o desordenados) dentro de una
+      transacción, no recalcula al responder una reseña ni escribe si el valor
+      no cambió, y omite perfiles inexistentes. Detalle y decisiones en
+      [DATA_MODEL.md](DATA_MODEL.md#cloud-functions). 22 tests nuevos (11
+      unitarios + 11 de integración contra el emulador, total 186 con
+      `npm run test:emulator`) y probada de punta a punta con el emulador de
+      Functions. **Sin cambios en Android:** el listado de reseñas ya calcula
+      su resumen localmente y las pantallas que leen los campos guardados se
+      corrigen solas.
+- [ ] Desplegar `recalcularCalificacion` en QA
+      (`firebase deploy --only functions:recalcularCalificacion -P qa`; es la
+      primera función disparada por eventos, puede pedir habilitar APIs de
+      Eventarc/Pub/Sub). QA no tiene reseñas hoy, así que no hace falta
+      backfill; al llegar la primera reseña de un perfil de muestra, su
+      calificación sembrada pasa a reflejar solo las reseñas reales. Al
+      desplegar, verificar creando una reseña (flujo de punta a punta que
+      además cubre "Dejar reseña" de Fase 4). Producción sigue en Spark.
 
 ## Fase 4 — Flujo de reserva 🔧 *(en progreso)*
 - [x] `:feature:booking`: 4 pasos (modalidad → fecha/hora → dirección →
