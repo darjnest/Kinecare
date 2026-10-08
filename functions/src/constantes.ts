@@ -36,6 +36,10 @@ export const MAX_LARGO_ID = 128;
 /** Coleccion de documentos-candado por profesional (ver crearReserva.ts). */
 export const COLECCION_BLOQUEOS_AGENDA = "bloqueosAgenda";
 
+/** Colecciones que lee/escribe el recalculo de calificación (ver calificacion.ts). */
+export const COLECCION_PROFESIONALES = "profesionales";
+export const COLECCION_RESENAS = "resenas";
+
 /** Colecciones del flujo de pago (ver DATA_MODEL.md). Todas se escriben solo con Admin SDK. */
 export const COLECCION_PAGOS = "pagos";
 export const COLECCION_CUENTAS_MP = "cuentasMercadoPago";

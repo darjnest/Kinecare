@@ -1,7 +1,9 @@
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { defineSecret, defineString } from "firebase-functions/params";
+import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { onCall, onRequest } from "firebase-functions/v2/https";
+import { calificacionTriggerHandler } from "./calificacion.js";
 import { conectarMercadoPagoHandler, oauthCallbackHandler, type RespuestaHttp } from "./conectarMercadoPago.js";
 import { crearReservaHandler } from "./crearReserva.js";
 import { iniciarPagoHandler, type DepsPago } from "./iniciarPago.js";
@@ -19,6 +21,16 @@ export const crearReserva = onCall({ region: "us-central1" }, (request) =>
 
 export const responderReserva = onCall({ region: "us-central1" }, (request) =>
   responderReservaHandler(getFirestore(), request.auth?.uid, request.data, new Date()),
+);
+
+// Mantiene `profesionales.calificacionPromedio`/`totalResenas` al día cuando cambia una reseña (el
+// cliente no puede escribirlos: lo prohíben las reglas). `retry`: el recálculo es idempotente, asi
+// que reintentar ante una falla transitoria es seguro; un perfil inexistente no lanza.
+export const recalcularCalificacion = onDocumentWritten(
+  { document: "resenas/{resenaId}", region: "us-central1", retry: true },
+  async (event) => {
+    await calificacionTriggerHandler(getFirestore(), event.data?.before.data(), event.data?.after.data());
+  },
 );
 
 // ── Mercado Pago (Marketplace + Checkout Pro) ────────────────────────────────────────────────

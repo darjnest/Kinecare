@@ -49,6 +49,14 @@
         { "fieldPath": "profesionalId", "order": "ASCENDING" },
         { "fieldPath": "fecha", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "resenas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "profesionalId", "order": "ASCENDING" },
+        { "fieldPath": "calificacion", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [
