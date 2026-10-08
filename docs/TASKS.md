@@ -286,16 +286,19 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       hace falta backfill; al llegar la primera reseña de un perfil de muestra,
       su calificación sembrada pasa a reflejar solo las reseñas reales.
       Producción sigue en Spark.
-- [ ] **Desplegar el índice `resenas(profesionalId, calificacion)` en QA**
-      (`firebase deploy --only firestore:indexes -P qa`) y verificar
-      `recalcularCalificacion`. La prueba en QA del 2026-10-08 (perfil
-      `profesionales/zz-prueba-calif` y reseña `resenas/zz-prueba-r1`, ambos
-      temporales y **por borrar**) mostró que la función falla sin ese
-      índice: el emulador no exige índices, así que los tests no lo vieron. El
-      índice ya está en `firestore.indexes.json` con un test que lo protege.
-      Con `retry: true` el evento pendiente se completa solo al existir el
-      índice. Después: crear una reseña desde la app tras completar una
-      reserva y ver el perfil actualizado (cubre también "Dejar reseña").
+- [x] Índice `resenas(profesionalId, calificacion)` **desplegado en QA** y
+      `recalcularCalificacion` **verificada en QA** (2026-10-08, con
+      documentos temporales ya borrados): crear, segunda reseña, responder (no
+      recalcula), borrar y `0 / 0` sin reseñas, todo como se diseñó. La función
+      fallaba sin ese índice y el emulador no lo detectó (ver DATA_MODEL.md);
+      `firestore.indexes.json` lo declara y un test impide borrarlo.
+      Tardó ~9 min en construirse; mientras tanto el evento se reintentó y se
+      completó solo. Quedan en QA 1 índice viejo (`especialidades`, sin usar)
+      que el deploy no borra sin `--force`.
+- [ ] Probar `recalcularCalificacion` con una reseña real desde la app (tras
+      completar una reserva): cubre también "Dejar reseña" de Fase 4. La
+      verificación de arriba escribió los documentos directo en Firestore, no
+      pasó por la app ni por las reglas.
 
 ## Fase 4 — Flujo de reserva 🔧 *(en progreso)*
 - [x] `:feature:booking`: 4 pasos (modalidad → fecha/hora → dirección →

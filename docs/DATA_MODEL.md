@@ -458,13 +458,19 @@ Mantiene `profesionales/{profesionalId}.calificacionPromedio` y
   segundo funcionó. El trigger se resuelve en `nam5` con la función en
   `us-central1`. Requiere `functions/.env.qa` con `MP_APP_ID` (ver
   `.env.example`) porque el CLI carga todos los parámetros del código.
-  **Prueba en QA (2026-10-08):** el trigger se disparó con una reseña de
-  prueba, pero falló con `FAILED_PRECONDITION: The query requires an index`
-  (falta `resenas(profesionalId, calificacion)`); el emulador no exige índices y
-  no lo detectó. Con `retry: true` el evento se sigue reintentando y se completa
-  solo cuando el índice existe. El índice ya está en `firestore.indexes.json`,
-  **falta desplegarlo** (`firebase deploy --only firestore:indexes -P qa`).
-  Producción sigue en Spark.
+  **Verificada en QA (2026-10-08)** con un perfil y reseñas temporales
+  (borrados después): al crear la primera reseña un perfil sembrado en
+  `4.9 / 120` pasó a `5 / 1`; una segunda reseña de 2 estrellas dio `3.5 / 2`
+  (~1 s después); responder una reseña no recalculó ni escribió; borrar una
+  bajó el conteo; sin reseñas queda `0 / 0`. La primera prueba falló con
+  `FAILED_PRECONDITION: The query requires an index` (falta
+  `resenas(profesionalId, calificacion)`): el emulador no exige índices y no lo
+  detectó. Con `retry: true` el evento fallido se reintentó y se completó solo
+  cuando el índice llegó a `READY` (tardó ~9 min en construirse aunque la
+  colección estaba vacía); desplegado con
+  `firebase deploy --only firestore:indexes -P qa`. Firestore guarda el
+  promedio como entero cuando es exacto (`5`, no `5.0`); la app lo lee con
+  `getDouble`, que lo acepta. Producción sigue en Spark.
 
 ### Pagos con Mercado Pago (Marketplace + Checkout Pro) — **sin desplegar**
 Modelo: cada profesional vincula su cuenta de Mercado Pago por OAuth; el cliente
