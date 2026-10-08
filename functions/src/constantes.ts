@@ -56,3 +56,14 @@ export const REFRESCO_ANTICIPADO_MINUTOS = 5;
 
 /** Esquema de deep link con el que Android recupera el control tras salir a Mercado Pago. */
 export const ESQUEMA_APP = "kinecare";
+
+/** Verificacion de identidad (ver DATA_MODEL.md). Se escribe solo con Admin SDK. */
+export const COLECCION_SOLICITUDES_VERIFICACION = "solicitudesVerificacion";
+export const COLECCION_USUARIOS = "usuarios";
+export const PROVEEDOR_VERIFICACION = "Didit";
+
+/** Ventana maxima entre `X-Timestamp` del webhook de Didit y el reloj del servidor. */
+export const TOLERANCIA_FIRMA_DIDIT_SEGUNDOS = 300;
+
+/** Tope de solicitudes que se leen por profesional al buscar la mas reciente (se ordena en memoria). */
+export const MAX_SOLICITUDES_POR_PROFESIONAL = 100;

@@ -20,7 +20,15 @@ export type Motivo =
   | "PAGO_NO_ENCONTRADO"
   | "PROFESIONAL_SIN_CUENTA_MP"
   | "MONTO_INVALIDO"
-  | "PASARELA_NO_DISPONIBLE";
+  | "PASARELA_NO_DISPONIBLE"
+  // verificacion de identidad
+  | "NO_ES_PROFESIONAL"
+  | "TIPO_NO_SOPORTADO"
+  | "PERFIL_NO_ENCONTRADO"
+  | "YA_VERIFICADO"
+  | "PROVEEDOR_NO_CONFIGURADO"
+  | "PROVEEDOR_NO_DISPONIBLE"
+  | "SOLICITUD_NO_ENCONTRADA";
 
 /** Crea el HttpsError con `details: { motivo }`, el contrato con el cliente. */
 export function errorDeNegocio(code: FunctionsErrorCode, motivo: Motivo, message: string): HttpsError {
