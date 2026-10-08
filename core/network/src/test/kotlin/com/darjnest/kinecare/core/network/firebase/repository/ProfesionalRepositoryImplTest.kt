@@ -389,6 +389,48 @@ class ProfesionalRepositoryImplTest {
         assertEquals(ProfesionalError.DESCONOCIDO, (resultado as Result.Error).error)
     }
 
+    @Test
+    fun `actualizarTiposAtencion escribe los nombres en orden del enum`() = runTest {
+        val profesionales = mockk<CollectionReference>()
+        val docRef = mockk<DocumentReference>()
+        every { firestore.collection(COLECCION_PROFESIONALES) } returns profesionales
+        every { profesionales.document("prof-1") } returns docRef
+        val task = mockk<Task<Void>>()
+        coEvery { task.await() } returns mockk()
+        every { docRef.update("tiposAtencion", listOf("KINESIOLOGIA", "MASOTERAPIA")) } returns task
+
+        val resultado = repository.actualizarTiposAtencion(
+            "prof-1",
+            linkedSetOf(TipoAtencion.MASOTERAPIA, TipoAtencion.KINESIOLOGIA),
+        )
+
+        assertTrue(resultado is Result.Success)
+        verify { docRef.update("tiposAtencion", listOf("KINESIOLOGIA", "MASOTERAPIA")) }
+    }
+
+    @Test
+    fun `actualizarTiposAtencion rechaza un conjunto vacio sin tocar Firestore`() = runTest {
+        val resultado = repository.actualizarTiposAtencion("prof-1", emptySet())
+
+        assertEquals(ProfesionalError.DESCONOCIDO, (resultado as Result.Error).error)
+        verify(exactly = 0) { firestore.collection(any()) }
+    }
+
+    @Test
+    fun `actualizarTiposAtencion retorna SIN_INTERNET ante FirebaseNetworkException`() = runTest {
+        val profesionales = mockk<CollectionReference>()
+        val docRef = mockk<DocumentReference>()
+        every { firestore.collection(COLECCION_PROFESIONALES) } returns profesionales
+        every { profesionales.document("prof-1") } returns docRef
+        val task = mockk<Task<Void>>()
+        coEvery { task.await() } throws FirebaseNetworkException("sin red")
+        every { docRef.update("tiposAtencion", any<List<String>>()) } returns task
+
+        val resultado = repository.actualizarTiposAtencion("prof-1", setOf(TipoAtencion.KINESIOLOGIA))
+
+        assertEquals(ProfesionalError.SIN_INTERNET, (resultado as Result.Error).error)
+    }
+
     /**
      * Encadena los mocks de Firestore que recorre
      * `ProfesionalRepositoryImpl.buscarPorTipoAtencion`: la query sobre
