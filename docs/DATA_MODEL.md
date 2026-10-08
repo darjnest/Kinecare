@@ -501,6 +501,15 @@ Reglas de detalle:
 /profesionales/{usuarioId}/credenciales/{archivo}     // acceso restringido, solo backend/proveedor
 ```
 
+Reglas en `storage.rules` (referenciadas desde `firebase.json`; validadas con
+`firebase_validate_security_rules`, **todavía sin desplegar**: el bucket de QA
+no está creado, ver [TASKS.md](TASKS.md)). `foto-perfil.jpg`: lectura pública
+(se ve en el perfil público), `create`/`update` solo del dueño, solo
+`image/jpeg` y < 5 MB, sin `delete`. `credenciales/**`: nada desde la app
+(lo maneja el backend/proveedor con Admin SDK, que ignora las reglas). Todo lo
+demás, denegado. No hay ruta definida para la foto del Cliente
+(`usuarios/{uid}.fotoUrl`): falta decidirla antes de activar "Cambiar foto".
+
 ## Entidades Room (`:core:database`, solo caché offline)
 
 ### `BusquedaCacheEntity`

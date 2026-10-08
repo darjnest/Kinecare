@@ -84,7 +84,14 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       nuevos con plan Spark (Google lo restringió a Blaze). **QA
       (`kinecare-cl-qa`) ya está en Blaze**, así que se puede inicializar
       ahí; producción (`kinecare-cl`) sigue en Spark. Necesario antes de la
-      Fase 6 (fotos de perfil, credenciales de verificación)
+      Fase 6 (fotos de perfil, credenciales de verificación). **Hecho en el
+      repo:** `storage.rules` (foto de perfil pública y solo del dueño, JPEG
+      < 5 MB; credenciales cerradas a la app; resto denegado) y el bloque
+      `storage` de `firebase.json`; reglas validadas, **sin desplegar**.
+      **Falta, a mano:** crear el bucket de QA desde la consola de Firebase y
+      correr `firebase deploy --only storage -P qa`; después conectar
+      "Cambiar foto" (Cliente y Profesional) y decidir la ruta de la foto del
+      Cliente.
 - [x] Cliente: al iniciar sesión o registrarse (rol `CLIENTE`), el `NavHost`
       de `:app` navega automáticamente a `SearchRoute` y saca `AuthRoute`
       del back stack (`KineCareNavHost.kt`, callback
