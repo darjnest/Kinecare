@@ -6,6 +6,7 @@ import com.darjnest.kinecare.core.common.data.error.ProfesionalError
 import com.darjnest.kinecare.core.common.data.error.UsuarioError
 import com.darjnest.kinecare.core.common.data.repository.UsuarioRepository
 import com.darjnest.kinecare.core.common.domain.model.Disponibilidad
+import com.darjnest.kinecare.core.common.domain.model.Profesional
 import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.domain.model.TipoAtencion
 import com.darjnest.kinecare.core.common.domain.model.Usuario
@@ -112,6 +113,7 @@ class ProfesionalRepositoryImplTest {
                 "totalResenas" to 32L,
                 "descripcion" to "Kinesiologo deportivo",
                 "estadoVerificacionGeneral" to "APROBADO",
+                "mercadoPagoConectado" to true,
             ),
         )
 
@@ -135,6 +137,7 @@ class ProfesionalRepositoryImplTest {
         assertEquals(1, profesional.insignias.size)
         assertEquals(4.8, profesional.calificacionPromedio)
         assertEquals(32, profesional.totalResenas)
+        assertTrue(profesional.mercadoPagoConectado)
     }
 
     @Test
@@ -299,6 +302,17 @@ class ProfesionalRepositoryImplTest {
 
         assertTrue(resultado is Result.Success)
         assertEquals("Ana Soto", (resultado as Result.Success).data.usuario.nombre)
+    }
+
+    @Test
+    fun `obtenerPorId lee mercadoPagoConectado y lo deja en false si el campo falta`() = runTest {
+        coEvery { usuarioRepository.obtenerPorId("prof-1") } returns Result.Success(usuario)
+        coEvery { usuarioRepository.obtenerPorId("prof-2") } returns Result.Success(usuario.copy(id = "prof-2"))
+        val conectado = obtenerPorIdConDocumento("prof-1", mapOf("mercadoPagoConectado" to true))
+        val sinCampo = obtenerPorIdConDocumento("prof-2", mapOf("rnpi" to "RNPI-1"))
+
+        assertTrue((conectado as Result.Success).data.mercadoPagoConectado)
+        assertEquals(false, (sinCampo as Result.Success).data.mercadoPagoConectado)
     }
 
     @Test
@@ -472,6 +486,26 @@ class ProfesionalRepositoryImplTest {
             every { serviciosCollection.get() } returns serviciosTask
         }
         return profesionalesCollection
+    }
+
+    /** `obtenerPorId` sobre un documento `profesionales/{id}` con [data] y sin servicios. */
+    private suspend fun obtenerPorIdConDocumento(id: String, data: Map<String, Any?>): Result<Profesional, ProfesionalError> {
+        val doc = mockDocumentSnapshot(id = id, data = data)
+        val docRef = mockk<DocumentReference>()
+        val profesionalesCollection = mockk<CollectionReference>()
+        every { firestore.collection(COLECCION_PROFESIONALES) } returns profesionalesCollection
+        every { profesionalesCollection.document(id) } returns docRef
+        val docTask = mockk<Task<DocumentSnapshot>>()
+        coEvery { docTask.await() } returns doc
+        every { docRef.get() } returns docTask
+        val serviciosCollection = mockk<CollectionReference>()
+        every { docRef.collection(SUBCOLECCION_SERVICIOS) } returns serviciosCollection
+        val serviciosTask = mockk<Task<QuerySnapshot>>()
+        val serviciosSnapshot = mockk<QuerySnapshot>()
+        every { serviciosSnapshot.documents } returns emptyList()
+        coEvery { serviciosTask.await() } returns serviciosSnapshot
+        every { serviciosCollection.get() } returns serviciosTask
+        return repository.obtenerPorId(id)
     }
 
     /** Mockea un `DocumentSnapshot` cuyos getters leen de un `Map` plano, en vez de repetir `every { }` por campo en cada test. */

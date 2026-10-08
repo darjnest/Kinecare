@@ -2,8 +2,14 @@ package com.darjnest.kinecare.core.network.functions
 
 import com.darjnest.kinecare.core.network.functions.dto.CallableRequest
 import com.darjnest.kinecare.core.network.functions.dto.CallableResponse
+import com.darjnest.kinecare.core.network.functions.dto.ConectarMercadoPagoRequestDto
+import com.darjnest.kinecare.core.network.functions.dto.ConectarMercadoPagoResultadoDto
 import com.darjnest.kinecare.core.network.functions.dto.CrearReservaRequestDto
 import com.darjnest.kinecare.core.network.functions.dto.CrearReservaResultadoDto
+import com.darjnest.kinecare.core.network.functions.dto.EstadoPagoRequestDto
+import com.darjnest.kinecare.core.network.functions.dto.EstadoPagoResultadoDto
+import com.darjnest.kinecare.core.network.functions.dto.IniciarPagoRequestDto
+import com.darjnest.kinecare.core.network.functions.dto.IniciarPagoResultadoDto
 import com.darjnest.kinecare.core.network.functions.dto.ResponderReservaRequestDto
 import com.darjnest.kinecare.core.network.functions.dto.ResponderReservaResultadoDto
 import retrofit2.Response
@@ -32,4 +38,22 @@ interface CloudFunctionsApi {
         @Header("Authorization") autorizacion: String,
         @Body cuerpo: CallableRequest<ResponderReservaRequestDto>,
     ): Response<CallableResponse<ResponderReservaResultadoDto>>
+
+    @POST("iniciarPago")
+    suspend fun iniciarPago(
+        @Header("Authorization") autorizacion: String,
+        @Body cuerpo: CallableRequest<IniciarPagoRequestDto>,
+    ): Response<CallableResponse<IniciarPagoResultadoDto>>
+
+    @POST("estadoPago")
+    suspend fun estadoPago(
+        @Header("Authorization") autorizacion: String,
+        @Body cuerpo: CallableRequest<EstadoPagoRequestDto>,
+    ): Response<CallableResponse<EstadoPagoResultadoDto>>
+
+    @POST("conectarMercadoPago")
+    suspend fun conectarMercadoPago(
+        @Header("Authorization") autorizacion: String,
+        @Body cuerpo: CallableRequest<ConectarMercadoPagoRequestDto>,
+    ): Response<CallableResponse<ConectarMercadoPagoResultadoDto>>
 }

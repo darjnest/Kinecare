@@ -57,7 +57,12 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.darjnest.kinecare.core.designsystem.components.label.BadgeTono
+import com.darjnest.kinecare.core.designsystem.components.label.KineCareBadge
+import com.darjnest.kinecare.core.designsystem.theme.KineCareSpacing
 import com.darjnest.kinecare.core.designsystem.theme.AzulPetroleo30
 import com.darjnest.kinecare.core.designsystem.theme.Gris30
 import com.darjnest.kinecare.core.designsystem.theme.InicioDorado
@@ -88,18 +93,27 @@ fun ProfessionalPanelRoot(
     onAbrirAccesoGestion: (String) -> Unit = {},
     onAbrirSolicitudes: () -> Unit = {},
     onAbrirMiPerfil: () -> Unit = {},
+    onConectarMercadoPago: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+
+    // Al volver de vincular Mercado Pago el ViewModel sigue vivo con el estado
+    // viejo: releer. Ignora la lectura si la inicial sigue en curso.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        viewModel.onAction(ProfessionalPanelAction.ActualizarCobros)
+    }
+
     ProfessionalPanelScreen(
         state = state,
         onAction = { accion ->
             // La navegacion entre pantallas del panel no es responsabilidad
             // del ViewModel: el Root la resuelve directo contra el NavGraph
             // (ver ProfessionalPanelNavGraph) e intercepta solo esta accion.
-            if (accion is ProfessionalPanelAction.SeleccionarAccesoGestion) {
-                onAbrirAccesoGestion(accion.accesoId)
-            } else {
-                viewModel.onAction(accion)
+            when (accion) {
+                is ProfessionalPanelAction.SeleccionarAccesoGestion -> onAbrirAccesoGestion(accion.accesoId)
+                // Vincular Mercado Pago vive en `:feature:payment`: callback resuelto desde `:app`.
+                ProfessionalPanelAction.ConectarMercadoPago -> onConectarMercadoPago()
+                else -> viewModel.onAction(accion)
             }
         },
         onAbrirSolicitudes = onAbrirSolicitudes,
@@ -166,6 +180,12 @@ fun ProfessionalPanelScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
                 GrillaAccesosGestion(accesos = state.accesosGestion, onAction = onAction)
+
+                Spacer(modifier = Modifier.height(16.dp))
+                TarjetaCobrosMercadoPago(
+                    conectada = state.mercadoPagoConectado,
+                    onClick = { onAction(ProfessionalPanelAction.ConectarMercadoPago) },
+                )
 
                 Spacer(modifier = Modifier.height(16.dp))
                 TarjetaConfiguracionCuenta(onClick = { onAction(ProfessionalPanelAction.AbrirConfiguracionCuenta) })
@@ -779,6 +799,83 @@ private fun TarjetaAccesoGestion(
     }
 }
 
+/**
+ * "Cobros con Mercado Pago": estado de la vinculacion de la cuenta del
+ * profesional ([conectada] `null` = no se pudo comprobar, no se afirma nada) y
+ * acceso a la pantalla para vincularla (o volver a vincularla).
+ */
+@Composable
+private fun TarjetaCobrosMercadoPago(conectada: Boolean?, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(KineCareSpacing.l),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(KineCareSpacing.iconoTactil)
+                    .clip(CircleShape)
+                    .background(LoginMenta),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Filled.AccountBalanceWallet,
+                    contentDescription = null,
+                    tint = LoginPrimarioOscuro,
+                    modifier = Modifier.size(KineCareSpacing.icono),
+                )
+            }
+            Spacer(modifier = Modifier.width(KineCareSpacing.m))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Cobros con Mercado Pago",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = TextoPrincipal,
+                )
+                Text(
+                    text = if (conectada == true) {
+                        "Recibes los pagos directo en tu cuenta"
+                    } else {
+                        "Vincula tu cuenta para recibir pagos de tus clientes"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = LoginGrisTexto,
+                    modifier = Modifier.padding(top = KineCareSpacing.xs),
+                )
+                when (conectada) {
+                    true -> KineCareBadge(
+                        texto = "Conectada",
+                        tono = BadgeTono.EXITO,
+                        modifier = Modifier.padding(top = KineCareSpacing.s),
+                    )
+                    false -> KineCareBadge(
+                        texto = "No conectada",
+                        tono = BadgeTono.NEUTRO,
+                        modifier = Modifier.padding(top = KineCareSpacing.s),
+                    )
+                    null -> Unit
+                }
+            }
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowForwardIos,
+                contentDescription = null,
+                tint = LoginGrisTexto,
+                modifier = Modifier.size(KineCareSpacing.icono),
+            )
+        }
+    }
+}
+
 @Composable
 private fun TarjetaConfiguracionCuenta(onClick: () -> Unit) {
     Card(
@@ -881,5 +978,13 @@ private fun formatearClp(monto: Long): String {
 private fun ProfessionalPanelScreenPreview() {
     KineCareTheme {
         ProfessionalPanelScreen(state = ProfessionalPanelState())
+    }
+}
+
+@Preview(showBackground = true, heightDp = 1600)
+@Composable
+private fun ProfessionalPanelScreenCobrosConectadosPreview() {
+    KineCareTheme {
+        ProfessionalPanelScreen(state = ProfessionalPanelState(mercadoPagoConectado = true))
     }
 }

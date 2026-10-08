@@ -35,3 +35,20 @@ export const MAX_LARGO_ID = 128;
 
 /** Coleccion de documentos-candado por profesional (ver crearReserva.ts). */
 export const COLECCION_BLOQUEOS_AGENDA = "bloqueosAgenda";
+
+/** Colecciones del flujo de pago (ver DATA_MODEL.md). Todas se escriben solo con Admin SDK. */
+export const COLECCION_PAGOS = "pagos";
+export const COLECCION_CUENTAS_MP = "cuentasMercadoPago";
+export const COLECCION_ESTADOS_OAUTH = "oauthEstados";
+
+/** Moneda de todos los cobros (Mercado Pago Chile). El CLP no tiene decimales. */
+export const MONEDA = "CLP";
+
+/** Vigencia del `state` de OAuth: el profesional tiene este tiempo para autorizar en Mercado Pago. */
+export const OAUTH_STATE_VIGENCIA_MINUTOS = 10;
+
+/** Se renueva el token del vendedor si vence en menos que esto. */
+export const REFRESCO_ANTICIPADO_MINUTOS = 5;
+
+/** Esquema de deep link con el que Android recupera el control tras salir a Mercado Pago. */
+export const ESQUEMA_APP = "kinecare";

@@ -43,6 +43,8 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
 
 class MisCitasViewModelTest {
 
@@ -60,6 +62,12 @@ class MisCitasViewModelTest {
 
     private val uid = "cliente-1"
 
+    // Anterior a la `fechaHora` por defecto de `reservaDePrueba`: esas citas son futuras.
+    private val ahora: Instant = Instant.fromEpochMilliseconds(1_600_000_000_000)
+    private val reloj = object : Clock {
+        override fun now(): Instant = ahora
+    }
+
     init {
         val firebaseUser = mockk<FirebaseUser>()
         every { firebaseUser.uid } returns uid
@@ -73,6 +81,7 @@ class MisCitasViewModelTest {
         resenaRepository,
         reporteProblemaRepository,
         firebaseAuth,
+        reloj,
     )
 
     private fun profesionalDePrueba(id: String, nombre: String): Profesional = Profesional(
@@ -397,5 +406,157 @@ class MisCitasViewModelTest {
         viewModel.onAction(MisCitasAction.ReportarProblema("r-1", "prof-1"))
 
         assertEquals(antes, viewModel.state.value)
+    }
+
+    // --- pagar con Mercado Pago ---
+
+    private fun cargarReservaConfirmadaConPago(estadoPago: EstadoPago, estado: EstadoReserva = EstadoReserva.CONFIRMADA): CitaProxima {
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns
+            Result.Success(listOf(reservaDePrueba("r-pago", "prof-1", estado, estadoPago = estadoPago)))
+        coEvery { profesionalRepository.obtenerPorId("prof-1") } returns
+            Result.Success(profesionalDePrueba("prof-1", "Bruno Diaz"))
+        return crearViewModel().state.value.proximasCitas.single()
+    }
+
+    @Test
+    fun `una reserva CONFIRMADA con pago PENDIENTE o RECHAZADO se puede pagar`() = runTest {
+        assertTrue(cargarReservaConfirmadaConPago(EstadoPago.PENDIENTE).puedePagar)
+        assertTrue(cargarReservaConfirmadaConPago(EstadoPago.RECHAZADO).puedePagar)
+    }
+
+    @Test
+    fun `una reserva CONFIRMADA ya pagada o reembolsada no ofrece pagar y expone su estado`() = runTest {
+        val pagada = cargarReservaConfirmadaConPago(EstadoPago.AUTORIZADO)
+        val reembolsada = cargarReservaConfirmadaConPago(EstadoPago.REEMBOLSADO)
+
+        assertFalse(pagada.puedePagar)
+        assertEquals(EstadoPago.AUTORIZADO, pagada.estadoPago)
+        assertFalse(reembolsada.puedePagar)
+        assertEquals(EstadoPago.REEMBOLSADO, reembolsada.estadoPago)
+    }
+
+    @Test
+    fun `una reserva SOLICITADA todavia no se puede pagar aunque su pago este PENDIENTE`() = runTest {
+        val cita = cargarReservaConfirmadaConPago(EstadoPago.PENDIENTE, estado = EstadoReserva.SOLICITADA)
+
+        assertFalse(cita.puedePagar)
+        assertNull(cita.estadoPago)
+    }
+
+    @Test
+    fun `una reserva CONFIRMADA futura con pago PENDIENTE se puede pagar`() = runTest {
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns Result.Success(
+            listOf(
+                reservaDePrueba(
+                    "r-futura", "prof-1", EstadoReserva.CONFIRMADA,
+                    fechaHora = ahora + 1.hours, estadoPago = EstadoPago.PENDIENTE,
+                ),
+            ),
+        )
+        coEvery { profesionalRepository.obtenerPorId("prof-1") } returns
+            Result.Success(profesionalDePrueba("prof-1", "Bruno Diaz"))
+
+        val cita = crearViewModel().state.value.proximasCitas.single()
+
+        assertFalse(cita.yaComenzo)
+        assertTrue(cita.puedePagar)
+    }
+
+    @Test
+    fun `una reserva CONFIRMADA cuya hora ya paso no se puede pagar aunque el pago siga PENDIENTE o RECHAZADO`() = runTest {
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns Result.Success(
+            listOf(
+                reservaDePrueba(
+                    "r-pasada", "prof-1", EstadoReserva.CONFIRMADA,
+                    fechaHora = ahora - 1.hours, estadoPago = EstadoPago.PENDIENTE,
+                ),
+                reservaDePrueba(
+                    "r-justo-ahora", "prof-1", EstadoReserva.CONFIRMADA,
+                    fechaHora = ahora, estadoPago = EstadoPago.RECHAZADO,
+                ),
+            ),
+        )
+        coEvery { profesionalRepository.obtenerPorId("prof-1") } returns
+            Result.Success(profesionalDePrueba("prof-1", "Bruno Diaz"))
+
+        val citas = crearViewModel().state.value.proximasCitas
+
+        assertEquals(2, citas.size)
+        assertTrue(citas.all { it.yaComenzo })
+        assertTrue(citas.none { it.puedePagar })
+    }
+
+    @Test
+    fun `una reserva pagada conserva el indicador en EN_CURSO, COMPLETADA y canceladas`() = runTest {
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns Result.Success(
+            listOf(
+                reservaDePrueba("r-en-curso", "prof-1", EstadoReserva.EN_CURSO, estadoPago = EstadoPago.AUTORIZADO),
+                reservaDePrueba("r-historial", "prof-1", EstadoReserva.COMPLETADA, estadoPago = EstadoPago.AUTORIZADO),
+                reservaDePrueba("r-cancelada", "prof-1", EstadoReserva.CANCELADA_PROFESIONAL, estadoPago = EstadoPago.REEMBOLSADO),
+            ),
+        )
+        coEvery { profesionalRepository.obtenerPorId("prof-1") } returns
+            Result.Success(profesionalDePrueba("prof-1", "Bruno Diaz"))
+        coEvery { resenaRepository.obtenerPorReserva("r-historial") } returns Result.Success(null)
+
+        val estado = crearViewModel().state.value
+
+        assertEquals(EstadoPago.AUTORIZADO, estado.citaEnCurso?.estadoPago)
+        assertEquals(EstadoPago.AUTORIZADO, estado.historial.single().estadoPago)
+        assertEquals(EstadoPago.REEMBOLSADO, estado.canceladas.single().estadoPago)
+    }
+
+    @Test
+    fun `una reserva aun SOLICITADA no expone estado de pago`() = runTest {
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns Result.Success(
+            listOf(
+                reservaDePrueba("r-solicitada", "prof-1", EstadoReserva.SOLICITADA, estadoPago = EstadoPago.PENDIENTE),
+            ),
+        )
+        coEvery { profesionalRepository.obtenerPorId("prof-1") } returns
+            Result.Success(profesionalDePrueba("prof-1", "Bruno Diaz"))
+
+        assertNull(crearViewModel().state.value.proximasCitas.single().estadoPago)
+    }
+
+    @Test
+    fun `la cita pagable lleva el nombre del servicio y el monto para la pantalla de pago`() = runTest {
+        val cita = cargarReservaConfirmadaConPago(EstadoPago.PENDIENTE)
+
+        assertEquals("r-pago", cita.id)
+        assertEquals("Sesion de rehabilitacion", cita.tipoSesion)
+        assertEquals(18000L, cita.precioTotal)
+    }
+
+    @Test
+    fun `Pagar es navegacion y no cambia el estado`() = runTest {
+        cargarReservaConfirmadaConPago(EstadoPago.PENDIENTE)
+        val viewModel = crearViewModel()
+        val antes = viewModel.state.value
+
+        viewModel.onAction(MisCitasAction.Pagar("r-pago", "Sesion de rehabilitacion", 18000L))
+
+        assertEquals(antes, viewModel.state.value)
+        coVerify(exactly = 2) { reservaRepository.obtenerPorCliente(uid) }
+    }
+
+    @Test
+    fun `Recargar al volver del pago refleja el nuevo estado del pago`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId("prof-1") } returns
+            Result.Success(profesionalDePrueba("prof-1", "Bruno Diaz"))
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns Result.Success(
+            listOf(reservaDePrueba("r-pago", "prof-1", EstadoReserva.CONFIRMADA, estadoPago = EstadoPago.PENDIENTE)),
+        )
+        val viewModel = crearViewModel()
+        assertTrue(viewModel.state.value.proximasCitas.single().puedePagar)
+
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns Result.Success(
+            listOf(reservaDePrueba("r-pago", "prof-1", EstadoReserva.CONFIRMADA, estadoPago = EstadoPago.AUTORIZADO)),
+        )
+        viewModel.onAction(MisCitasAction.Recargar)
+
+        val cita = viewModel.state.value.proximasCitas.single()
+        assertFalse(cita.puedePagar)
+        assertEquals(EstadoPago.AUTORIZADO, cita.estadoPago)
     }
 }

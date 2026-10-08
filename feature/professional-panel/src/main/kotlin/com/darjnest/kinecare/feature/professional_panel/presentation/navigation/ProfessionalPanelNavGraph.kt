@@ -16,6 +16,7 @@ fun NavGraphBuilder.professional_panelGraph(
     navController: NavController,
     onCerrarSesion: () -> Unit = {},
     onVerResenas: (String) -> Unit = {},
+    onConectarMercadoPago: () -> Unit = {},
 ) {
     composable<ProfessionalPanelRoute> {
         ProfessionalPanelRoot(
@@ -24,6 +25,7 @@ fun NavGraphBuilder.professional_panelGraph(
             },
             onAbrirSolicitudes = { navController.navigate(SolicitudesDeAtencionRoute) },
             onAbrirMiPerfil = { navController.navigate(MiPerfilProfesionalRoute) },
+            onConectarMercadoPago = onConectarMercadoPago,
         )
     }
     composable<MiPerfilProfesionalRoute> {

@@ -172,6 +172,7 @@ class ProfesionalRepositoryImpl @Inject constructor(
                 EstadoVerificacion.valueOf(getString("estadoVerificacionGeneral") ?: "")
             }.getOrDefault(EstadoVerificacion.NO_SOLICITADO),
             tiposAtencion = tiposAtencion,
+            mercadoPagoConectado = getBoolean("mercadoPagoConectado") ?: false,
         )
     }
 

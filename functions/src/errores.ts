@@ -13,7 +13,14 @@ export type Motivo =
   // responderReserva
   | "RESERVA_NO_ENCONTRADA"
   | "RESERVA_YA_RESPONDIDA"
-  | "RESERVA_VENCIDA";
+  | "RESERVA_VENCIDA"
+  // pagos
+  | "RESERVA_NO_PAGABLE"
+  | "PAGO_YA_REALIZADO"
+  | "PAGO_NO_ENCONTRADO"
+  | "PROFESIONAL_SIN_CUENTA_MP"
+  | "MONTO_INVALIDO"
+  | "PASARELA_NO_DISPONIBLE";
 
 /** Crea el HttpsError con `details: { motivo }`, el contrato con el cliente. */
 export function errorDeNegocio(code: FunctionsErrorCode, motivo: Motivo, message: string): HttpsError {

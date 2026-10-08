@@ -9,11 +9,17 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.darjnest.kinecare.core.common.data.repository.ProfesionalRepository
+import com.darjnest.kinecare.core.common.result.Result
+import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
@@ -93,6 +99,12 @@ data class ProfessionalPanelState(
     val resumenHoy: ResumenHoy? = null,
     val proximaCita: ProximaCita? = null,
     val accesosGestion: List<AccesoGestion> = emptyList(),
+    /**
+     * Si el profesional vinculo su cuenta de Mercado Pago
+     * (`profesionales/{id}.mercadoPagoConectado`, solo lo escribe el backend);
+     * `null` mientras no se pudo comprobar: la tarjeta "Cobros" no afirma nada.
+     */
+    val mercadoPagoConectado: Boolean? = null,
 )
 
 sealed interface ProfessionalPanelAction {
@@ -101,6 +113,12 @@ sealed interface ProfessionalPanelAction {
     data object AbrirRuta : ProfessionalPanelAction
     data class SeleccionarAccesoGestion(val accesoId: String) : ProfessionalPanelAction
     data object AbrirConfiguracionCuenta : ProfessionalPanelAction
+
+    /** Vuelve a leer si la cuenta de Mercado Pago esta vinculada (p. ej. al volver de vincularla). */
+    data object ActualizarCobros : ProfessionalPanelAction
+
+    /** Navegacion a `:feature:payment` (vincular Mercado Pago): la resuelve el `Root` via callback. */
+    data object ConectarMercadoPago : ProfessionalPanelAction
 }
 
 /**
@@ -162,15 +180,27 @@ private val accesosGestionFijos = listOf(
 )
 
 @HiltViewModel
-class ProfessionalPanelViewModel @Inject constructor() : ViewModel() {
+class ProfessionalPanelViewModel @Inject constructor(
+    private val profesionalRepository: ProfesionalRepository,
+    private val firebaseAuth: FirebaseAuth,
+) : ViewModel() {
 
     private val _state = MutableStateFlow(ProfessionalPanelState(accesosGestion = accesosGestionFijos))
     val state: StateFlow<ProfessionalPanelState> = _state.asStateFlow()
+
+    private var cobrosJob: Job? = null
+
+    init {
+        cargarEstadoCobros()
+    }
 
     fun onAction(action: ProfessionalPanelAction) {
         when (action) {
             is ProfessionalPanelAction.CambiarDisponibilidad ->
                 _state.update { it.copy(disponible = action.disponible) }
+            ProfessionalPanelAction.ActualizarCobros -> cargarEstadoCobros()
+            // Vincular Mercado Pago es navegacion: el Root la resuelve contra el NavGraph.
+            ProfessionalPanelAction.ConectarMercadoPago -> Unit
             // Ver ficha, ruta, accesos de gestion y configuracion: sin backend ni
             // navegacion todavia (no hay Firestore de reservas/servicios/ingresos
             // conectado a esta pantalla) — se conectan cuando la feature salga de
@@ -180,6 +210,22 @@ class ProfessionalPanelViewModel @Inject constructor() : ViewModel() {
             is ProfessionalPanelAction.SeleccionarAccesoGestion,
             ProfessionalPanelAction.AbrirConfiguracionCuenta,
             -> Unit
+        }
+    }
+
+    /**
+     * Lee `mercadoPagoConectado` del documento del profesional. Si la lectura
+     * falla se conserva el ultimo valor conocido (o `null`): un fallo de red no
+     * debe mostrar "No conectada" a quien si la vinculo.
+     */
+    private fun cargarEstadoCobros() {
+        if (cobrosJob?.isActive == true) return
+        val uid = firebaseAuth.currentUser?.uid ?: return
+        cobrosJob = viewModelScope.launch {
+            val resultado = profesionalRepository.obtenerPorId(uid)
+            if (resultado is Result.Success) {
+                _state.update { it.copy(mercadoPagoConectado = resultado.data.mercadoPagoConectado) }
+            }
         }
     }
 }

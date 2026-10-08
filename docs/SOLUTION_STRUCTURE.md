@@ -67,6 +67,7 @@ core/designsystem/src/main/kotlin/com/darjnest/kinecare/core/designsystem/
     ├── button/
     ├── card/
     ├── label/         # badges/insignias (tono semantico, sin conocer modelos de dominio)
+    ├── feedback/      # mensaje de estado a pantalla completa (resultado de un flujo)
     ├── loading/
     ├── dialog/
     └── ...             # bar/, form/, icon/, tooltip/, etc. se agregan cuando una

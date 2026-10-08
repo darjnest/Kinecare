@@ -15,6 +15,12 @@ object KineCareSpacing {
     val l: Dp = 16.dp
     val xl: Dp = 24.dp
 
+    /** Diametro del circulo de color que enmarca el icono de un mensaje de estado a pantalla completa. */
+    val circuloEstado: Dp = 96.dp
+
+    /** Tamano del icono dentro de ese circulo. */
+    val iconoEstado: Dp = 48.dp
+
     /** Lado del avatar grande de encabezado de perfil. */
     val avatarGrande: Dp = 72.dp
 

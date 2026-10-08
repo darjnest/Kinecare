@@ -356,9 +356,45 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       dispositivo).
 
 ## Fase 5 — Pago
-- [ ] Elegir pasarela (Transbank Webpay Plus / Flow / Mercado Pago)
-- [ ] `:feature:payment`
-- [ ] Cloud Functions `iniciarPago`, `estadoPago` + webhook
+- [x] Elegir pasarela: **Mercado Pago, Marketplace + Checkout Pro** (OAuth
+      por profesional, `marketplace_fee` 10 %, pago de reservas `CONFIRMADA`)
+- [x] Cloud Functions `conectarMercadoPago`, `mercadoPagoOAuthCallback`,
+      `iniciarPago`, `estadoPago`, `webhookMercadoPago`, `retornoPago`
+      (`functions/`, 147 tests incl. emulador; contrato en DATA_MODEL.md).
+      **Sin desplegar ni probar contra Mercado Pago real.**
+- [ ] Crear la app en el panel de Mercado Pago (Chile), cargar secretos
+      (`MP_CLIENT_SECRET`, `MP_WEBHOOK_SECRET`, `MP_TOKEN_ENCRYPTION_KEY`) y
+      `MP_APP_ID`, registrar Redirect URI y webhook, subir QA a Blaze y
+      desplegar. Probar con usuarios de prueba (vendedor + comprador).
+- [x] `:feature:payment` (UI/navegación Android; **no probado contra Mercado
+      Pago real ni con una sesión real, solo en emulador sin sesión**):
+      pantalla **Pagar** (`PaymentRoute(reservaId, titulo, montoClp)`: total
+      en CLP sobre el botón, abre `urlPago` en Custom Tab por un
+      `Flow<PaymentEvent>`, un mensaje por cada `IniciarPagoError`),
+      **Resultado del pago** (`PagoResultadoRoute(pagoId)`, deep link
+      `kinecare://pago/resultado`: consulta siempre `consultarEstado`, nunca el
+      deep link; si sigue `PENDIENTE` reintenta 5 veces cada 3 s y luego "Tu
+      pago está en proceso") y **Conectar Mercado Pago** del profesional
+      (`ConectarMercadoPagoRoute` + `MercadoPagoConectadoRoute`/
+      `MercadoPagoErrorRoute`, deep links `kinecare://mp/conectado` y
+      `kinecare://mp/error`; dos rutas distintas para que un error sin
+      `motivo` no pase por éxito, y "conectada" se confirma leyendo
+      `profesionales/{uid}.mercadoPagoConectado`, no el deep link).
+      `Profesional.mercadoPagoConectado` nuevo en dominio y en
+      `ProfesionalRepositoryImpl`. "Mis Citas" ofrece "Pagar con Mercado Pago"
+      en reservas `CONFIRMADA` con pago `PENDIENTE`/`RECHAZADO` e indica
+      "Pagada"/"Reembolsada" (también en cita en curso, historial y canceladas;
+      no se puede pagar una cita cuya hora ya pasó). `PagoRepository` e
+      `IntentoPago` viven dentro de `:feature:payment` (no en `:core:*`; ver
+      ARCHITECTURE.md); las URLs de pago solo se abren si son `https` de
+      Mercado Pago; el panel profesional muestra "Cobros con
+      Mercado Pago" (Conectada/No conectada). `:app`: `MainActivity` es
+      `singleTask` con intent-filters `kinecare://pago` y `kinecare://mp`, y
+      `KineCareNavHost` entrega `onNewIntent` a Navigation (la librería solo
+      procesa el deep link del arranque). Dependencia nueva
+      `androidx.browser` (Custom Tabs). Componentes nuevos en
+      `:core:designsystem`: `KineCareTopBar`, `KineCareStatusMessage`.
+      Pendiente: verificar el flujo completo con sesión y Mercado Pago real.
 - [ ] Certificate pinning en llamadas de pago
 
 ## Fase 6 — Verificación de identidad
