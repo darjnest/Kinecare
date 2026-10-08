@@ -286,9 +286,16 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       hace falta backfill; al llegar la primera reseña de un perfil de muestra,
       su calificación sembrada pasa a reflejar solo las reseñas reales.
       Producción sigue en Spark.
-- [ ] Verificar `recalcularCalificacion` en QA con una reseña real (crear una
-      desde la app tras completar una reserva y ver el perfil actualizado);
-      de paso cubre "Dejar reseña" de Fase 4. Probada solo contra emuladores.
+- [ ] **Desplegar el índice `resenas(profesionalId, calificacion)` en QA**
+      (`firebase deploy --only firestore:indexes -P qa`) y verificar
+      `recalcularCalificacion`. La prueba en QA del 2026-10-08 (perfil
+      `profesionales/zz-prueba-calif` y reseña `resenas/zz-prueba-r1`, ambos
+      temporales y **por borrar**) mostró que la función falla sin ese
+      índice: el emulador no exige índices, así que los tests no lo vieron. El
+      índice ya está en `firestore.indexes.json` con un test que lo protege.
+      Con `retry: true` el evento pendiente se completa solo al existir el
+      índice. Después: crear una reseña desde la app tras completar una
+      reserva y ver el perfil actualizado (cubre también "Dejar reseña").
 
 ## Fase 4 — Flujo de reserva 🔧 *(en progreso)*
 - [x] `:feature:booking`: 4 pasos (modalidad → fecha/hora → dirección →

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { leerResena, profesionalesAfectados, redondearPromedio } from "../../src/calificacion.js";
 
@@ -57,5 +58,26 @@ describe("redondearPromedio", () => {
   it("deja intactos los valores exactos", () => {
     assert.equal(redondearPromedio(5), 5);
     assert.equal(redondearPromedio(4.5), 4.5);
+  });
+});
+
+// El Firestore Emulator NO exige indices compuestos, asi que los tests de integracion pasan aunque
+// falte uno; en QA la agregacion `average("calificacion")` filtrada por `profesionalId` fallaba con
+// FAILED_PRECONDITION hasta que existio este indice. Este test evita que se borre sin darse cuenta.
+describe("indices de firestore.indexes.json", () => {
+  it("existe el indice profesionalId + calificacion en resenas que necesita el recalculo", () => {
+    const { indexes } = JSON.parse(readFileSync("../firestore.indexes.json", "utf-8")) as {
+      indexes: { collectionGroup: string; fields: { fieldPath: string; order?: string }[] }[];
+    };
+    const existe = indexes.some(
+      (i) =>
+        i.collectionGroup === "resenas" &&
+        i.fields.length === 2 &&
+        i.fields[0]?.fieldPath === "profesionalId" &&
+        i.fields[0]?.order === "ASCENDING" &&
+        i.fields[1]?.fieldPath === "calificacion" &&
+        i.fields[1]?.order === "ASCENDING",
+    );
+    assert.ok(existe, "falta el indice resenas(profesionalId ASC, calificacion ASC)");
   });
 });

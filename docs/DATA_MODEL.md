@@ -219,6 +219,11 @@ respuestaProfesional: string?
 Índice compuesto: `profesionalId` + `fecha` (desc) — ya declarado en
 `firestore.indexes.json`; lo usa `ResenaRepository.obtenerPorProfesional`
 (`:core:network`, `orderBy fecha DESC`, `limit 100`).
+Índice compuesto: `profesionalId` + `calificacion` (asc) — lo necesita la
+agregación `average("calificacion")` de `recalcularCalificacion`. **Sin él el
+trigger falla con `FAILED_PRECONDITION` en Firestore real, pero el emulador no
+lo exige**, así que los tests de integración pasan igual (ver el test
+`indices de firestore.indexes.json`, que evita que se borre).
 
 **Convención de id:** el id del documento es **siempre el `reservaId`** de la
 reserva reseñada (`resenas/{reservaId}`). Una reserva admite a lo más una
@@ -453,7 +458,13 @@ Mantiene `profesionales/{profesionalId}.calificacionPromedio` y
   segundo funcionó. El trigger se resuelve en `nam5` con la función en
   `us-central1`. Requiere `functions/.env.qa` con `MP_APP_ID` (ver
   `.env.example`) porque el CLI carga todos los parámetros del código.
-  **Sin verificar con una reseña real en QA todavía.** Producción sigue en Spark.
+  **Prueba en QA (2026-10-08):** el trigger se disparó con una reseña de
+  prueba, pero falló con `FAILED_PRECONDITION: The query requires an index`
+  (falta `resenas(profesionalId, calificacion)`); el emulador no exige índices y
+  no lo detectó. Con `retry: true` el evento se sigue reintentando y se completa
+  solo cuando el índice existe. El índice ya está en `firestore.indexes.json`,
+  **falta desplegarlo** (`firebase deploy --only firestore:indexes -P qa`).
+  Producción sigue en Spark.
 
 ### Pagos con Mercado Pago (Marketplace + Checkout Pro) — **sin desplegar**
 Modelo: cada profesional vincula su cuenta de Mercado Pago por OAuth; el cliente
