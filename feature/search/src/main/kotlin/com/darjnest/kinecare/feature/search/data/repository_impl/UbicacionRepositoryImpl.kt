@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.location.Address
 import android.location.Geocoder
 import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
 import com.darjnest.kinecare.core.common.result.Result
 import com.darjnest.kinecare.feature.search.data.repository.UbicacionRepository
@@ -59,6 +60,7 @@ class UbicacionRepositoryImpl @Inject constructor(
         return direccion?.let(::formatearDireccion)
     }
 
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     private suspend fun geocodificarAsync(geocoder: Geocoder, latitud: Double, longitud: Double): Address? =
         suspendCancellableCoroutine { continuation ->
             geocoder.getFromLocation(latitud, longitud, 1) { direcciones ->

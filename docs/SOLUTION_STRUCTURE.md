@@ -121,9 +121,12 @@ dependencias que usa de verdad — no se agrega `:core:network` o
 - Version catalog único: `gradle/libs.versions.toml`.
 - Sin versiones hardcodeadas en `build.gradle.kts` de ningún módulo.
 
-## CI (GitHub Actions, a configurar en fase 8)
-- `build.yml`: `./gradlew build` + `./gradlew testDebugUnitTest` +
-  `./gradlew lintDebug` en cada PR contra `QA` y `PRD`.
+## CI (GitHub Actions)
+- `.github/workflows/ci.yml`, en cada PR contra `QA`/`PRD` y en cada push a
+  esas ramas. Tres jobs: `android` (tests unitarios, lint y `assembleDebug` de
+  los flavors qa y prod), `functions` (typecheck, build y tests contra el
+  Firestore Emulator) y `ci`, un check agregado estable para exigir en las
+  rulesets. Detalle y pendientes en [TASKS.md](TASKS.md#fase-8--qa-pulido-y-publicación).
 
 Ver también: [ARCHITECTURE.md](ARCHITECTURE.md), [DOMAIN.md](DOMAIN.md),
 [DATA_MODEL.md](DATA_MODEL.md), [TASKS.md](TASKS.md).
