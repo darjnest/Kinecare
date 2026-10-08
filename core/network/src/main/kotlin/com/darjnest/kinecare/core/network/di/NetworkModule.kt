@@ -1,6 +1,7 @@
 package com.darjnest.kinecare.core.network.di
 
 import com.darjnest.kinecare.core.network.functions.CloudFunctionsApi
+import com.darjnest.kinecare.core.network.security.crearCertificatePinnerCloudFunctions
 import com.darjnest.kinecare.core.network.urlBaseCloudFunctions
 import com.google.firebase.FirebaseApp
 import dagger.Module
@@ -39,6 +40,9 @@ object NetworkModule {
         }
         return OkHttpClient.Builder()
             .addInterceptor(loggingInterceptor)
+            // Pinning de las llamadas a las Cloud Functions (pagos, verificacion, reservas): ver
+            // CertificatePins.kt y docs/ARCHITECTURE.md#seguridad.
+            .certificatePinner(crearCertificatePinnerCloudFunctions())
             .build()
     }
 

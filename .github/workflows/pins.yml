@@ -1,0 +1,30 @@
+name: Certificate pins
+
+# Comprueba que la cadena de certificados que sirven hoy las Cloud Functions sigue conteniendo un pin
+# de la app (core/network/.../security/CertificatePins.kt). Si Google rotara de CA raiz y el pin no
+# coincidiera, las versiones instaladas dejarian de poder llamar a las funciones (pagos, verificacion,
+# reservas): este aviso permite publicar una version con el pin nuevo ANTES de que eso pase.
+# Es un workflow aparte de `ci.yml` a proposito: depende de la red y de un tercero (Google), no del
+# codigo, asi que no debe bloquear un PR que no toca los pins.
+on:
+  schedule:
+    - cron: "0 13 * * 1" # lunes 13:00 UTC
+  workflow_dispatch:
+  pull_request:
+    branches: [QA, PRD]
+    paths:
+      - "core/network/src/main/kotlin/com/darjnest/kinecare/core/network/security/**"
+      - "scripts/verificar-pins.sh"
+      - ".github/workflows/pins.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  pins:
+    name: Los pins coinciden con lo que sirve Google
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/verificar-pins.sh
