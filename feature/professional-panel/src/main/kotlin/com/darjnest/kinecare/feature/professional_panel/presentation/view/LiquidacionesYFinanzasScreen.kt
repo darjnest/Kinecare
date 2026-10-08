@@ -50,6 +50,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -77,7 +78,6 @@ import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.L
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.PagoHistorico
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.ResumenFinanciero
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.ResumenMensual
-import java.util.Locale
 
 @Composable
 fun LiquidacionesYFinanzasRoot(
@@ -281,7 +281,7 @@ private fun TarjetaMontoPorLiquidar(resumenFinanciero: ResumenFinanciero) {
                 )
             }
             Text(
-                text = "Liquidación ${resumenFinanciero.periodicidad.lowercase(Locale.getDefault())} automática programada a las ${resumenFinanciero.proximoDepositoHora} hrs.",
+                text = "Liquidación ${resumenFinanciero.periodicidad.lowercase(Locale.current.platformLocale)} automática programada a las ${resumenFinanciero.proximoDepositoHora} hrs.",
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.White.copy(alpha = 0.8f),
                 modifier = Modifier.padding(top = 2.dp),
