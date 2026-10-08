@@ -71,15 +71,23 @@ duplicada entre módulos.
   el `Root` expone un callback (`onProfesionalClick: (String) -> Unit`) y
   `:app` hace el `navController.navigate(...)`.
 
-### Deep links y Custom Tabs (Mercado Pago)
+### Deep links y Custom Tabs (Mercado Pago y verificación de identidad)
 - El pago y el OAuth del profesional se abren en **Custom Tabs**
   (`androidx.browser`), nunca en un WebView; la URL llega por un
   `Flow<Event>` del `ViewModel` y no se registra en logs. Solo se abre si es
   `https` y su host es de Mercado Pago (`mercadopago.cl|com`,
   `mercadolibre.cl|com` y subdominios; `esUrlDeMercadoPago` parsea la URL y
-  rechaza userinfo y otros hosts).
+  rechaza userinfo y otros hosts). La verificación de identidad (Didit)
+  usa lo mismo con `didit.me` y subdominios (`esUrlDeDidit`).
+- **Código compartido** entre features de pago y verificación: la validación
+  de URL por dominios vive en `:core:common` (`esUrlHttpsDeDominios`: https,
+  sin userinfo, solo puerto 443, host parseado igual o subdominio) y
+  `abrirEnCustomTab` en `:core:designsystem/util`; cada feature solo declara
+  su lista de dominios. `aErrorDe` (mapeo de errores de callable) es una
+  extensión pública de `:core:network` usada por ambas.
 - El retorno es un deep link `kinecare://pago/resultado?pagoId=`,
-  `kinecare://mp/conectado` o `kinecare://mp/error?motivo=`.
+  `kinecare://mp/conectado`, `kinecare://mp/error?motivo=` o
+  `kinecare://verificacion/resultado?solicitudId=`.
   `MainActivity` es `singleTask` con sus `intent-filter`, y como Navigation
   Compose solo procesa el deep link del arranque en frío (no `onNewIntent`),
   `KineCareNavHost` entrega los nuevos intents `kinecare://` con
@@ -219,7 +227,8 @@ de Firebase (`firebase use qa` / `firebase use prod`) al proyecto correcto.
   de Mercado Pago (Custom Tabs) y el dinero llega directo al profesional con
   `marketplace_fee` para la plataforma. Todo el backend vive en Cloud
   Functions (ver [DATA_MODEL.md](DATA_MODEL.md#pagos-con-mercado-pago-marketplace--checkout-pro--sin-desplegar)).
-- Verificación de identidad: proveedor tipo Truora/Metamap/Didit — la app
+- Verificación de identidad: proveedor **Didit** (elegido 2026-10-08;
+  detalle en [DATA_MODEL.md](DATA_MODEL.md#verificación-de-identidad-con-didit--sin-desplegar)) — la app
   solo consume el estado (pendiente/aprobado/rechazado) vía Cloud Function.
 
 ## Alcance futuro (no en este repo todavía)
