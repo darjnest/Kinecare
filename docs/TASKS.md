@@ -571,7 +571,22 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
 
 ## Fase 8 — QA, pulido y publicación
 - [ ] Cobertura de tests (JUnit5, MockK, Turbine, Compose UI Testing)
-- [ ] GitHub Actions CI
+- [x] GitHub Actions CI (`.github/workflows/ci.yml`), en cada PR hacia
+      `QA`/`PRD` y en cada push a esas ramas. Job **Android**: JDK 17,
+      `testDebugUnitTest` + `:app:testQaDebugUnitTest` (`:app` tiene flavors,
+      por eso su tarea lleva el flavor), `lintDebug` + `:app:lintQaDebug` y
+      `:app:assembleQaDebug`/`:app:assembleProdDebug`. Job **Cloud Functions**:
+      Node 22 + Java 21, `typecheck`, `build` y `npm run test:emulator` (164
+      tests contra el Firestore Emulator, sin credenciales). Job **CI**: un
+      solo check agregado para exigir en las rulesets. Reportes de tests y
+      lint se suben como artefacto solo si algo falla. Al activarlo, lint
+      encontraba 2 errores que ya estaban en `QA` (falta `@RequiresApi` en el
+      `Geocoder` asíncrono de `:feature:search` y un `Locale.getDefault()` no
+      observable en `LiquidacionesYFinanzasScreen`); corregidos en el mismo
+      cambio. **Pendiente:** exigir el check `CI` en las rulesets de `QA` y
+      `PRD` (solo se puede elegir tras la primera corrida en GitHub), cuando
+      se sume release firmado (Fase 5 del estándar) y revisar si el tiempo de
+      la corrida justifica separar el job de Android.
 - [ ] R8/ProGuard, revisión de seguridad
 - [ ] Publicación en Play Store
 

@@ -78,10 +78,13 @@ feature/* fix/* chore/*  ──PR──►  QA  ──PR (merge commit)──►
     haya un segundo colaborador con permiso de revisar.
   - Verificado con `gh api repos/darjnest/Kinecare/rules/branches/<rama>`.
 
-**PENDIENTE:** CI (Fase 4) y release firmado (Fase 5) del estándar del
-equipo, hasta que exista código funcional que compilar/firmar. También
-pendiente: exigir un check de CI como obligatorio en ambas ramas (recién
-se puede una vez que el workflow haya corrido al menos una vez).
+CI: `.github/workflows/ci.yml` (build, lint y tests de Android + tests de
+Cloud Functions contra el emulador) corre en cada PR a `QA`/`PRD`.
+
+**PENDIENTE:** release firmado (Fase 5 del estándar del equipo, hasta que
+exista algo que publicar). También pendiente: exigir el check `CI` como
+obligatorio en las rulesets de ambas ramas (recién se puede elegir tras la
+primera corrida del workflow en GitHub).
 
 ## Agentes especializados
 Este proyecto define subagentes en `.claude/agents/` — úsalos para el tipo

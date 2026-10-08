@@ -1,0 +1,111 @@
+name: CI
+
+# Corre en cada PR hacia QA/PRD y en cada push a esas ramas (el push a PRD
+# cubre el merge commit de una promoción QA -> PRD).
+on:
+  pull_request:
+    branches: [QA, PRD]
+  push:
+    branches: [QA, PRD]
+
+# Un push nuevo a la misma rama/PR cancela la corrida anterior.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: Android (build, lint, tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      # JDK 17: lo exige `jvmToolchain(17)` de los módulos y Gradle 9 corre
+      # sobre 17+. El resolver foojay baja cualquier otro toolchain que falte.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # `testDebugUnitTest`/`lintDebug` cubren los módulos de librería; `:app`
+      # tiene flavors (qa/prod), así que sus tareas llevan el flavor en el
+      # nombre y hay que pedirlas explícitas. Se arma qa y prod: cada uno usa
+      # su propio google-services.json.
+      - name: Tests unitarios y lint
+        run: >
+          ./gradlew
+          testDebugUnitTest :app:testQaDebugUnitTest
+          lintDebug :app:lintQaDebug
+          --stacktrace
+
+      - name: Compilar APKs
+        run: ./gradlew :app:assembleQaDebug :app:assembleProdDebug --stacktrace
+
+      # Reportes solo cuando algo falla, para no llenar el almacenamiento.
+      - name: Subir reportes de tests y lint
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-reportes
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            **/build/reports/tests/
+            **/build/reports/lint-results-*.html
+            **/build/test-results/
+
+  functions:
+    name: Cloud Functions (typecheck, tests, emulador)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: functions
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+
+      # El Firestore Emulator corre sobre Java; firebase-tools reciente pide 21+.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # `build` es el que corre `firebase deploy` en predeploy: si no compila
+      # aquí, el deploy tampoco.
+      - name: Build de despliegue
+        run: npm run build
+
+      # Unitarios + integración contra el Firestore Emulator (demo-kinecare,
+      # sin credenciales ni proyecto real).
+      - name: Tests (unitarios + integración con emulador)
+        run: npm run test:emulator
+
+  # Un solo check estable para exigir en las rulesets de QA y PRD, aunque
+  # mañana se agreguen o renombren jobs.
+  ci:
+    name: CI
+    if: always()
+    needs: [android, functions]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Todos los jobs en verde
+        run: |
+          echo "android=${{ needs.android.result }} functions=${{ needs.functions.result }}"
+          [ "${{ needs.android.result }}" = "success" ] && [ "${{ needs.functions.result }}" = "success" ]
