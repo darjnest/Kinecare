@@ -100,6 +100,26 @@ class ProfesionalRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun actualizarTiposAtencion(
+        id: String,
+        tipos: Set<TipoAtencion>,
+    ): Result<Unit, ProfesionalError> {
+        // La regla exige al menos uno; se corta antes de llegar a Firestore.
+        if (tipos.isEmpty()) return Result.Error(ProfesionalError.DESCONOCIDO)
+        return try {
+            // Orden del enum, no el de insercion del Set: el arreglo queda estable.
+            val nombres = TipoAtencion.entries.filter { it in tipos }.map { it.name }
+            firestore.collection(COLECCION_PROFESIONALES).document(id)
+                .update("tiposAtencion", nombres)
+                .await()
+            Result.Success(Unit)
+        } catch (e: FirebaseNetworkException) {
+            Result.Error(ProfesionalError.SIN_INTERNET)
+        } catch (e: Exception) {
+            Result.Error(ProfesionalError.DESCONOCIDO)
+        }
+    }
+
     private fun Disponibilidad.aMapa(): Map<String, Any> = mapOf(
         "diaSemana" to diaSemana.name,
         "horaInicio" to horaInicio.aHoraMinuto(),

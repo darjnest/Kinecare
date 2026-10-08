@@ -9,6 +9,7 @@ import com.darjnest.kinecare.core.common.domain.model.EstadoVerificacion
 import com.darjnest.kinecare.core.common.domain.model.Insignia
 import com.darjnest.kinecare.core.common.domain.model.Profesional
 import com.darjnest.kinecare.core.common.domain.model.RolUsuario
+import com.darjnest.kinecare.core.common.domain.model.TipoAtencion
 import com.darjnest.kinecare.core.common.domain.model.TipoInsignia
 import com.darjnest.kinecare.core.common.domain.model.Usuario
 import com.darjnest.kinecare.core.common.result.Result
@@ -52,6 +53,7 @@ class MiPerfilProfesionalViewModelTest {
     private fun profesional(
         descripcion: String = "Kinesiologa deportiva",
         credencialesAprobadas: Boolean = true,
+        tiposAtencion: List<TipoAtencion> = listOf(TipoAtencion.KINESIOLOGIA),
     ) = Profesional(
         usuario = Usuario(
             id = uid,
@@ -82,6 +84,7 @@ class MiPerfilProfesionalViewModelTest {
         totalResenas = 12,
         descripcion = descripcion,
         estadoVerificacionGeneral = EstadoVerificacion.APROBADO,
+        tiposAtencion = tiposAtencion,
     )
 
     @Test
@@ -214,5 +217,98 @@ class MiPerfilProfesionalViewModelTest {
         assertEquals("Nueva bio", estado.borradorBiografia)
         assertEquals("Kinesiologa deportiva", estado.biografia)
         coVerify(exactly = 1) { profesionalRepository.actualizarDescripcion(uid, "Nueva bio") }
+    }
+
+    @Test
+    fun `al cargar expone los tipos de atencion del profesional`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId(uid) } returns
+            Result.Success(profesional(tiposAtencion = listOf(TipoAtencion.KINESIOLOGIA, TipoAtencion.MASOTERAPIA)))
+
+        val viewModel = crearViewModel()
+
+        assertEquals(setOf(TipoAtencion.KINESIOLOGIA, TipoAtencion.MASOTERAPIA), viewModel.state.value.tiposAtencion)
+    }
+
+    @Test
+    fun `editar tipos de atencion abre el dialogo con los actuales como borrador`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId(uid) } returns Result.Success(profesional())
+        val viewModel = crearViewModel()
+
+        viewModel.onAction(MiPerfilProfesionalAction.EditarTiposAtencion)
+
+        assertTrue(viewModel.state.value.editandoTiposAtencion)
+        assertEquals(setOf(TipoAtencion.KINESIOLOGIA), viewModel.state.value.borradorTiposAtencion)
+    }
+
+    @Test
+    fun `alternar agrega y quita un tipo del borrador sin tocar los guardados`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId(uid) } returns Result.Success(profesional())
+        val viewModel = crearViewModel()
+        viewModel.onAction(MiPerfilProfesionalAction.EditarTiposAtencion)
+
+        viewModel.onAction(MiPerfilProfesionalAction.AlternarTipoAtencion(TipoAtencion.MASOTERAPIA))
+        assertEquals(
+            setOf(TipoAtencion.KINESIOLOGIA, TipoAtencion.MASOTERAPIA),
+            viewModel.state.value.borradorTiposAtencion,
+        )
+
+        viewModel.onAction(MiPerfilProfesionalAction.AlternarTipoAtencion(TipoAtencion.KINESIOLOGIA))
+        assertEquals(setOf(TipoAtencion.MASOTERAPIA), viewModel.state.value.borradorTiposAtencion)
+        assertEquals(setOf(TipoAtencion.KINESIOLOGIA), viewModel.state.value.tiposAtencion)
+    }
+
+    @Test
+    fun `guardar tipos de atencion persiste el borrador, actualiza la tarjeta y cierra el dialogo`() = runTest {
+        val nuevos = setOf(TipoAtencion.KINESIOLOGIA, TipoAtencion.MASOTERAPIA)
+        coEvery { profesionalRepository.obtenerPorId(uid) } returns Result.Success(profesional())
+        coEvery { profesionalRepository.actualizarTiposAtencion(uid, nuevos) } returns Result.Success(Unit)
+        val viewModel = crearViewModel()
+
+        viewModel.onAction(MiPerfilProfesionalAction.EditarTiposAtencion)
+        viewModel.onAction(MiPerfilProfesionalAction.AlternarTipoAtencion(TipoAtencion.MASOTERAPIA))
+        viewModel.onAction(MiPerfilProfesionalAction.GuardarTiposAtencion)
+
+        val estado = viewModel.state.value
+        assertEquals(nuevos, estado.tiposAtencion)
+        assertFalse(estado.editandoTiposAtencion)
+        assertFalse(estado.guardandoTiposAtencion)
+        coVerify(exactly = 1) { profesionalRepository.actualizarTiposAtencion(uid, nuevos) }
+    }
+
+    @Test
+    fun `no se puede guardar sin ningun tipo de atencion`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId(uid) } returns Result.Success(profesional())
+        val viewModel = crearViewModel()
+        viewModel.onAction(MiPerfilProfesionalAction.EditarTiposAtencion)
+        viewModel.onAction(MiPerfilProfesionalAction.AlternarTipoAtencion(TipoAtencion.KINESIOLOGIA))
+
+        viewModel.onAction(MiPerfilProfesionalAction.GuardarTiposAtencion)
+
+        assertTrue(viewModel.state.value.editandoTiposAtencion)
+        coVerify(exactly = 0) { profesionalRepository.actualizarTiposAtencion(any(), any()) }
+    }
+
+    @Test
+    fun `si guardar tipos de atencion falla el dialogo sigue abierto y lo guardado no cambia`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId(uid) } returns Result.Success(profesional())
+        val gate = CompletableDeferred<Result<Unit, ProfesionalError>>()
+        coEvery { profesionalRepository.actualizarTiposAtencion(uid, any()) } coAnswers { gate.await() }
+        val viewModel = crearViewModel()
+        viewModel.onAction(MiPerfilProfesionalAction.EditarTiposAtencion)
+        viewModel.onAction(MiPerfilProfesionalAction.AlternarTipoAtencion(TipoAtencion.MASOTERAPIA))
+
+        viewModel.onAction(MiPerfilProfesionalAction.GuardarTiposAtencion)
+        assertTrue(viewModel.state.value.guardandoTiposAtencion)
+
+        // Un segundo toque mientras guarda no dispara otra escritura.
+        viewModel.onAction(MiPerfilProfesionalAction.GuardarTiposAtencion)
+        gate.complete(Result.Error(ProfesionalError.SIN_INTERNET))
+
+        val estado = viewModel.state.value
+        assertFalse(estado.guardandoTiposAtencion)
+        assertTrue(estado.errorGuardarTiposAtencion)
+        assertTrue(estado.editandoTiposAtencion)
+        assertEquals(setOf(TipoAtencion.KINESIOLOGIA), estado.tiposAtencion)
+        coVerify(exactly = 1) { profesionalRepository.actualizarTiposAtencion(uid, any()) }
     }
 }

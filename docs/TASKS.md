@@ -505,16 +505,26 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       nuevos (`AuthRepositoryImplTest` 4 y `AuthViewModelTest` 5 — primeros
       de `:feature:auth` —, `PerfilProfesionalInicialTest` 3,
       `ProfesionalRepositoryImplTest` +2, `SearchViewModelTest` +1).
-- [ ] Desplegar en QA reglas e índice de `tiposAtencion` y rellenar
+- [x] Desplegar en QA reglas e índice de `tiposAtencion` y rellenar
       `tiposAtencion` en los 13 `profesionales` existentes (derivado de
-      `especialidades`); sin eso la búsqueda queda vacía en QA. Falta
-      también editar `tiposAtencion` desde el panel profesional.
-      **Rellenado hecho en QA:** los 13 perfiles ya tienen `tiposAtencion`
-      (8 `KINESIOLOGIA`, 5 `MASOTERAPIA`). **Falta desplegar** reglas e
-      índice (`firebase deploy --only firestore -P qa`): hasta entonces la
-      consulta de búsqueda falla con `FAILED_PRECONDITION` (índice
-      `tiposAtencion` + `calificacionPromedio` inexistente). Al desplegar,
-      verificar con una consulta `array-contains` sobre `tiposAtencion`.
+      `especialidades`: 8 `KINESIOLOGIA`, 5 `MASOTERAPIA`). Verificado el
+      2026-10-07: el índice `tiposAtencion` + `calificacionPromedio` está
+      `READY` en `kinecare-cl-qa`, las reglas desplegadas incluyen la
+      validación de `tiposAtencion` y una consulta `array-contains` sobre
+      `tiposAtencion` ordenada por `calificacionPromedio` devuelve los
+      8 kinesiólogos. **Falta:** desplegar lo mismo en producción
+      (`kinecare-cl`) cuando se promueva QA → PRD.
+- [x] Panel profesional: editar `tiposAtencion` desde "Mi perfil"
+      (`MiPerfilProfesionalScreen`). Tarjeta "Atenciones que ofreces" siempre
+      visible (con aviso en rojo si está vacía, caso de perfiles legados) y
+      diálogo con una casilla por `TipoAtencion`; Guardar queda deshabilitado
+      sin al menos una (la Security Rule exige 1–2). Nuevo
+      `ProfesionalRepository.actualizarTiposAtencion` (escribe solo
+      `tiposAtencion`, en orden del enum). 8 tests nuevos
+      (`ProfesionalRepositoryImplTest` 3, `MiPerfilProfesionalViewModelTest`
+      5); pasan `testDebugUnitTest` de `:core:network` y
+      `:feature:professional-panel` y `:app:assembleQaDebug`. **No verificado
+      visualmente** en dispositivo.
 
 ## Fase 8 — QA, pulido y publicación
 - [ ] Cobertura de tests (JUnit5, MockK, Turbine, Compose UI Testing)

@@ -46,6 +46,8 @@ import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -86,6 +88,7 @@ import com.darjnest.kinecare.core.designsystem.theme.LoginPrimarioOscuro
 import com.darjnest.kinecare.core.designsystem.theme.RojoError40
 import com.darjnest.kinecare.core.designsystem.theme.RojoError90
 import com.darjnest.kinecare.core.designsystem.theme.TextoPrincipal
+import com.darjnest.kinecare.core.common.domain.model.TipoAtencion
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.Especialidad
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.IdentidadProfesional
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.LARGO_MAXIMO_BIOGRAFIA
@@ -132,6 +135,9 @@ fun MiPerfilProfesionalScreen(
     if (state.editandoBiografia) {
         DialogoEditarBiografia(state = state, onAction = onAction)
     }
+    if (state.editandoTiposAtencion) {
+        DialogoEditarTiposAtencion(state = state, onAction = onAction)
+    }
 
     Scaffold(
         modifier = modifier,
@@ -169,6 +175,12 @@ fun MiPerfilProfesionalScreen(
                         compromisoKineCare = state.compromisoKineCare,
                         onAction = onAction,
                     )
+                }
+
+                // Siempre visible: un perfil sin `tiposAtencion` no aparece en la
+                // busqueda y esta es la unica forma de corregirlo.
+                if (state.identidad != null) {
+                    TarjetaTiposAtencion(tipos = state.tiposAtencion, onAction = onAction)
                 }
 
                 if (state.especialidades.isNotEmpty()) {
@@ -672,6 +684,141 @@ private fun TarjetaBiografia(
             }
         }
     }
+}
+
+private fun TipoAtencion.etiqueta(): String = when (this) {
+    TipoAtencion.KINESIOLOGIA -> "Kinesiología"
+    TipoAtencion.MASOTERAPIA -> "Masoterapia"
+}
+
+@Composable
+private fun TarjetaTiposAtencion(
+    tipos: Set<TipoAtencion>,
+    onAction: (MiPerfilProfesionalAction) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Spa, contentDescription = null, tint = LoginPrimarioOscuro, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Atenciones que ofreces",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = TextoPrincipal,
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(LoginGrisClaro)
+                        .clickable { onAction(MiPerfilProfesionalAction.EditarTiposAtencion) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Filled.Edit, contentDescription = "Editar atenciones que ofreces", tint = LoginGrisTexto, modifier = Modifier.size(16.dp))
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            if (tipos.isEmpty()) {
+                Text(
+                    text = "Elige al menos una atención para aparecer en las búsquedas de los clientes.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            } else {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TipoAtencion.entries.filter { it in tipos }.forEach { tipo ->
+                        Text(
+                            text = tipo.etiqueta(),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = TextoPrincipal,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(LoginMenta)
+                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DialogoEditarTiposAtencion(
+    state: MiPerfilProfesionalState,
+    onAction: (MiPerfilProfesionalAction) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = { onAction(MiPerfilProfesionalAction.CancelarEdicionTiposAtencion) },
+        title = { Text("Atenciones que ofreces") },
+        text = {
+            Column {
+                Text(
+                    text = "Los clientes te encuentran según lo que marques aquí.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = LoginGrisTexto,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                TipoAtencion.entries.forEach { tipo ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = !state.guardandoTiposAtencion) {
+                                onAction(MiPerfilProfesionalAction.AlternarTipoAtencion(tipo))
+                            },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(
+                            checked = tipo in state.borradorTiposAtencion,
+                            onCheckedChange = { onAction(MiPerfilProfesionalAction.AlternarTipoAtencion(tipo)) },
+                            enabled = !state.guardandoTiposAtencion,
+                            colors = CheckboxDefaults.colors(checkedColor = LoginPrimarioOscuro),
+                        )
+                        Text(text = tipo.etiqueta(), style = MaterialTheme.typography.bodyLarge, color = TextoPrincipal)
+                    }
+                }
+                if (state.borradorTiposAtencion.isEmpty()) {
+                    Text(
+                        text = "Elige al menos una.",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                if (state.errorGuardarTiposAtencion) {
+                    Text(
+                        text = "No pudimos guardar tus atenciones. Inténtalo de nuevo.",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onAction(MiPerfilProfesionalAction.GuardarTiposAtencion) },
+                enabled = !state.guardandoTiposAtencion && state.borradorTiposAtencion.isNotEmpty(),
+            ) { Text(if (state.guardandoTiposAtencion) "Guardando..." else "Guardar") }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = { onAction(MiPerfilProfesionalAction.CancelarEdicionTiposAtencion) },
+                enabled = !state.guardandoTiposAtencion,
+            ) { Text("Cancelar") }
+        },
+    )
 }
 
 @Composable
