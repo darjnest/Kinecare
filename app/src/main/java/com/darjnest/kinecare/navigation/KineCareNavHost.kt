@@ -37,6 +37,7 @@ import com.darjnest.kinecare.feature.reviews.presentation.navigation.ReviewsRout
 import com.darjnest.kinecare.feature.reviews.presentation.navigation.reviewsGraph
 import com.darjnest.kinecare.feature.search.presentation.navigation.SearchRoute
 import com.darjnest.kinecare.feature.search.presentation.navigation.searchGraph
+import com.darjnest.kinecare.feature.verification.presentation.navigation.VerificationRoute
 import com.darjnest.kinecare.feature.verification.presentation.navigation.verificationGraph
 
 /**
@@ -156,12 +157,28 @@ fun KineCareNavHost(modifier: Modifier = Modifier) {
                 navController.navigate(AuthRoute) { popUpTo(navController.graph.id) { inclusive = true } }
             },
         )
-        verificationGraph()
+        verificationGraph(
+            onVolver = { navController.popBackStack() },
+            // "Listo" tras el resultado vuelve a Verificar identidad, que sigue debajo en el back
+            // stack y refresca su estado al reanudar; sin ella (deep link en frio) se abre el panel.
+            onListo = {
+                if (!navController.popBackStack<VerificationRoute>(inclusive = false)) {
+                    navController.navigate(ProfessionalPanelRoute) {
+                        popUpTo(navController.graph.id) { inclusive = true }
+                    }
+                }
+            },
+            // Sin sesion lo unico util es el login; al iniciar sesion `AuthRoute` lleva al home del rol.
+            onIniciarSesion = {
+                navController.navigate(AuthRoute) { popUpTo(navController.graph.id) { inclusive = true } }
+            },
+        )
         professional_panelGraph(
             navController,
             onCerrarSesion = onCerrarSesionProfesional,
             onVerResenas = onVerResenas,
             onConectarMercadoPago = { navController.navigate(ConectarMercadoPagoRoute) },
+            onVerificarIdentidad = { navController.navigate(VerificationRoute) { launchSingleTop = true } },
         )
         reviewsGraph(onVolver = { navController.popBackStack() })
     }
@@ -171,7 +188,7 @@ fun KineCareNavHost(modifier: Modifier = Modifier) {
  * Navigation Compose procesa el deep link de la Activity solo al crear el
  * grafo (arranque en frio); no reacciona a `onNewIntent`. Como `MainActivity`
  * es `singleTask`, el retorno desde el Custom Tab (`kinecare://pago/...`,
- * `kinecare://mp/...`) llega a la Activity ya abierta por `onNewIntent`, asi
+ * `kinecare://mp/...`, `kinecare://verificacion/...`) llega a la Activity ya abierta por `onNewIntent`, asi
  * que se entrega aqui al `NavController`.
  *
  * Se navega con `navigate(uri)` y no con `handleDeepLink(intent)`: este ultimo

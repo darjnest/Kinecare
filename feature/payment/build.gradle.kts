@@ -57,9 +57,6 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.navigation.compose)
-    // Custom Tabs: el pago y el OAuth de Mercado Pago se abren en el navegador
-    // del sistema (nunca en un WebView), ver docs/ARCHITECTURE.md.
-    implementation(libs.androidx.browser)
     // `Response<CallableResponse<T>>` de `CloudFunctionsApi` (Retrofit).
     implementation(libs.retrofit.core)
     implementation(libs.kotlinx.serialization.json)
