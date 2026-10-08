@@ -418,7 +418,7 @@ Firestore Emulator: camino feliz, cada `motivo`, reserva ajena, concurrencia).
 Desplegada con `firebase deploy --only functions:responderReserva -P qa`;
 verificado que sin sesión responde 401 `SIN_SESION`.
 
-### `recalcularCalificacion` (trigger Firestore) — **sin desplegar**
+### `recalcularCalificacion` (trigger Firestore) — **desplegada en QA**, no en producción
 `onDocumentWritten` sobre `resenas/{resenaId}` (`us-central1`, `retry: true`).
 Mantiene `profesionales/{profesionalId}.calificacionPromedio` y
 `totalResenas`, que las reglas no dejan escribir al cliente.
@@ -445,9 +445,15 @@ Mantiene `profesionales/{profesionalId}.calificacionPromedio` y
   de 8 eventos simultáneos); además probado de punta a punta con el emulador de
   Functions (reseña escrita → perfil actualizado; responder no lo toca; borrar
   lo baja).
-- **Por desplegar:** `firebase deploy --only functions:recalcularCalificacion -P qa`.
-  Es la primera función disparada por eventos del proyecto: el primer despliegue
-  puede pedir habilitar APIs de Eventarc/Pub/Sub. Producción sigue en Spark.
+- **Despliegue:** `firebase deploy --only functions:recalcularCalificacion -P qa --force`
+  (`--force` porque el CLI exige confirmar la política de reintentos; con `--only`
+  no borra otras funciones). Es la primera función disparada por eventos del
+  proyecto: el primer intento falló con `Permission denied while using the
+  Eventarc Service Agent` (los permisos tardan unos minutos en propagarse) y el
+  segundo funcionó. El trigger se resuelve en `nam5` con la función en
+  `us-central1`. Requiere `functions/.env.qa` con `MP_APP_ID` (ver
+  `.env.example`) porque el CLI carga todos los parámetros del código.
+  **Sin verificar con una reseña real en QA todavía.** Producción sigue en Spark.
 
 ### Pagos con Mercado Pago (Marketplace + Checkout Pro) — **sin desplegar**
 Modelo: cada profesional vincula su cuenta de Mercado Pago por OAuth; el cliente

@@ -278,14 +278,17 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       Functions. **Sin cambios en Android:** el listado de reseñas ya calcula
       su resumen localmente y las pantallas que leen los campos guardados se
       corrigen solas.
-- [ ] Desplegar `recalcularCalificacion` en QA
-      (`firebase deploy --only functions:recalcularCalificacion -P qa`; es la
-      primera función disparada por eventos, puede pedir habilitar APIs de
-      Eventarc/Pub/Sub). QA no tiene reseñas hoy, así que no hace falta
-      backfill; al llegar la primera reseña de un perfil de muestra, su
-      calificación sembrada pasa a reflejar solo las reseñas reales. Al
-      desplegar, verificar creando una reseña (flujo de punta a punta que
-      además cubre "Dejar reseña" de Fase 4). Producción sigue en Spark.
+- [x] `recalcularCalificacion` **desplegada en QA** (2026-10-08, listada como
+      `google.cloud.firestore.document.v1.written` en `us-central1`). El primer
+      intento falló por la propagación de permisos del agente de servicio de
+      Eventarc; el segundo, unos minutos después, funcionó (hizo falta
+      `--force` por la política de reintentos). QA no tiene reseñas, así que no
+      hace falta backfill; al llegar la primera reseña de un perfil de muestra,
+      su calificación sembrada pasa a reflejar solo las reseñas reales.
+      Producción sigue en Spark.
+- [ ] Verificar `recalcularCalificacion` en QA con una reseña real (crear una
+      desde la app tras completar una reserva y ver el perfil actualizado);
+      de paso cubre "Dejar reseña" de Fase 4. Probada solo contra emuladores.
 
 ## Fase 4 — Flujo de reserva 🔧 *(en progreso)*
 - [x] `:feature:booking`: 4 pasos (modalidad → fecha/hora → dirección →
