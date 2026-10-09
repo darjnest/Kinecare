@@ -181,7 +181,30 @@ de Firebase (`firebase use qa` / `firebase use prod`) al proyecto correcto.
   Cloud Function, nunca en el cliente.
 - No se persiste biometría ni documentos de identidad en el dispositivo,
   solo el resultado (`SolicitudVerificacion.estado`).
-- Certificate pinning en llamadas de pago (OkHttp `CertificatePinner`).
+- **Certificate pinning** (OkHttp `CertificatePinner`) en el cliente que llama a
+  las Cloud Functions (`:core:network`, `security/CertificatePins.kt`): pagos,
+  verificación de identidad y reservas comparten ese cliente y host
+  (`*.cloudfunctions.net`, QA y producción).
+  - **Qué se pinea:** las cuatro raíces de Google Trust Services (R1 y R2 RSA,
+    R3 y R4 ECC; vencen en 2036), no el certificado del servidor ni un
+    intermedio. El hoja es un certificado compartido de Google que se renueva
+    cada ~3 meses y Google rota los intermedios (WR1..WR5, WE1..WE4) sin avisar.
+    Las cuatro raíces son además el respaldo mutuo: un pin único sin respaldo
+    bloquea la app en una rotación. Hoy coincide la raíz R1 (el servidor envía
+    la copia con firma cruzada de GlobalSign, que comparte su clave).
+  - **Qué no cubre:** Firestore, Auth y el resto del SDK de Firebase (usan su
+    propio stack, no este cliente), ni el Custom Tab de Mercado Pago o de Didit
+    (es el navegador del sistema). El tráfico con Mercado Pago y Didit sale del
+    backend, no de la app.
+  - **Riesgo operativo:** un pin que deje de coincidir bloquea a **todas** las
+    versiones instaladas hasta que se actualicen. No hay interruptor remoto. Por
+    eso `scripts/verificar-pins.sh` compara los pins del código con la cadena
+    real que sirve Google y corre cada semana y en cada PR que toca los pins
+    (`.github/workflows/pins.yml`). **Si Google cambia de CA raíz** (no solo de
+    intermedio): agregar su pin, publicar una versión de la app y esperar a que
+    se adopte **antes** de que el servidor cambie.
+  - **Efecto secundario:** un proxy con CA instalada (Charles, mitmproxy) no
+    puede inspeccionar estas llamadas, ni en debug.
 - Tokens en Android Keystore / `EncryptedSharedPreferences`; nunca en
   `SharedPreferences` planas ni en `DataStore` sin cifrar.
 - R8/ProGuard habilitado en build de release.

@@ -127,6 +127,10 @@ dependencias que usa de verdad — no se agrega `:core:network` o
   los flavors qa y prod), `functions` (typecheck, build y tests contra el
   Firestore Emulator) y `ci`, un check agregado estable para exigir en las
   rulesets. Detalle y pendientes en [TASKS.md](TASKS.md#fase-8--qa-pulido-y-publicación).
+- `.github/workflows/pins.yml`: aparte de `ci.yml` a propósito (depende de la red
+  y de Google, no del código, y no debe bloquear un PR que no toca los pins).
+  Corre `scripts/verificar-pins.sh` cada lunes, a mano y en los PRs que tocan
+  `core/network/.../security/`. Ver [ARCHITECTURE.md](ARCHITECTURE.md#seguridad).
 
 Ver también: [ARCHITECTURE.md](ARCHITECTURE.md), [DOMAIN.md](DOMAIN.md),
 [DATA_MODEL.md](DATA_MODEL.md), [TASKS.md](TASKS.md).

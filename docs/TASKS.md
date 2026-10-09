@@ -435,7 +435,37 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       `androidx.browser` (Custom Tabs). Componentes nuevos en
       `:core:designsystem`: `KineCareTopBar`, `KineCareStatusMessage`.
       Pendiente: verificar el flujo completo con sesión y Mercado Pago real.
-- [ ] Certificate pinning en llamadas de pago
+- [x] Certificate pinning en las llamadas a las Cloud Functions (pagos,
+      verificación de identidad y reservas comparten el cliente): `CertificatePinner`
+      de OkHttp con las **cuatro raíces de Google Trust Services** (R1..R4), no
+      el hoja ni un intermedio (el hoja es un certificado compartido que se
+      renueva cada ~3 meses y Google rota los intermedios). Hashes tomados del
+      almacén del sistema y contrastados con la cadena real de QA y producción.
+      **Verificado con un handshake real** de OkHttp (JVM, no Android) contra los
+      hosts de QA y producción: acepta con los pins correctos y rechaza con uno
+      erróneo (`Certificate pinning failure`). 9 tests nuevos en `:core:network`
+      con certificados públicos reales como fixtures (los pins son exactamente
+      las 4 raíces; la cadena que sirve Google hoy pasa; otra CA es rechazada; el
+      patrón cubre los hosts que arma `urlBaseCloudFunctions`; otros hosts no se
+      ven afectados), y comprobado que un pin mal copiado los hace fallar.
+      `scripts/verificar-pins.sh` compara los pins del código con lo que sirve
+      Google (falla con salida 1 si ninguno coincide) y
+      `.github/workflows/pins.yml` lo corre cada lunes y en los PRs que tocan los
+      pins. Detalle, alcance y riesgos en
+      [ARCHITECTURE.md](ARCHITECTURE.md#seguridad). **No verificado en un
+      dispositivo Android** (sin emulador): que el limpiador de cadena de
+      Android incluya la raíz de confianza es lo que hace coincidir un pin de
+      raíz cuando el servidor no la envía; hoy el servidor sí envía la raíz R1
+      con firma cruzada, así que no depende de eso.
+- [ ] Probar en un dispositivo/emulador Android con la app QA que las llamadas a
+      las funciones (reservar, estado de pago, verificación) siguen funcionando
+      con el pinning activo. Es la primera prueba del pinning sobre el stack de
+      TLS de Android.
+- [ ] Decidir qué hacer ante el riesgo de bloqueo por rotación de CA: hoy no hay
+      interruptor remoto (p. ej. Remote Config) para desactivar el pinning sin
+      publicar versión; se mitiga con las 4 raíces de respaldo y el aviso
+      semanal, pero una versión instalada con pins viejos quedaría sin servicio
+      si Google cambiara de raíz.
 
 ## Fase 6 — Verificación de identidad
 - [ ] Elegir proveedor (Truora / Metamap / Didit)
