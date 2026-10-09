@@ -87,11 +87,10 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       Fase 6 (fotos de perfil, credenciales de verificación). **Hecho en el
       repo:** `storage.rules` (foto de perfil pública y solo del dueño, JPEG
       < 5 MB; credenciales cerradas a la app; resto denegado) y el bloque
-      `storage` de `firebase.json`; reglas validadas, **sin desplegar**.
-      **Falta, a mano:** crear el bucket de QA desde la consola de Firebase y
-      correr `firebase deploy --only storage -P qa`; después conectar
-      "Cambiar foto" (Cliente y Profesional) y decidir la ruta de la foto del
-      Cliente.
+      `storage` de `firebase.json`; reglas validadas. **Bucket de QA creado y reglas desplegadas el
+      2026-10-09** (verificadas leyendo las reglas activas); producción sigue
+      sin bucket (Spark). **Falta:** conectar "Cambiar foto" (Cliente y
+      Profesional) y decidir la ruta de la foto del Cliente.
 - [x] Cliente: al iniciar sesión o registrarse (rol `CLIENTE`), el `NavHost`
       de `:app` navega automáticamente a `SearchRoute` y saca `AuthRoute`
       del back stack (`KineCareNavHost.kt`, callback
