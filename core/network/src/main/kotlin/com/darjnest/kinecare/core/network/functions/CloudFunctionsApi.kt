@@ -8,10 +8,14 @@ import com.darjnest.kinecare.core.network.functions.dto.CrearReservaRequestDto
 import com.darjnest.kinecare.core.network.functions.dto.CrearReservaResultadoDto
 import com.darjnest.kinecare.core.network.functions.dto.EstadoPagoRequestDto
 import com.darjnest.kinecare.core.network.functions.dto.EstadoPagoResultadoDto
+import com.darjnest.kinecare.core.network.functions.dto.EstadoVerificacionRequestDto
+import com.darjnest.kinecare.core.network.functions.dto.EstadoVerificacionResultadoDto
 import com.darjnest.kinecare.core.network.functions.dto.IniciarPagoRequestDto
 import com.darjnest.kinecare.core.network.functions.dto.IniciarPagoResultadoDto
 import com.darjnest.kinecare.core.network.functions.dto.ResponderReservaRequestDto
 import com.darjnest.kinecare.core.network.functions.dto.ResponderReservaResultadoDto
+import com.darjnest.kinecare.core.network.functions.dto.SolicitarVerificacionRequestDto
+import com.darjnest.kinecare.core.network.functions.dto.SolicitarVerificacionResultadoDto
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.Header
@@ -56,4 +60,16 @@ interface CloudFunctionsApi {
         @Header("Authorization") autorizacion: String,
         @Body cuerpo: CallableRequest<ConectarMercadoPagoRequestDto>,
     ): Response<CallableResponse<ConectarMercadoPagoResultadoDto>>
+
+    @POST("solicitarVerificacion")
+    suspend fun solicitarVerificacion(
+        @Header("Authorization") autorizacion: String,
+        @Body cuerpo: CallableRequest<SolicitarVerificacionRequestDto>,
+    ): Response<CallableResponse<SolicitarVerificacionResultadoDto>>
+
+    @POST("estadoVerificacion")
+    suspend fun estadoVerificacion(
+        @Header("Authorization") autorizacion: String,
+        @Body cuerpo: CallableRequest<EstadoVerificacionRequestDto>,
+    ): Response<CallableResponse<EstadoVerificacionResultadoDto>>
 }

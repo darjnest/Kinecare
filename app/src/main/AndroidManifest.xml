@@ -26,7 +26,8 @@
             </intent-filter>
 
             <!--
-                Retorno desde el Custom Tab de Mercado Pago (pago y OAuth del profesional).
+                Retorno desde el Custom Tab de Mercado Pago (pago y OAuth del profesional) y de
+                la verificacion de identidad (Didit, via la funcion HTTPS que redirige aqui).
                 `singleTask` entrega estos deep links a la Activity ya abierta (`onNewIntent`)
                 en vez de apilar otra. Ver KineCareNavHost.
             -->
@@ -52,6 +53,17 @@
                     android:scheme="kinecare" />
                 <data android:path="/conectado" />
                 <data android:path="/error" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:host="verificacion"
+                    android:path="/resultado"
+                    android:scheme="kinecare" />
             </intent-filter>
         </activity>
     </application>

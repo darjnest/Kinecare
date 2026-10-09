@@ -11,6 +11,10 @@ import { parseClave } from "./mercadopago/cifrado.js";
 import { crearPasarelaMP } from "./mercadopago/pasarela.js";
 import { estadoPagoHandler, retornoPagoHandler, webhookHandler } from "./pagos.js";
 import { responderReservaHandler } from "./responderReserva.js";
+import { crearProveedorDidit } from "./verificacion/didit.js";
+import { estadoVerificacionHandler } from "./verificacion/estadoVerificacion.js";
+import { solicitarVerificacionHandler, type DepsVerificacion } from "./verificacion/solicitarVerificacion.js";
+import { retornoVerificacionHandler, webhookDiditHandler } from "./verificacion/webhookDidit.js";
 
 initializeApp();
 
@@ -118,6 +122,54 @@ export const webhookMercadoPago = onRequest({ region: REGION, secrets: SECRETOS_
       depsMercadoPago(),
       MP_WEBHOOK_SECRET.value(),
       { headers: req.headers, query: req.query, body: req.body },
+      new Date(),
+    ),
+  );
+});
+
+// ── Verificacion de identidad (Didit) ────────────────────────────────────────────────────────
+// Secretos: `firebase functions:secrets:set DIDIT_API_KEY` y `DIDIT_WEBHOOK_SECRET` (el
+// `secret_shared_key` del destino de webhook en la consola de Didit). El workflow id NO es secreto y
+// se lee de `process.env.DIDIT_WORKFLOW_ID` (functions/.env.<proyecto>), no con `defineString`: el CLI
+// exigiria un valor en todo deploy aunque la funcion no lo use (ya paso con MP_APP_ID).
+const DIDIT_API_KEY = defineSecret("DIDIT_API_KEY");
+const DIDIT_WEBHOOK_SECRET = defineSecret("DIDIT_WEBHOOK_SECRET");
+
+/** Didit corta el webhook a los 5 s: la relectura de la decision debe caber con holgura. */
+const TIMEOUT_WEBHOOK_DIDIT_MS = 3000;
+
+function depsVerificacion(timeoutMs?: number): DepsVerificacion {
+  return {
+    proveedor: crearProveedorDidit({ apiKey: DIDIT_API_KEY.value(), timeoutMs }),
+    workflowId: process.env.DIDIT_WORKFLOW_ID?.trim() ?? "",
+    urlBase: urlBase(),
+  };
+}
+
+export const solicitarVerificacion = onCall({ region: REGION, secrets: [DIDIT_API_KEY] }, (request) =>
+  solicitarVerificacionHandler(getFirestore(), depsVerificacion(), request.auth?.uid, request.data, new Date()),
+);
+
+export const estadoVerificacion = onCall({ region: REGION, secrets: [DIDIT_API_KEY] }, (request) =>
+  estadoVerificacionHandler(getFirestore(), depsVerificacion(), request.auth?.uid, request.data, new Date()),
+);
+
+export const retornoVerificacion = onRequest({ region: REGION }, (req, res) => {
+  responder(res, retornoVerificacionHandler(req.query));
+});
+
+export const webhookDidit = onRequest({ region: REGION, secrets: [DIDIT_API_KEY, DIDIT_WEBHOOK_SECRET] }, async (req, res) => {
+  if (req.method !== "POST") {
+    res.status(405).send();
+    return;
+  }
+  responder(
+    res,
+    await webhookDiditHandler(
+      getFirestore(),
+      depsVerificacion(TIMEOUT_WEBHOOK_DIDIT_MS),
+      DIDIT_WEBHOOK_SECRET.value(),
+      { headers: req.headers, rawBody: req.rawBody },
       new Date(),
     ),
   );

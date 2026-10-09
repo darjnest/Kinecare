@@ -23,7 +23,7 @@ import java.io.IOException
  * `FirebaseNetworkException` retornan [sinInternet]; cualquier otra excepcion
  * [desconocido]. Compartido por los repositorios que hablan con Cloud
  * Functions (`ReservaRepositoryImpl`, `PagoRepositoryImpl` de
- * `:feature:payment`).
+ * `:feature:payment`, `VerificacionRepositoryImpl` de `:feature:verification`).
  */
 suspend fun <T, E : Error> llamarCallable(
     firebaseAuth: FirebaseAuth,
@@ -54,6 +54,22 @@ suspend fun <T, E : Error> llamarCallable(
     } catch (e: Exception) {
         Result.Error(desconocido)
     }
+}
+
+/**
+ * Traduce el error de una callable al enum [E] de la funcion: prioriza
+ * `details.motivo` (1:1 con el nombre del valor); si no viene o no coincide,
+ * cae al `status` canonico que resuelve [aCanonico]; y si tampoco, a
+ * [desconocido]. Un cuerpo que no es de callable (`null`) es siempre [desconocido].
+ */
+fun <E : Enum<E>> CallableErrorDto?.aErrorDe(
+    valores: List<E>,
+    desconocido: E,
+    aCanonico: (String?) -> E?,
+): E {
+    if (this == null) return desconocido
+    val porMotivo = details?.motivo?.let { motivo -> valores.firstOrNull { it.name == motivo } }
+    return porMotivo ?: aCanonico(status) ?: desconocido
 }
 
 private fun errorCallable(json: Json, cuerpo: String?): CallableErrorDto? = cuerpo

@@ -296,15 +296,31 @@ FCM) requiere un trigger `onCreate` → plan Blaze.
 ### `solicitudesVerificacion/{solicitudId}`
 ```
 profesionalId: string
-tipo: "IDENTIDAD" | "CREDENCIALES" | "AUTENTICIDAD" | "HISTORIAL"
+tipo: "IDENTIDAD" | "CREDENCIALES" | "AUTENTICIDAD" | "HISTORIAL"   // hoy solo IDENTIDAD
 estado: "PENDIENTE" | "APROBADO" | "RECHAZADO"
-proveedorExterno: string?
+proveedorExterno: string?      // "Didit"
+estadoProveedor: string?       // status crudo de la sesión de Didit ("In Review", "Approved"...)
 fechaSolicitud: timestamp
-fechaResolucion: timestamp?
+fechaResolucion: timestamp?    // solo si estado != PENDIENTE
+motivo: string?                // DECLINED | RUT_NO_COINCIDE | EXPIRADA | ABANDONADA | KYC_VENCIDO
+rutCoincide: boolean?          // null/ausente = no se pudo comparar
+ultimoEventoId: string?        // event_id del último webhook aplicado (idempotencia)
 ```
-Escrito por Cloud Functions (`solicitarVerificacion`, `estadoVerificacion`).
-Nunca contiene documentos de identidad ni biometría — esos se suben a
-Storage y el proveedor externo los procesa fuera de Firestore.
+**El id del documento es el `session_id` de Didit.** Escrito solo por Cloud
+Functions (`solicitarVerificacion`, `estadoVerificacion`, `webhookDidit`); el
+profesional dueño puede leerlo (reglas) y nadie lo escribe desde la app. **Nunca
+contiene PII ni biometría**: ni nombre, fecha de nacimiento, número de
+documento, RUN, imágenes ni URLs de media. `rutCoincide` es un booleano: el RUN
+de la cédula se compara en memoria y se descarta. El proveedor procesa
+documento y selfie fuera de Firestore y fuera del dispositivo.
+
+La insignia pública se escribe en `profesionales/{uid}.insignias` (entrada
+`tipo: "IDENTIDAD"`, el resto del arreglo se conserva) y
+`estadoVerificacionGeneral` toma el estado de esa insignia (hoy el único tipo
+soportado). El `detalle` de la insignia es **público y neutro**
+("Identidad verificada con documento y prueba de vida", "No se pudo verificar la
+identidad", "Verificación en curso"); el motivo fino (p. ej. `RUT_NO_COINCIDE`)
+queda solo en la solicitud privada.
 
 ## Cloud Functions
 
@@ -471,6 +487,100 @@ Mantiene `profesionales/{profesionalId}.calificacionPromedio` y
   `firebase deploy --only firestore:indexes -P qa`. Firestore guarda el
   promedio como entero cuando es exacto (`5`, no `5.0`); la app lo lee con
   `getDouble`, que lo acepta. Producción sigue en Spark.
+
+### Verificación de identidad con Didit — **sin desplegar**
+Proveedor elegido: **Didit** (flujo alojado: el profesional abre una URL en un
+Custom Tab, sube cédula y hace prueba de vida; la app nunca ve ni guarda
+documento ni selfie). Contrato verificado contra docs.didit.me (sesión
+`POST /v3/session/`, decisión `GET /v3/session/{id}/decision/`, webhooks v3);
+**nada se ha probado contra Didit real** (no hay cuenta ni sandbox configurado).
+El backend va detrás de la interfaz `ProveedorVerificacion`
+(`functions/src/verificacion/`), así que cambiar de proveedor es un adaptador.
+
+| Función | Tipo | Qué hace |
+|---|---|---|
+| `solicitarVerificacion` | callable | `{tipo:"IDENTIDAD"}` → `{solicitudId, url, estado:"PENDIENTE"}`. Solo rol `PROFESIONAL`. Crea la sesión en Didit (idempotente: mientras haya una sesión sin terminar devuelve la misma URL), crea `solicitudesVerificacion/{session_id}` y deja la insignia en `PENDIENTE` |
+| `estadoVerificacion` | callable | `{solicitudId?}` → `{estado, solicitudId?, motivo?}`. Sin id usa la solicitud IDENTIDAD más reciente de quien llama (`NO_SOLICITADO` si no hay). Si está `PENDIENTE` **relee la decisión a Didit y la aplica** (autocuración si el webhook se perdió); si esa relectura falla devuelve el estado guardado |
+| `webhookDidit` | HTTPS POST | Verifica firma y **relee la decisión a Didit** (del payload solo toma `session_id` y `event_id`); aplica en transacción idempotente |
+| `retornoVerificacion` | HTTPS GET | Didit vuelve aquí al terminar; redirige 302 a `kinecare://verificacion/resultado?solicitudId=<id>` (solo el id validado; el estado jamás se toma de la query) |
+
+**Motivos de error** (`details.motivo`): `SIN_SESION`, `NO_ES_PROFESIONAL`,
+`TIPO_NO_SOPORTADO`, `PERFIL_NO_ENCONTRADO`, `YA_VERIFICADO`,
+`PROVEEDOR_NO_CONFIGURADO` (falta `DIDIT_WORKFLOW_ID`),
+`PROVEEDOR_NO_DISPONIBLE` (Didit caído, 401/403, 429, créditos agotados),
+`SOLICITUD_NO_ENCONTRADA` (también para solicitudes ajenas).
+
+**Firma del webhook.** Se acepta `X-Signature` (HMAC-SHA256 hex sobre los bytes
+crudos, `req.rawBody`) o `X-Signature-V2` (sobre el JSON canónico), con clave
+`DIDIT_WEBHOOK_SECRET` y `X-Timestamp` a ±300 s; comparación en tiempo
+constante; `X-Signature-Simple` (obsoleta) se ignora. Se responde 401 a firma
+inválida, 200 a eventos que no son `status.updated` o a sesiones desconocidas, y
+500 ante fallas transitorias (Didit reintenta solo 2 veces, a ~1 y ~4 min; lo
+que quede sin aplicar lo recupera `estadoVerificacion`). Se procesa antes de
+responder (Cloud Functions congela la CPU al responder) con un timeout de 3 s
+hacia Didit, porque Didit corta a los 5 s.
+
+**Mapeo de estados** (`functions/src/verificacion/estados.ts`):
+
+| Didit | Solicitud | Insignia pública |
+|---|---|---|
+| `Approved` y RUT coincide o no comparable | `APROBADO` | `APROBADO` |
+| `Approved` pero el RUN de la cédula **no** coincide con `usuarios/{uid}.rut` | `RECHAZADO` (`RUT_NO_COINCIDE`) | `RECHAZADO` |
+| `Declined` | `RECHAZADO` (`DECLINED`) | `RECHAZADO` |
+| `In Review`, `Not Started`, `In Progress`, `Resubmitted`, `Awaiting User` | `PENDIENTE` | `PENDIENTE` |
+| `Expired` / `Abandoned` | `RECHAZADO` (`EXPIRADA` / `ABANDONADA`) | **`NO_SOLICITADO`** (quien no terminó no queda marcado como rechazado) |
+| `Kyc Expired` | `RECHAZADO` (`KYC_VENCIDO`) | `NO_SOLICITADO` |
+
+Los estados finales no retroceden. La insignia también está protegida frente a
+varias solicitudes: `APROBADO` siempre se aplica; sobre una insignia ya
+`APROBADO` solo la cambia `Kyc Expired` de la propia solicitud aprobada; y un
+rechazo/expiración/abandono no la pisa si el profesional tiene otra solicitud
+`PENDIENTE` (Didit solo es idempotente con sesiones sin terminar, así que una
+sesión `In Review` permite abrir una segunda).
+
+**Comparación de RUT.** Con `Approved` se compara el `personal_number` de la
+cédula con `usuarios/{uid}.rut` (ambos normalizados: sin puntos ni guion,
+mayúsculas, sin ceros a la izquierda; solo igualdad, no valida el dígito
+verificador). Solo cuenta si el valor tiene forma de RUN (`^\d{7,8}[0-9K]$`); si
+Didit no lo entrega o el usuario no tiene `rut`, queda `rutCoincide: null`.
+**Riesgo principal sin verificar:** que `personal_number` sea de verdad el RUN en
+una cédula chilena. Si trajera, p. ej., el número de documento (9 dígitos, que
+también cumple esa forma), se rechazaría a profesionales legítimos por
+`RUT_NO_COINCIDE`; si viniera vacío, se aprobaría sin comparar (control más
+débil, no rechaza a nadie). **Probar con una cédula real en QA y revisar
+`rutCoincide` en las solicitudes antes de producción.** `document_number` no se
+usa como respaldo justamente por eso.
+
+**Configuración antes de desplegar.** Secretos:
+`firebase functions:secrets:set DIDIT_API_KEY` y `DIDIT_WEBHOOK_SECRET` (el
+`secret_shared_key` del destino de webhook v3 en la consola de Didit). Variable
+no secreta `DIDIT_WORKFLOW_ID` (UUID del workflow documento + prueba de vida)
+en `functions/.env.<proyecto>`; se lee de `process.env` y no con `defineString`,
+porque el CLI exige valor para todo parámetro declarado en cada deploy (ya pasó
+con `MP_APP_ID`). Destino de webhook en Didit:
+`https://us-central1-<proyecto>.cloudfunctions.net/webhookDidit`, evento
+`status.updated`. Mientras los secretos no existan, un `firebase deploy
+--only functions` completo fallará: despliega las demás funciones por nombre.
+
+**Costos y límites.** Cada sesión nueva tras un rechazo/expiración puede gastar
+créditos de Didit y no hay límite de frecuencia por usuario; Didit responde 400
+también por créditos agotados (se ve en el log como `SOLICITUD_RECHAZADA` y el
+cliente recibe `PROVEEDOR_NO_DISPONIBLE`). Un 429 no se reintenta.
+`estadoVerificacion` sin id lee hasta 100 solicitudes del profesional y ordena en
+memoria (solo consulta por `profesionalId ==`: **sin índice compuesto**; el
+emulador no los exige y en QA real fallaría, lección de `recalcularCalificacion`).
+
+Tests: 114 nuevos en `functions/` (301 con `npm run test:emulator`): firma
+(vector canónico, timestamp viejo, longitudes distintas), adaptador de Didit con
+`fetch` falso (éxito, 400, 401, 429, 5xx, timeout, 404 HTML), mapeo, RUT, y
+integración contra el emulador con un proveedor falso (rol, idempotencia, ajena,
+autocuración, webhook repetido/desordenado, RUT, expirado/abandonado, varias
+solicitudes, conservar otras insignias, y que ningún documento escrito contenga
+el RUN ni el contenido de `decision`). Sin verificar: la firma V2 contra un
+evento real (difiere de Python solo en exponentes de floats y enteros > 2^53,
+que no aparecen en eventos de estado; `X-Signature` sobre bytes crudos va
+primero), que `req.rawBody` llegue byte a byte en el runtime real y la latencia
+real (< 5 s) con Didit y Firestore.
 
 ### Pagos con Mercado Pago (Marketplace + Checkout Pro) — **sin desplegar**
 Modelo: cada profesional vincula su cuenta de Mercado Pago por OAuth; el cliente

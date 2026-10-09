@@ -30,5 +30,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
+    // Custom Tabs compartido (`abrirEnCustomTab`): pago, OAuth y verificacion de identidad.
+    implementation(libs.androidx.browser)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }

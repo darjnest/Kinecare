@@ -8,9 +8,7 @@ import { tokenVigente } from "./mercadopago/cuentas.js";
 import { estadoDesdeMP, transicionValida, type EstadoPago } from "./mercadopago/estados.js";
 import { firmaWebhookValida } from "./mercadopago/firma.js";
 import type { PagoMP } from "./mercadopago/pasarela.js";
-import { esObjeto, idObligatorio, invalido } from "./validacion.js";
-
-const ID_SEGURO = /^[A-Za-z0-9_-]{1,128}$/;
+import { ID_SEGURO, esObjeto, idObligatorio, invalido } from "./validacion.js";
 
 function pagoNoEncontrado() {
   return errorDeNegocio("not-found", "PAGO_NO_ENCONTRADO", "No encontramos ese pago.");
