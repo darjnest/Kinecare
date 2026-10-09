@@ -174,7 +174,7 @@ private fun ModalidadServicio.aTexto(): String = when (this) {
     ModalidadServicio.ONLINE -> "Online"
 }
 
-private fun Reserva.ubicacionTexto(): String = when (modalidad) {
+internal fun Reserva.ubicacionTexto(): String = when (modalidad) {
     ModalidadServicio.DOMICILIO -> direccion
         ?.let { d -> listOf("${d.calle} ${d.numero}".trim(), d.comuna).filter { it.isNotBlank() }.joinToString(", ") }
         ?.takeIf { it.isNotBlank() }

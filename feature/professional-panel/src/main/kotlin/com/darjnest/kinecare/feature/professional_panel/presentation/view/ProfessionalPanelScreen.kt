@@ -1,5 +1,9 @@
 package com.darjnest.kinecare.feature.professional_panel.presentation.view
 
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,7 +29,6 @@ import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Dashboard
-import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.HowToReg
 import androidx.compose.material.icons.filled.LocationOn
@@ -51,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -97,10 +101,13 @@ fun ProfessionalPanelRoot(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
-    // Al volver de vincular Mercado Pago el ViewModel sigue vivo con el estado
-    // viejo: releer. Ignora la lectura si la inicial sigue en curso.
+    val contexto = LocalContext.current
+
+    // Al volver de aceptar una solicitud o de vincular Mercado Pago el
+    // ViewModel sigue vivo con el estado viejo: releer. Ignora la lectura si
+    // la inicial sigue en curso.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-        viewModel.onAction(ProfessionalPanelAction.ActualizarCobros)
+        viewModel.onAction(ProfessionalPanelAction.Actualizar)
     }
 
     ProfessionalPanelScreen(
@@ -113,6 +120,7 @@ fun ProfessionalPanelRoot(
                 is ProfessionalPanelAction.SeleccionarAccesoGestion -> onAbrirAccesoGestion(accion.accesoId)
                 // Vincular Mercado Pago vive en `:feature:payment`: callback resuelto desde `:app`.
                 ProfessionalPanelAction.ConectarMercadoPago -> onConectarMercadoPago()
+                ProfessionalPanelAction.AbrirRuta -> state.proximaCita?.direccionRuta?.let { abrirEnMapas(contexto, it) }
                 else -> viewModel.onAction(accion)
             }
         },
@@ -120,6 +128,16 @@ fun ProfessionalPanelRoot(
         onAbrirMiPerfil = onAbrirMiPerfil,
         modifier = modifier,
     )
+}
+
+/** Abre [direccion] en la app de mapas del dispositivo; si no hay ninguna, no hace nada. */
+private fun abrirEnMapas(contexto: Context, direccion: String) {
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=${Uri.encode(direccion)}"))
+    try {
+        contexto.startActivity(intent)
+    } catch (_: ActivityNotFoundException) {
+        // Sin app de mapas instalada: nada que abrir.
+    }
 }
 
 @Composable
@@ -333,7 +351,7 @@ private fun TarjetaVerificacion(verificacion: VerificacionPanel) {
                     color = LoginPrimarioOscuro,
                 )
                 Text(
-                    text = "${verificacion.entidad} • Credenciales al día",
+                    text = listOfNotNull(verificacion.entidad, "Credenciales al día").joinToString(" • "),
                     style = MaterialTheme.typography.labelSmall,
                     color = LoginGrisTexto,
                     modifier = Modifier.padding(top = 2.dp),
@@ -531,7 +549,7 @@ private fun TarjetaProximaCita(
                         Icon(Icons.Filled.Alarm, contentDescription = null, tint = RojoError40, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "En ${proximaCita.minutosRestantes} min • ${proximaCita.modalidad}",
+                            text = "${proximaCita.tiempoRestanteTexto} • ${proximaCita.modalidad}",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
                             color = RojoError40,
@@ -568,17 +586,19 @@ private fun TarjetaProximaCita(
                             style = MaterialTheme.typography.bodyMedium,
                             color = LoginPrimario,
                         )
-                        Row(
-                            modifier = Modifier.padding(top = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(Icons.Filled.LocationOn, contentDescription = null, tint = LoginGrisTexto, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "${proximaCita.distanciaKm} km • ${proximaCita.comuna}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = LoginGrisTexto,
-                            )
+                        proximaCita.comuna?.let { comuna ->
+                            Row(
+                                modifier = Modifier.padding(top = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(Icons.Filled.LocationOn, contentDescription = null, tint = LoginGrisTexto, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = comuna,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = LoginGrisTexto,
+                                )
+                            }
                         }
                     }
                 }
@@ -604,33 +624,26 @@ private fun TarjetaProximaCita(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    Text(
-                        text = proximaCita.piso,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = LoginGrisTexto,
-                    )
+                    proximaCita.complemento?.let { complemento ->
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = complemento,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = LoginGrisTexto,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                // Sin direccion (consulta u online) no hay ruta que abrir. "Ver ficha" no
+                // existe aun: no hay pantalla de paciente, asi que no se ofrece.
+                if (proximaCita.direccionRuta != null) {
+                    Spacer(modifier = Modifier.height(14.dp))
                     Row(
                         modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(50))
-                            .background(LoginGrisClaro)
-                            .clickable { onAction(ProfessionalPanelAction.VerFichaPaciente) }
-                            .padding(vertical = 12.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(Icons.Filled.Description, contentDescription = null, tint = TextoPrincipal, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = "Ver Ficha", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = TextoPrincipal)
-                    }
-                    Row(
-                        modifier = Modifier
-                            .weight(1f)
+                            .fillMaxWidth()
                             .clip(RoundedCornerShape(50))
                             .background(LoginPrimarioOscuro)
                             .clickable { onAction(ProfessionalPanelAction.AbrirRuta) }
@@ -640,7 +653,7 @@ private fun TarjetaProximaCita(
                     ) {
                         Icon(Icons.Filled.Navigation, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = "Ruta Waze/Maps", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(text = "Cómo llegar", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 }
             }
