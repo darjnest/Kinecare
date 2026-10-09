@@ -33,17 +33,24 @@ import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -96,10 +103,19 @@ fun LiquidacionesYFinanzasScreen(
     onVolver: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(state.mensaje) {
+        state.mensaje?.let {
+            snackbarHostState.showSnackbar(it)
+            onAction(LiquidacionesYFinanzasAction.MensajeMostrado)
+        }
+    }
+
     Scaffold(
         modifier = modifier,
         containerColor = LoginFondo,
         topBar = { EncabezadoFinanzas(onVolver = onVolver) },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -111,6 +127,20 @@ fun LiquidacionesYFinanzasScreen(
         ) {
             Spacer(modifier = Modifier.height(4.dp))
             FilaTituloYEstadoSii(siiConectado = state.siiConectado)
+
+            if (state.cargando && state.resumenMensual == null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 48.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator(color = LoginPrimarioOscuro)
+                }
+            } else if (state.errorCarga) {
+                Spacer(modifier = Modifier.height(16.dp))
+                TarjetaErrorCarga(onReintentar = { onAction(LiquidacionesYFinanzasAction.Reintentar) })
+            }
 
             state.resumenFinanciero?.let { resumenFinanciero ->
                 Spacer(modifier = Modifier.height(16.dp))
@@ -130,6 +160,13 @@ fun LiquidacionesYFinanzasScreen(
             if (state.historialPagos.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(24.dp))
                 SeccionHistorialPagos(pagos = state.historialPagos, onAction = onAction)
+            } else if (state.resumenMensual != null) {
+                Spacer(modifier = Modifier.height(24.dp))
+                Text(
+                    text = "Aún no tienes pagos. Aparecerán aquí cuando un paciente pague una atención confirmada.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = LoginGrisTexto,
+                )
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -445,8 +482,9 @@ private fun SeccionResumenMensual(resumenMensual: ResumenMensual) {
                         color = TextoPrincipal,
                     )
                     Spacer(modifier = Modifier.height(4.dp))
+                    resumenMensual.variacionPorcentaje?.let { variacion ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        val subeIngreso = resumenMensual.variacionPorcentaje >= 0
+                        val subeIngreso = variacion >= 0
                         Icon(
                             imageVector = if (subeIngreso) Icons.Filled.TrendingUp else Icons.Filled.TrendingDown,
                             contentDescription = null,
@@ -455,10 +493,11 @@ private fun SeccionResumenMensual(resumenMensual: ResumenMensual) {
                         )
                         Spacer(modifier = Modifier.width(3.dp))
                         Text(
-                            text = "${if (subeIngreso) "+" else ""}${resumenMensual.variacionPorcentaje}% vs mes anterior",
+                            text = "${if (subeIngreso) "+" else ""}$variacion% vs mes anterior",
                             style = MaterialTheme.typography.labelSmall,
                             color = if (subeIngreso) LoginPrimario else RojoError40,
                         )
+                    }
                     }
                 }
             }
@@ -534,38 +573,40 @@ private fun SeccionResumenMensual(resumenMensual: ResumenMensual) {
                         .background(LoginGrisClaro),
                 )
 
-                Spacer(modifier = Modifier.height(10.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
+                resumenMensual.boletasEmitidas?.let { boletas ->
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .background(LoginMenta),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(Icons.Filled.ReceiptLong, contentDescription = null, tint = LoginPrimarioOscuro, modifier = Modifier.size(16.dp))
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(text = "Boletas de honorarios automáticas", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = TextoPrincipal)
+                                Text(text = "Sincronizado con Servicio de Impuestos Internos", style = MaterialTheme.typography.labelSmall, color = LoginGrisTexto)
+                            }
+                        }
+                        Text(
+                            text = "$boletas emitidas",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = TextoPrincipal,
                             modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(LoginMenta),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(Icons.Filled.ReceiptLong, contentDescription = null, tint = LoginPrimarioOscuro, modifier = Modifier.size(16.dp))
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(text = "Boletas de honorarios automáticas", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = TextoPrincipal)
-                            Text(text = "Sincronizado con Servicio de Impuestos Internos", style = MaterialTheme.typography.labelSmall, color = LoginGrisTexto)
-                        }
+                                .clip(RoundedCornerShape(50))
+                                .background(LoginGrisClaro)
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                        )
                     }
-                    Text(
-                        text = "${resumenMensual.boletasEmitidas} emitidas",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = TextoPrincipal,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(LoginGrisClaro)
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
-                    )
                 }
             }
         }
@@ -584,7 +625,7 @@ private fun SeccionHistorialPagos(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(text = "Historial de Pagos", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = TextoPrincipal)
-            Text(text = "${pagos.size} últimos ciclos", style = MaterialTheme.typography.labelSmall, color = AzulPetroleo30)
+            Text(text = "${pagos.size} más recientes", style = MaterialTheme.typography.labelSmall, color = AzulPetroleo30)
         }
         Spacer(modifier = Modifier.height(10.dp))
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -621,25 +662,34 @@ private fun TarjetaPagoHistorico(
                         .background(LoginMenta),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = LoginPrimarioOscuro, modifier = Modifier.size(20.dp))
+                    Icon(
+                        imageVector = if (pago.estado == EstadoPago.EXITOSA) Icons.Filled.CheckCircle else Icons.Filled.Schedule,
+                        contentDescription = null,
+                        tint = LoginPrimarioOscuro,
+                        modifier = Modifier.size(20.dp),
+                    )
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(text = pago.titulo, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = TextoPrincipal)
                         Spacer(modifier = Modifier.width(8.dp))
-                        if (pago.estado == EstadoPago.EXITOSA) {
-                            Text(
-                                text = "EXITOSA",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = LoginPrimarioOscuro,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(50))
-                                    .background(LoginMenta)
-                                    .padding(horizontal = 6.dp, vertical = 2.dp),
-                            )
+                        val (textoEstado, colorEstado, fondoEstado) = when (pago.estado) {
+                            EstadoPago.EXITOSA -> Triple("EXITOSA", LoginPrimarioOscuro, LoginMenta)
+                            EstadoPago.PENDIENTE -> Triple("PENDIENTE", LoginGrisTexto, LoginGrisClaro)
+                            EstadoPago.RECHAZADA -> Triple("RECHAZADO", RojoError40, LoginGrisClaro)
+                            EstadoPago.REEMBOLSADA -> Triple("REEMBOLSADO", AzulPetroleo30, LoginAzulSuave)
                         }
+                        Text(
+                            text = textoEstado,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = colorEstado,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(fondoEstado)
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
                     }
                     Text(
                         text = "${pago.fechaTexto} • ${pago.medioTexto}",
@@ -660,6 +710,44 @@ private fun TarjetaPagoHistorico(
                     Text(text = "Comprobante", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = AzulPetroleo30)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun TarjetaErrorCarga(onReintentar: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 32.dp, horizontal = 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Icon(Icons.Filled.WifiOff, contentDescription = null, tint = LoginGrisTexto, modifier = Modifier.size(30.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "No pudimos cargar tus finanzas",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = TextoPrincipal,
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "Reintentar",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(LoginPrimarioOscuro)
+                    .clickable(onClick = onReintentar)
+                    .padding(horizontal = 24.dp, vertical = 10.dp),
+            )
         }
     }
 }
