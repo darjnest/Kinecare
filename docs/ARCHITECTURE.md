@@ -197,12 +197,51 @@ de Firebase (`firebase use qa` / `firebase use prod`) al proyecto correcto.
     (es el navegador del sistema). El tráfico con Mercado Pago y Didit sale del
     backend, no de la app.
   - **Riesgo operativo:** un pin que deje de coincidir bloquea a **todas** las
-    versiones instaladas hasta que se actualicen. No hay interruptor remoto. Por
-    eso `scripts/verificar-pins.sh` compara los pins del código con la cadena
-    real que sirve Google y corre cada semana y en cada PR que toca los pins
+    versiones instaladas hasta que se actualicen. Por eso
+    `scripts/verificar-pins.sh` compara los pins del código con la cadena real
+    que sirve Google y corre cada semana y en cada PR que toca los pins
     (`.github/workflows/pins.yml`). **Si Google cambia de CA raíz** (no solo de
     intermedio): agregar su pin, publicar una versión de la app y esperar a que
-    se adopte **antes** de que el servidor cambie.
+    se adopte **antes** de que el servidor cambie. Si se llegara tarde, existe
+    el interruptor remoto de abajo.
+  - **Interruptor remoto (Firebase Remote Config), firmado.** Parámetro
+    `cf_pinning_override` (String) con un JSON `{"v":1,"desde":…,"hasta":…,"firma":"…"}`
+    (segundos Unix). Un booleano simple sería una puerta falsa: Remote Config se
+    descarga de `firebaseremoteconfig.googleapis.com`, que **no** está pineado, así
+    que quien tuviera una CA falsa en el camino (justo la amenaza que frena el
+    pinning) podría responder "desactiva el pinning". Por eso la app **solo**
+    respeta un override con firma ECDSA P-256 válida contra la clave pública
+    embebida (`CLAVE_PUBLICA_OVERRIDE_PINNING`), y ante cualquier duda (vacío,
+    basura, firma ajena, valor alterado, vencido, aún no vigente) el pinning
+    sigue activo. La ventana va firmada y no puede pasar de **30 días**, así que
+    un override no deja el pinning apagado indefinidamente ni puede extenderse
+    sin la clave; al vencer, el pinning vuelve solo. Un `Call.Factory` decide
+    por llamada entre el cliente con pinning y uno idéntico sin él, así que
+    surte efecto en cuanto Remote Config activa el valor, sin reiniciar. Es un
+    canal independiente: llega aunque el pinning bloquee las funciones.
+    - **Estado de fábrica: inactivo.** La clave pública embebida está vacía, así
+      que nadie puede apagar el pinning hasta que se configure (paso 1).
+    - **1. Una sola vez:** `scripts/pinning-override.sh generar-clave <archivo.pem>`
+      (se niega a escribir dentro del repo). Pegar la clave pública que imprime en
+      `CLAVE_PUBLICA_OVERRIDE_PINNING` y publicar una versión. **Guardar la clave
+      privada fuera del repo y respaldada**: quien la tenga puede apagar el
+      pinning de todas las apps hasta 30 días seguidos; si se pierde, el
+      interruptor queda inutilizable hasta publicar una versión con otra clave.
+    - **2. En una emergencia** (los pins ya no coinciden con lo que sirve Google,
+      p. ej. falla `pins.yml` o llegan reportes de que nada llama a las
+      funciones): `scripts/pinning-override.sh firmar <archivo.pem> <días ≤ 30>`
+      imprime el JSON; crear en la consola de Firebase → Remote Config el
+      parámetro `cf_pinning_override` (String) con ese valor y **publicar**. Las
+      apps lo toman en su próxima descarga (intervalo mínimo de 1 h, al abrir la
+      app) y lo aplican de inmediato.
+    - **3. Mientras tanto:** agregar el pin nuevo, publicar una versión y esperar
+      la adopción. Después retirar el parámetro (o dejar que venza).
+    - **Límites:** no ayuda a una app que nunca descargó Remote Config (instalada
+      sin red) ni a quien no la abra dentro de la ventana. Mientras está activo, el
+      tráfico a las Cloud Functions queda protegido solo por la validación normal
+      del sistema (sin pinning). La app registra en logcat (etiqueta `KineCarePinning`) cuándo cambia el
+      estado. Si el parámetro se publica mal (valor inválido) no pasa nada: sigue
+      el pinning.
   - **Efecto secundario:** un proxy con CA instalada (Charles, mitmproxy) no
     puede inspeccionar estas llamadas, ni en debug.
 - Tokens en Android Keystore / `EncryptedSharedPreferences`; nunca en

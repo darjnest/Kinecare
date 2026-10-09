@@ -461,11 +461,30 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       las funciones (reservar, estado de pago, verificación) siguen funcionando
       con el pinning activo. Es la primera prueba del pinning sobre el stack de
       TLS de Android.
-- [ ] Decidir qué hacer ante el riesgo de bloqueo por rotación de CA: hoy no hay
-      interruptor remoto (p. ej. Remote Config) para desactivar el pinning sin
-      publicar versión; se mitiga con las 4 raíces de respaldo y el aviso
-      semanal, pero una versión instalada con pins viejos quedaría sin servicio
-      si Google cambiara de raíz.
+- [x] Interruptor remoto del pinning con **Firebase Remote Config, firmado**
+      (parámetro `cf_pinning_override`): un override con ventana de hasta 30 días
+      firmada con ECDSA P-256, verificada contra una clave pública embebida;
+      cualquier valor vacío, corrupto, ajeno, alterado, vencido o aún no vigente
+      deja el pinning activo. Un `Call.Factory` elige por llamada entre el
+      cliente con y sin pinning, así que surte efecto sin reiniciar la app.
+      Decisión de diseño: un booleano sin firma habría dejado que quien tenga una
+      CA falsa en el camino apague el pinning (Remote Config no está pineado).
+      `scripts/pinning-override.sh` genera la clave (se niega a escribirla dentro
+      del repo), firma un override y valida los días. 21 tests nuevos (fixture
+      firmado con OpenSSL verificado por la app: script y verificación
+      compatibles; ventanas, firmas ajenas, valores alterados, basura, cache de la
+      política, selección de cliente) y comprobado con mutaciones (anular la firma
+      y ampliar la ventana hacen fallar los tests). Procedimiento y límites en
+      [ARCHITECTURE.md](ARCHITECTURE.md#seguridad). **Inactivo de fábrica**: la
+      clave pública embebida está vacía.
+- [ ] **Activar el interruptor** (lo hace una persona): `scripts/pinning-override.sh generar-clave <archivo fuera del repo>`,
+      pegar la clave pública en `CLAVE_PUBLICA_OVERRIDE_PINNING`, respaldar la
+      clave privada (bóveda / gestor de contraseñas) y publicar una versión.
+- [ ] Probar el interruptor de punta a punta con la app QA en un dispositivo o
+      emulador: publicar un override de prueba en Remote Config del proyecto QA y
+      ver que las llamadas siguen funcionando con un pin deliberadamente roto, y
+      que vuelven a bloquearse al retirarlo o vencer. Solo se probó con tests de
+      JVM; **no se ha ejecutado contra Remote Config real ni en Android**.
 
 ## Fase 6 — Verificación de identidad
 - [ ] Elegir proveedor (Truora / Metamap / Didit)

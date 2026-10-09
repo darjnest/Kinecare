@@ -96,6 +96,7 @@ turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
 firebase-auth = { group = "com.google.firebase", name = "firebase-auth" }
 firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore" }
+firebase-config = { group = "com.google.firebase", name = "firebase-config" }
 firebase-storage = { group = "com.google.firebase", name = "firebase-storage" }
 firebase-functions = { group = "com.google.firebase", name = "firebase-functions" }
 firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }

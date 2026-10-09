@@ -1,6 +1,9 @@
 package com.darjnest.kinecare.core.network.di
 
 import com.darjnest.kinecare.core.network.functions.CloudFunctionsApi
+import com.darjnest.kinecare.core.network.security.PinningCallFactory
+import com.darjnest.kinecare.core.network.security.PinningOverrideRemoto
+import com.darjnest.kinecare.core.network.security.PinningPolicy
 import com.darjnest.kinecare.core.network.security.crearCertificatePinnerCloudFunctions
 import com.darjnest.kinecare.core.network.urlBaseCloudFunctions
 import com.google.firebase.FirebaseApp
@@ -46,16 +49,23 @@ object NetworkModule {
             .build()
     }
 
+    /** Pinning activo salvo un override firmado y vigente de Remote Config (ver `PinningOverride.kt`). */
     @Provides
     @Singleton
-    fun provideRetrofit(okHttpClient: OkHttpClient, json: Json): Retrofit {
+    fun providePinningPolicy(overrideRemoto: PinningOverrideRemoto): PinningPolicy =
+        PinningPolicy(valorOverride = overrideRemoto::valor)
+
+    @Provides
+    @Singleton
+    fun provideRetrofit(okHttpClient: OkHttpClient, pinningPolicy: PinningPolicy, json: Json): Retrofit {
         val contentType = "application/json".toMediaType()
         val projectId = requireNotNull(FirebaseApp.getInstance().options.projectId) {
             "google-services.json no define project_id"
         }
         return Retrofit.Builder()
             .baseUrl(urlBaseCloudFunctions(projectId))
-            .client(okHttpClient)
+            // Elige por llamada entre el cliente con pinning y uno sin el, segun la politica.
+            .callFactory(PinningCallFactory(okHttpClient, pinningPolicy))
             .addConverterFactory(json.asConverterFactory(contentType))
             .build()
     }
