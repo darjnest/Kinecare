@@ -400,11 +400,24 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
 - [x] Cloud Functions `conectarMercadoPago`, `mercadoPagoOAuthCallback`,
       `iniciarPago`, `estadoPago`, `webhookMercadoPago`, `retornoPago`
       (`functions/`, 147 tests incl. emulador; contrato en DATA_MODEL.md).
-      **Sin desplegar ni probar contra Mercado Pago real.**
-- [ ] Crear la app en el panel de Mercado Pago (Chile), cargar secretos
+      **Desplegadas en QA** (2026-10-07, PR #36); **sin probar de punta a
+      punta contra Mercado Pago real** (ver el ítem siguiente).
+- [x] **QA configurado** (2026-10-07): app "KineCare" (Checkout Pro) creada en
+      el panel de Mercado Pago Chile, Redirect URL de QA registrada, secretos
       (`MP_CLIENT_SECRET`, `MP_WEBHOOK_SECRET`, `MP_TOKEN_ENCRYPTION_KEY`) y
-      `MP_APP_ID`, registrar Redirect URI y webhook, subir QA a Blaze y
-      desplegar. Probar con usuarios de prueba (vendedor + comprador).
+      `MP_APP_ID` cargados, QA en Blaze, funciones y reglas desplegadas, webhook
+      validado (401 sin firma) y dos usuarios de prueba (vendedor + comprador).
+      `MP_CLIENT_SECRET` es el Access Token de prueba y **no se ha verificado
+      que el OAuth lo acepte**.
+- [ ] Probar de punta a punta en QA con un Profesional con login real:
+      "Cobros con Mercado Pago" → Conectar → iniciar sesión con el vendedor de
+      prueba → ver `profesionales/{uid}.mercadoPagoConectado = true`; luego, como
+      Cliente, pagar una reserva `CONFIRMADA` con el comprador de prueba y ver el
+      webhook aplicar el pago. Si el OAuth rechaza el `client_secret`, hay que
+      activar las credenciales de producción de la app (piden una URL de sitio
+      web que KineCare aún no tiene).
+- [ ] Producción (`kinecare-cl`): Redirect URL y webhook productivos, secretos,
+      `MP_APP_ID` y deploy; requiere subir producción a Blaze.
 - [x] `:feature:payment` (UI/navegación Android; **no probado contra Mercado
       Pago real ni con una sesión real, solo en emulador sin sesión**):
       pantalla **Pagar** (`PaymentRoute(reservaId, titulo, montoClp)`: total
