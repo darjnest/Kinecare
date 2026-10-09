@@ -14,7 +14,7 @@ import kotlin.io.encoding.Base64
  * `scripts/pinning-override.sh generar-clave <archivo>` y la guarda quien administra el proyecto
  * (ver docs/ARCHITECTURE.md#seguridad); ese comando imprime la clave publica para pegar aqui.
  */
-internal const val CLAVE_PUBLICA_OVERRIDE_PINNING: String = ""
+internal const val CLAVE_PUBLICA_OVERRIDE_PINNING: String = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAED9uBqCxSzQn1VmjvKPPFQHRCdmYY7tW6ojSNapirV73z0wPl+jY7bFAzXPSurmv+FDkAX48HIQS8cLBkoffTIQ=="
 
 /** Parametro de Remote Config con el override firmado. Ausente o vacio = pinning activo. */
 internal const val CLAVE_REMOTE_CONFIG_OVERRIDE_PINNING = "cf_pinning_override"

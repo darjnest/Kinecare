@@ -219,8 +219,10 @@ de Firebase (`firebase use qa` / `firebase use prod`) al proyecto correcto.
     por llamada entre el cliente con pinning y uno idéntico sin él, así que
     surte efecto en cuanto Remote Config activa el valor, sin reiniciar. Es un
     canal independiente: llega aunque el pinning bloquee las funciones.
-    - **Estado de fábrica: inactivo.** La clave pública embebida está vacía, así
-      que nadie puede apagar el pinning hasta que se configure (paso 1).
+    - **Estado actual: clave embebida (2026-10-09).** La clave pública ya está en
+      `CLAVE_PUBLICA_OVERRIDE_PINNING`; el pinning sigue activo mientras Remote
+      Config no tenga un override firmado y vigente. Con la clave vacía el
+      interruptor queda inutilizable (así salía de fábrica).
     - **1. Una sola vez:** `scripts/pinning-override.sh generar-clave <archivo.pem>`
       (se niega a escribir dentro del repo). Pegar la clave pública que imprime en
       `CLAVE_PUBLICA_OVERRIDE_PINNING` y publicar una versión. **Guardar la clave

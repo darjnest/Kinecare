@@ -477,9 +477,12 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       y ampliar la ventana hacen fallar los tests). Procedimiento y límites en
       [ARCHITECTURE.md](ARCHITECTURE.md#seguridad). **Inactivo de fábrica**: la
       clave pública embebida está vacía.
-- [ ] **Activar el interruptor** (lo hace una persona): `scripts/pinning-override.sh generar-clave <archivo fuera del repo>`,
-      pegar la clave pública en `CLAVE_PUBLICA_OVERRIDE_PINNING`, respaldar la
-      clave privada (bóveda / gestor de contraseñas) y publicar una versión.
+- [x] **Activar el interruptor**: clave generada con
+      `scripts/pinning-override.sh generar-clave` (2026-10-09) y su parte pública
+      pegada en `CLAVE_PUBLICA_OVERRIDE_PINNING` (tests de `:core:network` en
+      verde). **Pendiente (lo hace una persona):** respaldar la clave privada
+      (`~/.kinecare-secrets/pinning-override-qa.pem`) en la bóveda / gestor de
+      contraseñas y publicar una versión con la clave embebida.
 - [ ] Probar el interruptor de punta a punta con la app QA en un dispositivo o
       emulador: publicar un override de prueba en Remote Config del proyecto QA y
       ver que las llamadas siguen funcionando con un pin deliberadamente roto, y
@@ -718,10 +721,10 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       encontraba 2 errores que ya estaban en `QA` (falta `@RequiresApi` en el
       `Geocoder` asíncrono de `:feature:search` y un `Locale.getDefault()` no
       observable en `LiquidacionesYFinanzasScreen`); corregidos en el mismo
-      cambio. **Pendiente:** exigir el check `CI` en las rulesets de `QA` y
-      `PRD` (solo se puede elegir tras la primera corrida en GitHub), cuando
-      se sume release firmado (Fase 5 del estándar) y revisar si el tiempo de
-      la corrida justifica separar el job de Android.
+      cambio. El check `CI` ya es obligatorio en las rulesets de `QA` y
+      `PRD` (2026-10-09, sin exigir rama al día con la base). **Pendiente:**
+      sumar release firmado (Fase 5 del estándar) y revisar si el tiempo de la
+      corrida justifica separar el job de Android.
 - [ ] R8/ProGuard, revisión de seguridad
 - [ ] Publicación en Play Store
 
