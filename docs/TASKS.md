@@ -87,11 +87,10 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       Fase 6 (fotos de perfil, credenciales de verificación). **Hecho en el
       repo:** `storage.rules` (foto de perfil pública y solo del dueño, JPEG
       < 5 MB; credenciales cerradas a la app; resto denegado) y el bloque
-      `storage` de `firebase.json`; reglas validadas, **sin desplegar**.
-      **Falta, a mano:** crear el bucket de QA desde la consola de Firebase y
-      correr `firebase deploy --only storage -P qa`; después conectar
-      "Cambiar foto" (Cliente y Profesional) y decidir la ruta de la foto del
-      Cliente.
+      `storage` de `firebase.json`; reglas validadas. **Bucket de QA creado y reglas desplegadas el
+      2026-10-09** (verificadas leyendo las reglas activas); producción sigue
+      sin bucket (Spark). **Falta:** conectar "Cambiar foto" (Cliente y
+      Profesional) y decidir la ruta de la foto del Cliente.
 - [x] Cliente: al iniciar sesión o registrarse (rol `CLIENTE`), el `NavHost`
       de `:app` navega automáticamente a `SearchRoute` y saca `AuthRoute`
       del back stack (`KineCareNavHost.kt`, callback
@@ -401,11 +400,24 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
 - [x] Cloud Functions `conectarMercadoPago`, `mercadoPagoOAuthCallback`,
       `iniciarPago`, `estadoPago`, `webhookMercadoPago`, `retornoPago`
       (`functions/`, 147 tests incl. emulador; contrato en DATA_MODEL.md).
-      **Sin desplegar ni probar contra Mercado Pago real.**
-- [ ] Crear la app en el panel de Mercado Pago (Chile), cargar secretos
+      **Desplegadas en QA** (2026-10-07, PR #36); **sin probar de punta a
+      punta contra Mercado Pago real** (ver el ítem siguiente).
+- [x] **QA configurado** (2026-10-07): app "KineCare" (Checkout Pro) creada en
+      el panel de Mercado Pago Chile, Redirect URL de QA registrada, secretos
       (`MP_CLIENT_SECRET`, `MP_WEBHOOK_SECRET`, `MP_TOKEN_ENCRYPTION_KEY`) y
-      `MP_APP_ID`, registrar Redirect URI y webhook, subir QA a Blaze y
-      desplegar. Probar con usuarios de prueba (vendedor + comprador).
+      `MP_APP_ID` cargados, QA en Blaze, funciones y reglas desplegadas, webhook
+      validado (401 sin firma) y dos usuarios de prueba (vendedor + comprador).
+      `MP_CLIENT_SECRET` es el Access Token de prueba y **no se ha verificado
+      que el OAuth lo acepte**.
+- [ ] Probar de punta a punta en QA con un Profesional con login real:
+      "Cobros con Mercado Pago" → Conectar → iniciar sesión con el vendedor de
+      prueba → ver `profesionales/{uid}.mercadoPagoConectado = true`; luego, como
+      Cliente, pagar una reserva `CONFIRMADA` con el comprador de prueba y ver el
+      webhook aplicar el pago. Si el OAuth rechaza el `client_secret`, hay que
+      activar las credenciales de producción de la app (piden una URL de sitio
+      web que KineCare aún no tiene).
+- [ ] Producción (`kinecare-cl`): Redirect URL y webhook productivos, secretos,
+      `MP_APP_ID` y deploy; requiere subir producción a Blaze.
 - [x] `:feature:payment` (UI/navegación Android; **no probado contra Mercado
       Pago real ni con una sesión real, solo en emulador sin sesión**):
       pantalla **Pagar** (`PaymentRoute(reservaId, titulo, montoClp)`: total
@@ -477,9 +489,12 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       y ampliar la ventana hacen fallar los tests). Procedimiento y límites en
       [ARCHITECTURE.md](ARCHITECTURE.md#seguridad). **Inactivo de fábrica**: la
       clave pública embebida está vacía.
-- [ ] **Activar el interruptor** (lo hace una persona): `scripts/pinning-override.sh generar-clave <archivo fuera del repo>`,
-      pegar la clave pública en `CLAVE_PUBLICA_OVERRIDE_PINNING`, respaldar la
-      clave privada (bóveda / gestor de contraseñas) y publicar una versión.
+- [x] **Activar el interruptor**: clave generada con
+      `scripts/pinning-override.sh generar-clave` (2026-10-09) y su parte pública
+      pegada en `CLAVE_PUBLICA_OVERRIDE_PINNING` (tests de `:core:network` en
+      verde). **Pendiente (lo hace una persona):** respaldar la clave privada
+      (`~/.kinecare-secrets/pinning-override-qa.pem`) en la bóveda / gestor de
+      contraseñas y publicar una versión con la clave embebida.
 - [ ] Probar el interruptor de punta a punta con la app QA en un dispositivo o
       emulador: publicar un override de prueba en Remote Config del proyecto QA y
       ver que las llamadas siguen funcionando con un pin deliberadamente roto, y
@@ -718,10 +733,10 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       encontraba 2 errores que ya estaban en `QA` (falta `@RequiresApi` en el
       `Geocoder` asíncrono de `:feature:search` y un `Locale.getDefault()` no
       observable en `LiquidacionesYFinanzasScreen`); corregidos en el mismo
-      cambio. **Pendiente:** exigir el check `CI` en las rulesets de `QA` y
-      `PRD` (solo se puede elegir tras la primera corrida en GitHub), cuando
-      se sume release firmado (Fase 5 del estándar) y revisar si el tiempo de
-      la corrida justifica separar el job de Android.
+      cambio. El check `CI` ya es obligatorio en las rulesets de `QA` y
+      `PRD` (2026-10-09, sin exigir rama al día con la base). **Pendiente:**
+      sumar release firmado (Fase 5 del estándar) y revisar si el tiempo de la
+      corrida justifica separar el job de Android.
 - [ ] R8/ProGuard, revisión de seguridad
 - [ ] Publicación en Play Store
 
