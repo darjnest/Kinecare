@@ -609,6 +609,31 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       una cita confirmada (`CANCELADA_PROFESIONAL`/`CANCELADA_CLIENTE`),
       expirar solicitudes sin respuesta (función programada), notificar al
       cliente (FCM) y el contador de pendientes en el dashboard.
+- [x] `:feature:professional-panel` — **Liquidaciones y finanzas** conectada
+      a datos reales, **sin backend nuevo**: `LiquidacionesYFinanzasViewModel`
+      deriva todo de `ReservaRepository.obtenerPorProfesional` (que ya trae
+      `pagos/{id}` de cada reserva) y del catálogo de servicios. **Ingreso** =
+      reserva con pago `AUTORIZADO`, estado `CONFIRMADA`/`EN_CURSO`/`COMPLETADA`
+      y cita ya iniciada (una cobrada pero cancelada no cuenta; una futura
+      tampoco). "Resumen de <mes>": ingresos brutos y atenciones del mes en
+      hora de Chile, promedio por día transcurrido, variación contra el mes
+      anterior (oculta si ese mes no tuvo ingresos) y comisión leída de la
+      reserva. "Historial de pagos": los 20 más recientes con honorario neto
+      (monto − comisión), estado (exitoso / rechazado / reembolsado / "por
+      cobrar" solo en reservas ya confirmadas), medio de pago y fecha de la
+      cita. Carga con indicador, error con "Reintentar" y Snackbar (11 tests
+      nuevos en `LiquidacionesYFinanzasViewModelTest`). **Decisión:** con
+      Mercado Pago Marketplace el dinero llega directo a la cuenta del
+      profesional, así que **no hay "monto por liquidar", próximo depósito ni
+      cuenta bancaria de KineCare**: esas tarjetas quedan ocultas (el ViewModel
+      las deja en `null`; la cuenta bancaria se gestiona en Mercado Pago).
+      Boletas del SII, "Comprobante" y "Certificado anual" siguen sin
+      backend: la fila de boletas se oculta y los dos botones avisan
+      "Disponible próximamente". **Limitaciones:** la fecha del historial es la
+      de la cita (el pago no guarda fecha propia en el dominio); no se
+      verificó en dispositivo. **A revisar:** la tarjeta de Solicitudes dice
+      "Pago en custodia KineCare… se libera al completar", lo que contradice
+      Checkout Pro (no retiene fondos).
 - [x] Un profesional registrado desde la app no aparece en la búsqueda:
       `:feature:search` filtra `especialidades` por la etiqueta
       `KINESIOLOGIA`/`MASOTERAPIA` (`TipoAtencion`), que hoy solo tienen los
