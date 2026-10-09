@@ -650,6 +650,34 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       5); pasan `testDebugUnitTest` de `:core:network` y
       `:feature:professional-panel` y `:app:assembleQaDebug`. **No verificado
       visualmente** en dispositivo.
+- [x] `:feature:professional-panel` — **Dashboard** conectado a perfil y
+      reservas reales (`ProfessionalPanelViewModel` ahora inyecta
+      `ReservaRepository`, `UsuarioRepository`, `ServicioRepository` y `Clock`).
+      Saludo con el primer nombre; banner de verificación solo con insignia
+      `CREDENCIALES` aprobada y RNPI informado (antes era un modelo vacío);
+      "Resumen de hoy": próximas = `CONFIRMADA` futuras, hoy en agenda =
+      confirmadas/en curso con fecha de hoy en hora de Chile, calificación y
+      reseñas del perfil, y "Actualizado HH:mm" (hora de la última lectura, no
+      un "hace X min" que quedaría falso); **próxima cita** = la `CONFIRMADA`
+      más cercana, con nombre de paciente y servicio reales (texto genérico si
+      falla la lectura), "En 45 min / 3 h / 2 días", comuna e indicaciones solo
+      si existen; **"Cómo llegar"** abre la dirección en la app de mapas
+      (`geo:`) y solo aparece en atenciones a domicilio con dirección; el
+      acceso "Solicitudes" muestra el contador de solicitudes por responder (las
+      mismas que lista "Solicitudes de atención"). Se refresca en cada
+      `ON_RESUME` (acción `Actualizar`, que reemplaza a `ActualizarCobros`), así
+      que aceptar una solicitud se refleja al volver. Cada lectura falla por
+      separado y conserva lo último conocido; si fallan las reservas se oculta el
+      resumen y la próxima cita pero el perfil sigue visible. Se quitaron la
+      distancia en km y el "piso" (el dominio no los tiene) y el botón "Ver
+      Ficha" (no existe pantalla de paciente). **"Por liquidar"** = honorario
+      neto de las `COMPLETADA` con pago `AUTORIZADO`: aproximación mientras no
+      exista un registro de liquidaciones (Fase 7, "Liquidaciones y finanzas"),
+      hoy casi siempre 0 porque nada pasa reservas a `COMPLETADA` (función de
+      completar sigue fuera de alcance). 14 tests nuevos en
+      `ProfessionalPanelViewModelTest` (22 en total); pasan
+      `:feature:professional-panel:testDebugUnitTest`, `lintDebug` y
+      `:app:assembleQaDebug`. **No verificado visualmente** en dispositivo.
 
 ## Fase 8 — QA, pulido y publicación
 - [ ] Cobertura de tests (JUnit5, MockK, Turbine, Compose UI Testing)
