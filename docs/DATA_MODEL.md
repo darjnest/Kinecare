@@ -214,8 +214,9 @@ preferenceId: string?            // preferencia de Checkout Pro
 initPoint: string?               // URL de pago de Mercado Pago (siempre init_point, nunca sandbox)
 creadoEn: timestamp
 actualizadoEn: timestamp
-reembolsoPendiente: boolean?     // lo escribe cancelarReserva sobre un pago AUTORIZADO: true = corresponde reembolso total
+reembolsoPendiente: boolean?     // true = corresponde devolver el dinero (cancelarReserva sobre un pago AUTORIZADO, o pago tardío)
 reembolsoPolitica: "TOTAL" | "NINGUNO"?   // política aplicada al cancelar
+reembolsoMotivo: "PAGO_TARDIO"?  // solo si el cobro se aprobó DESPUÉS de cancelar/rechazar la reserva (lo escribe el webhook)
 reembolsoSolicitadoEn: timestamp?
 ```
 Escrito **solo** por Cloud Functions (`iniciarPago`, `webhookMercadoPago`,
@@ -553,9 +554,15 @@ Reglas de detalle:
   Mercado Pago en el backend y no se inventó una llamada a la API: alguien debe
   devolver el dinero desde Mercado Pago a las filas con `reembolsoPendiente ==
   true` (después el webhook pasará el pago a `REEMBOLSADO`).
-- **Cabo suelto:** un pago `PENDIENTE` con la preferencia de Checkout Pro todavía
-  abierta podría pagarse después de cancelar; el webhook hoy lo aplicaría sin mirar
-  el estado de la reserva (ver TASKS.md).
+- **Pago tardío (resuelto).** Un pago `PENDIENTE` con la preferencia de Checkout Pro
+  todavía abierta puede pagarse después de cancelar. Cuando el webhook (o `estadoPago`)
+  aprueba un cobro y la reserva está `CANCELADA_CLIENTE`, `CANCELADA_PROFESIONAL` o
+  `RECHAZADA`, `aplicarPago` lo registra `AUTORIZADO` (el dinero sí se cobró) pero lo
+  deja con `reembolsoPendiente: true`, `reembolsoPolitica: "TOTAL"` y
+  `reembolsoMotivo: "PAGO_TARDIO"`, sin importar la anticipación: cobrar algo que nadie
+  va a atender nunca corresponde. La reserva sigue cancelada. Cancelar y aplicar el
+  pago se serializan en transacción, así que no hay carrera. Sigue siendo una
+  devolución manual (ver arriba) y la preferencia no se cierra en Mercado Pago.
 
 Pruebas: `test/unit/cancelarReserva.test.ts` y
 `test/integration/cancelarReserva.integration.test.ts`.

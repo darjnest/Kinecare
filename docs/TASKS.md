@@ -785,9 +785,17 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       esto en QA.
 - [ ] **Reembolso real de Mercado Pago**: no hay cliente de reembolso; hoy solo
       queda `pagos/{id}.reembolsoPendiente` para procesarlo a mano.
-- [ ] Un pago `PENDIENTE` con preferencia abierta puede pagarse después de
-      cancelar la reserva (el webhook lo marcaría `AUTORIZADO` sobre una reserva
-      cancelada). Falta que el webhook marque `reembolsoPendiente` en ese caso.
+- [x] **Pago tardío tras cancelar**: un pago `PENDIENTE` con la preferencia de
+      Checkout Pro abierta que se aprueba después de cancelar (o de rechazar) la
+      reserva queda `AUTORIZADO` con `reembolsoPendiente: true`, `reembolsoPolitica:
+      "TOTAL"` y `reembolsoMotivo: "PAGO_TARDIO"` (`aplicarPago`, `functions/src/pagos.ts`).
+      La reserva no se reactiva y cancelar vs. webhook se serializan en transacción.
+      8 tests de integración nuevos (incluida una carrera cancelar/webhook) que
+      fallan sin el arreglo; 295 en total con `npm run test:emulator`. **Sin
+      desplegar** (`firebase deploy --only functions:webhookMercadoPago,functions:estadoPago -P qa`).
+      Limitación: la preferencia sigue abierta en Mercado Pago (cerrarla exigiría
+      llamar a su API con el token del vendedor) y la app mostrará "pago exitoso"
+      al cliente aunque la cita esté cancelada: el reembolso sigue siendo manual.
 - [x] Cliente Android — **push FCM**: `firebase-messaging` (catálogo, BoM
       existente); `DispositivoPushRepository` (`:core:common` + `:core:network`)
       registra `usuarios/{uid}/dispositivos/{token}` al haber sesión

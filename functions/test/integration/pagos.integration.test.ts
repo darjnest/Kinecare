@@ -5,6 +5,7 @@ import { createHmac, randomBytes } from "node:crypto";
 import { before, beforeEach, describe, it } from "node:test";
 import { initializeApp } from "firebase-admin/app";
 import { Timestamp, getFirestore, type Firestore } from "firebase-admin/firestore";
+import { cancelarReservaHandler } from "../../src/cancelarReserva.js";
 import { conectarMercadoPagoHandler, oauthCallbackHandler } from "../../src/conectarMercadoPago.js";
 import { iniciarPagoHandler, type DepsPago } from "../../src/iniciarPago.js";
 import { descifrar } from "../../src/mercadopago/cifrado.js";
@@ -383,6 +384,111 @@ describe("webhookMercadoPago", () => {
     pasarela.falla = true;
     assert.equal((await notificar(pagoId, "9001")).status, 500);
     assert.equal((await leerPago(pagoId)).estado, "PENDIENTE");
+  });
+});
+
+describe("pago tardio sobre una reserva cancelada", () => {
+  async function pagoPendiente() {
+    await sembrarCuenta();
+    const reservaId = await sembrarReserva();
+    const { pagoId } = await pagar(reservaId); // el cliente abre Checkout Pro y lo deja abierto
+    return { reservaId, pagoId };
+  }
+  const cancelar = (reservaId: string, uid: string) => cancelarReservaHandler(db, uid, { reservaId }, AHORA);
+  const aprobar = async (pagoId: string) => {
+    pasarela.pagoPorId.set("9001", pagoMP({ referenciaExterna: pagoId }));
+    assert.equal((await notificar(pagoId, "9001")).status, 200);
+  };
+
+  it("cancela el cliente con el pago PENDIENTE y luego paga: queda AUTORIZADO con reembolso TOTAL pendiente", async () => {
+    const { reservaId, pagoId } = await pagoPendiente();
+    const r = await cancelar(reservaId, CLIENTE);
+    assert.equal(r.reembolso, "NO_APLICA"); // al cancelar no habia nada cobrado
+    assert.equal((await leerPago(pagoId)).reembolsoPendiente, undefined);
+
+    await aprobar(pagoId);
+    const pago = await leerPago(pagoId);
+    assert.equal(pago.estado, "AUTORIZADO");
+    assert.equal(pago.reembolsoPendiente, true);
+    assert.equal(pago.reembolsoPolitica, "TOTAL");
+    assert.equal(pago.reembolsoMotivo, "PAGO_TARDIO");
+    assert.ok(pago.reembolsoSolicitadoEn);
+    const reserva = await leerReserva(reservaId);
+    assert.equal(reserva.estado, "CANCELADA_CLIENTE"); // el pago no resucita la reserva
+    assert.equal(reserva.pago.estado, "AUTORIZADO");
+  });
+
+  it("el reembolso es total aunque el cliente cancele con menos de 24 h: pagar despues de cancelar nunca se cobra", async () => {
+    await sembrarCuenta();
+    const reservaId = await sembrarReserva();
+    await db.collection("reservas").doc(reservaId).update({ fechaHora: Timestamp.fromDate(new Date("2026-10-01T14:00:00Z")) });
+    const { pagoId } = await pagar(reservaId);
+    await cancelar(reservaId, CLIENTE);
+    await aprobar(pagoId);
+    const pago = await leerPago(pagoId);
+    assert.equal(pago.reembolsoPendiente, true);
+    assert.equal(pago.reembolsoPolitica, "TOTAL");
+  });
+
+  it("cancela el profesional y el cliente paga despues: tambien queda pendiente", async () => {
+    const { reservaId, pagoId } = await pagoPendiente();
+    await cancelar(reservaId, PRO);
+    await aprobar(pagoId);
+    const pago = await leerPago(pagoId);
+    assert.equal(pago.estado, "AUTORIZADO");
+    assert.equal(pago.reembolsoPendiente, true);
+    assert.equal((await leerReserva(reservaId)).estado, "CANCELADA_PROFESIONAL");
+  });
+
+  it("una reserva RECHAZADA tampoco se cobra: queda pendiente de reembolso", async () => {
+    const { reservaId, pagoId } = await pagoPendiente();
+    await db.collection("reservas").doc(reservaId).update({ estado: "RECHAZADA" });
+    await aprobar(pagoId);
+    assert.equal((await leerPago(pagoId)).reembolsoPendiente, true);
+  });
+
+  it("es idempotente: repetir la notificacion no reescribe el reembolso", async () => {
+    const { reservaId, pagoId } = await pagoPendiente();
+    await cancelar(reservaId, CLIENTE);
+    await aprobar(pagoId);
+    const antes = await leerPago(pagoId);
+    await aprobar(pagoId);
+    const despues = await leerPago(pagoId);
+    assert.equal(despues.reembolsoSolicitadoEn.toMillis(), antes.reembolsoSolicitadoEn.toMillis());
+    assert.equal(despues.actualizadoEn.toMillis(), antes.actualizadoEn.toMillis());
+  });
+
+  it("un pago normal sobre una reserva CONFIRMADA no se marca para reembolso", async () => {
+    const { pagoId } = await pagoPendiente();
+    await aprobar(pagoId);
+    const pago = await leerPago(pagoId);
+    assert.equal(pago.estado, "AUTORIZADO");
+    assert.equal(pago.reembolsoPendiente, undefined);
+    assert.equal(pago.reembolsoMotivo, undefined);
+  });
+
+  it("si el pago entra primero y luego se cancela, manda la politica de cancelarReserva (sin PAGO_TARDIO)", async () => {
+    const { reservaId, pagoId } = await pagoPendiente();
+    await aprobar(pagoId);
+    const r = await cancelar(reservaId, CLIENTE);
+    assert.equal(r.reembolso, "TOTAL");
+    const pago = await leerPago(pagoId);
+    assert.equal(pago.reembolsoPendiente, true);
+    assert.equal(pago.reembolsoMotivo, undefined);
+  });
+
+  it("carrera: cancelar y aprobar el pago a la vez terminan siempre con reembolso pendiente", async () => {
+    for (let i = 0; i < 6; i++) {
+      await limpiarEmulador();
+      await sembrarBase();
+      const { reservaId, pagoId } = await pagoPendiente();
+      pasarela.pagoPorId.set("9001", pagoMP({ referenciaExterna: pagoId }));
+      await Promise.all([cancelar(reservaId, CLIENTE), notificar(pagoId, "9001")]);
+      const pago = await leerPago(pagoId);
+      assert.equal(pago.estado, "AUTORIZADO", `iteracion ${i}`);
+      assert.equal(pago.reembolsoPendiente, true, `iteracion ${i}`);
+      assert.equal((await leerReserva(reservaId)).estado, "CANCELADA_CLIENTE", `iteracion ${i}`);
+    }
   });
 });
 
