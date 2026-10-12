@@ -3,7 +3,9 @@
 package com.darjnest.kinecare.feature.client_panel.presentation.viewmodel
 
 import app.cash.turbine.test
+import com.darjnest.kinecare.core.common.data.error.FotoPerfilError
 import com.darjnest.kinecare.core.common.data.error.UsuarioError
+import com.darjnest.kinecare.core.common.data.repository.FotoPerfilRepository
 import com.darjnest.kinecare.core.common.data.repository.UsuarioRepository
 import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.domain.model.Usuario
@@ -33,6 +35,7 @@ class InformacionPersonalClienteViewModelTest {
     }
 
     private val usuarioRepository = mockk<UsuarioRepository>()
+    private val fotoPerfilRepository = mockk<FotoPerfilRepository>()
     private val firebaseAuth = mockk<FirebaseAuth>()
 
     private val uid = "cliente-1"
@@ -44,7 +47,7 @@ class InformacionPersonalClienteViewModelTest {
     }
 
     private fun crearViewModel(): InformacionPersonalClienteViewModel =
-        InformacionPersonalClienteViewModel(usuarioRepository, firebaseAuth)
+        InformacionPersonalClienteViewModel(usuarioRepository, fotoPerfilRepository, firebaseAuth)
 
     private fun usuarioDePrueba(
         nombre: String = "Ana Soto",
@@ -235,5 +238,100 @@ class InformacionPersonalClienteViewModelTest {
 
         assertNull(viewModel.state.value.error)
         assertTrue(viewModel.state.value.guardadoExitoso)
+    }
+
+    @Test
+    fun `una foto elegida se sube con el rol cliente y su URL se guarda en el usuario`() = runTest {
+        coEvery { usuarioRepository.obtenerPorId(uid) } returns Result.Success(usuarioDePrueba(fotoUrl = null))
+        coEvery { fotoPerfilRepository.subir(uid, RolUsuario.CLIENTE, "content://foto/1") } returns
+            Result.Success("https://dl/nueva.jpg?v=1")
+        coEvery { usuarioRepository.actualizarFotoUrl(uid, "https://dl/nueva.jpg?v=1") } returns Result.Success(Unit)
+        val viewModel = crearViewModel()
+
+        viewModel.onAction(InformacionPersonalClienteAction.FotoElegida("content://foto/1"))
+
+        val estado = viewModel.state.value
+        assertEquals("https://dl/nueva.jpg?v=1", estado.fotoUrl)
+        assertFalse(estado.subiendoFoto)
+        assertNull(estado.errorFoto)
+        coVerify { usuarioRepository.actualizarFotoUrl(uid, "https://dl/nueva.jpg?v=1") }
+    }
+
+    @Test
+    fun `mientras sube la foto el estado marca progreso y no acepta otra subida`() = runTest {
+        coEvery { usuarioRepository.obtenerPorId(uid) } returns Result.Success(usuarioDePrueba(fotoUrl = null))
+        val gate = CompletableDeferred<Result<String, FotoPerfilError>>()
+        coEvery { fotoPerfilRepository.subir(uid, RolUsuario.CLIENTE, any()) } coAnswers { gate.await() }
+        coEvery { usuarioRepository.actualizarFotoUrl(any(), any()) } returns Result.Success(Unit)
+        val viewModel = crearViewModel()
+
+        viewModel.onAction(InformacionPersonalClienteAction.FotoElegida("content://foto/1"))
+        assertTrue(viewModel.state.value.subiendoFoto)
+
+        // Mientras hay una subida en curso, otra eleccion se ignora.
+        viewModel.onAction(InformacionPersonalClienteAction.FotoElegida("content://foto/2"))
+        gate.complete(Result.Success("https://dl/a.jpg"))
+
+        assertFalse(viewModel.state.value.subiendoFoto)
+        assertEquals("https://dl/a.jpg", viewModel.state.value.fotoUrl)
+        coVerify(exactly = 1) { fotoPerfilRepository.subir(any(), any(), any()) }
+    }
+
+    @Test
+    fun `cada error de subida muestra su propio mensaje y no cambia la foto`() = runTest {
+        coEvery { usuarioRepository.obtenerPorId(uid) } returns Result.Success(usuarioDePrueba())
+        val esperados = mapOf(
+            FotoPerfilError.SIN_INTERNET to "Sin conexión. Revisa tu internet e intenta de nuevo.",
+            FotoPerfilError.IMAGEN_INVALIDA to "No pudimos leer esa imagen. Elige otra foto.",
+            FotoPerfilError.IMAGEN_MUY_GRANDE to "La foto es demasiado pesada. Elige otra más liviana.",
+            FotoPerfilError.ALMACENAMIENTO_NO_DISPONIBLE to
+                "Cambiar la foto de perfil aún no está disponible. Estamos trabajando en ello.",
+            FotoPerfilError.DESCONOCIDO to "No pudimos subir la foto. Intenta de nuevo.",
+        )
+        esperados.forEach { (error, mensaje) ->
+            coEvery { fotoPerfilRepository.subir(uid, RolUsuario.CLIENTE, any()) } returns Result.Error(error)
+            val viewModel = crearViewModel()
+
+            viewModel.onAction(InformacionPersonalClienteAction.FotoElegida("content://foto/1"))
+
+            val estado = viewModel.state.value
+            assertEquals(mensaje, estado.errorFoto, error.name)
+            assertFalse(estado.subiendoFoto)
+            assertEquals("https://foto.test/ana.jpg", estado.fotoUrl)
+        }
+        coVerify(exactly = 0) { usuarioRepository.actualizarFotoUrl(any(), any()) }
+    }
+
+    @Test
+    fun `si la foto sube pero no se puede guardar la URL se avisa y la foto no cambia`() = runTest {
+        coEvery { usuarioRepository.obtenerPorId(uid) } returns Result.Success(usuarioDePrueba())
+        coEvery { fotoPerfilRepository.subir(uid, RolUsuario.CLIENTE, any()) } returns Result.Success("https://dl/a.jpg")
+        coEvery { usuarioRepository.actualizarFotoUrl(uid, "https://dl/a.jpg") } returns
+            Result.Error(UsuarioError.SIN_INTERNET)
+        val viewModel = crearViewModel()
+
+        viewModel.onAction(InformacionPersonalClienteAction.FotoElegida("content://foto/1"))
+
+        val estado = viewModel.state.value
+        assertEquals("No pudimos guardar la foto en tu perfil. Intenta de nuevo.", estado.errorFoto)
+        assertEquals("https://foto.test/ana.jpg", estado.fotoUrl)
+        assertFalse(estado.subiendoFoto)
+    }
+
+    @Test
+    fun `un nuevo intento limpia el error anterior`() = runTest {
+        coEvery { usuarioRepository.obtenerPorId(uid) } returns Result.Success(usuarioDePrueba())
+        coEvery { fotoPerfilRepository.subir(uid, RolUsuario.CLIENTE, any()) } returns
+            Result.Error(FotoPerfilError.SIN_INTERNET)
+        val viewModel = crearViewModel()
+        viewModel.onAction(InformacionPersonalClienteAction.FotoElegida("content://foto/1"))
+        assertEquals("Sin conexión. Revisa tu internet e intenta de nuevo.", viewModel.state.value.errorFoto)
+
+        coEvery { fotoPerfilRepository.subir(uid, RolUsuario.CLIENTE, any()) } returns Result.Success("https://dl/a.jpg")
+        coEvery { usuarioRepository.actualizarFotoUrl(uid, "https://dl/a.jpg") } returns Result.Success(Unit)
+        viewModel.onAction(InformacionPersonalClienteAction.FotoElegida("content://foto/1"))
+
+        assertNull(viewModel.state.value.errorFoto)
+        assertEquals("https://dl/a.jpg", viewModel.state.value.fotoUrl)
     }
 }

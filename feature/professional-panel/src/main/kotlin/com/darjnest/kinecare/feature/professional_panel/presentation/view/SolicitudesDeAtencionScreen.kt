@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.darjnest.kinecare.core.designsystem.components.dialog.KineCareConfirmDialog
+import com.darjnest.kinecare.core.designsystem.components.dialog.KineCareTextInputDialog
 import com.darjnest.kinecare.core.designsystem.theme.AzulPetroleo30
 import com.darjnest.kinecare.core.designsystem.theme.InicioDorado
 import com.darjnest.kinecare.core.designsystem.theme.KineCareTheme
@@ -87,6 +88,7 @@ import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.M
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.NivelUrgenciaSolicitud
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.PestanaSolicitudes
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.SolicitudAtencion
+import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.MAX_MOTIVO_CANCELACION
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.SolicitudResuelta
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.SolicitudesDeAtencionAction
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.SolicitudesDeAtencionState
@@ -146,6 +148,24 @@ fun SolicitudesDeAtencionScreen(
             textoCancelar = "Volver",
             onConfirmar = { onAction(SolicitudesDeAtencionAction.ConfirmarRechazo) },
             onCancelar = { onAction(SolicitudesDeAtencionAction.CancelarRechazo) },
+        )
+    }
+
+    state.cancelacion?.let { cancelacion ->
+        KineCareTextInputDialog(
+            titulo = "Cancelar cita",
+            mensaje = cancelacion.resumen,
+            aviso = "Si el paciente ya pagó, se le reembolsará el total del pago.",
+            etiquetaCampo = "Motivo (opcional)",
+            valor = cancelacion.motivo,
+            onValorChange = { onAction(SolicitudesDeAtencionAction.CambiarMotivoCancelacion(it)) },
+            maxCaracteres = MAX_MOTIVO_CANCELACION,
+            textoConfirmar = "Cancelar cita",
+            textoCancelar = "Volver",
+            error = cancelacion.error,
+            enProgreso = cancelacion.cancelando,
+            onConfirmar = { onAction(SolicitudesDeAtencionAction.ConfirmarCancelacion) },
+            onCancelar = { onAction(SolicitudesDeAtencionAction.DescartarCancelacion) },
         )
     }
 
@@ -228,6 +248,7 @@ fun SolicitudesDeAtencionScreen(
                                     solicitud = fila,
                                     completando = state.respondiendoId == fila.id,
                                     onCompletar = { onAction(SolicitudesDeAtencionAction.CompletarAtencion(fila.id)) },
+                                    onCancelar = { onAction(SolicitudesDeAtencionAction.CancelarCita(fila.id)) },
                                 )
                             }
                         }
@@ -755,6 +776,7 @@ private fun FilaSolicitudResuelta(
     solicitud: SolicitudResuelta,
     completando: Boolean,
     onCompletar: () -> Unit,
+    onCancelar: () -> Unit,
 ) {
     val (fondo, color) = when (solicitud.estado) {
         EstadoSolicitudResuelta.CONFIRMADA,
@@ -839,6 +861,25 @@ private fun FilaSolicitudResuelta(
                         color = Color.White,
                     )
                 }
+            }
+        }
+        if (solicitud.puedeCancelar) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(50))
+                    .background(RojoError90)
+                    .clickable(enabled = !completando, onClick = onCancelar)
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "Cancelar cita",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = RojoError40,
+                )
             }
         }
     }

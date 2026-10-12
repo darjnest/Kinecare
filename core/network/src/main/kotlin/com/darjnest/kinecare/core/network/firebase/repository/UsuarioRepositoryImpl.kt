@@ -62,6 +62,19 @@ class UsuarioRepositoryImpl @Inject constructor(
             Result.Error(UsuarioError.DESCONOCIDO)
         }
     }
+
+    override suspend fun actualizarFotoUrl(id: String, fotoUrl: String?): Result<Unit, UsuarioError> {
+        return try {
+            firestore.collection(COLECCION_USUARIOS).document(id)
+                .update(mapOf("fotoUrl" to fotoUrl))
+                .await()
+            Result.Success(Unit)
+        } catch (e: FirebaseNetworkException) {
+            Result.Error(UsuarioError.SIN_INTERNET)
+        } catch (e: Exception) {
+            Result.Error(UsuarioError.DESCONOCIDO)
+        }
+    }
 }
 
 /** Mapea un `DocumentSnapshot` de `usuarios/{id}` a [Usuario], o null si no existe. */

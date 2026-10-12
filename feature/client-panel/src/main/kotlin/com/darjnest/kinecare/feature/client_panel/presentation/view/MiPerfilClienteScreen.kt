@@ -45,8 +45,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -60,9 +58,13 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.darjnest.kinecare.core.designsystem.components.avatar.KineCareAvatar
 import com.darjnest.kinecare.core.designsystem.components.bar.KineCareBottomNavBar
 import com.darjnest.kinecare.core.designsystem.components.bar.PestanaClienteInferior
+import com.darjnest.kinecare.core.designsystem.theme.KineCareSpacing
 import com.darjnest.kinecare.core.designsystem.theme.KineCareTheme
 import com.darjnest.kinecare.core.designsystem.theme.LoginAzulSuave
 import com.darjnest.kinecare.core.designsystem.theme.LoginFondo
@@ -75,7 +77,6 @@ import com.darjnest.kinecare.core.designsystem.theme.LoginPrimarioOscuro
 import com.darjnest.kinecare.core.designsystem.theme.RojoError40
 import com.darjnest.kinecare.core.designsystem.theme.RojoError90
 import com.darjnest.kinecare.core.designsystem.theme.TextoPrincipal
-import com.darjnest.kinecare.feature.client_panel.presentation.viewmodel.AjustesSeguridad
 import com.darjnest.kinecare.feature.client_panel.presentation.viewmodel.DireccionCliente
 import com.darjnest.kinecare.feature.client_panel.presentation.viewmodel.FacturacionCliente
 import com.darjnest.kinecare.feature.client_panel.presentation.viewmodel.MetodoPagoGuardado
@@ -100,6 +101,10 @@ fun MiPerfilClienteRoot(
     onCerrarSesion: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    // La foto se cambia en "Informacion Personal": al volver aqui se relee.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        viewModel.onAction(MiPerfilClienteAction.RefrescarFoto)
+    }
     MiPerfilClienteScreen(
         state = state,
         onAction = { accion ->
@@ -132,6 +137,9 @@ fun MiPerfilClienteScreen(
 ) {
     state.formularioDireccion?.let { formulario ->
         DialogoNuevaDireccion(formulario = formulario, onAction = onAction)
+    }
+    if (state.mostrandoDerechos) {
+        DialogoDerechosDelPaciente(onCerrar = { onAction(MiPerfilClienteAction.CerrarDerechosDelPaciente) })
     }
     Scaffold(
         modifier = modifier,
@@ -185,7 +193,6 @@ fun MiPerfilClienteScreen(
                 }
 
                 TarjetaAjustesYSeguridad(
-                    ajustes = state.ajustes,
                     onAction = onAction,
                     onCerrarSesion = onCerrarSesion,
                 )
@@ -259,24 +266,14 @@ private fun TarjetaCabeceraPaciente(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Box {
-                Box(
-                    modifier = Modifier
-                        .size(88.dp)
-                        .clip(CircleShape)
-                        .background(LoginMenta),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (resumen != null && resumen.iniciales.isNotBlank()) {
-                        Text(
-                            text = resumen.iniciales,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = LoginPrimarioOscuro,
-                        )
-                    } else {
-                        Icon(Icons.Filled.Person, contentDescription = null, tint = LoginPrimarioOscuro, modifier = Modifier.size(40.dp))
-                    }
-                }
+                KineCareAvatar(
+                    iniciales = resumen?.iniciales.orEmpty(),
+                    fotoUrl = resumen?.fotoUrl,
+                    tamano = KineCareSpacing.avatarPerfil,
+                    colorFondo = LoginMenta,
+                    colorContenido = LoginPrimarioOscuro,
+                    contentDescription = "Foto de perfil",
+                )
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
@@ -871,7 +868,6 @@ private fun TarjetaPagosYFacturacion(
 
 @Composable
 private fun TarjetaAjustesYSeguridad(
-    ajustes: AjustesSeguridad,
     onAction: (MiPerfilClienteAction) -> Unit,
     onCerrarSesion: () -> Unit,
 ) {
@@ -889,20 +885,6 @@ private fun TarjetaAjustesYSeguridad(
                 color = TextoPrincipal,
             )
 
-            Spacer(modifier = Modifier.height(10.dp))
-            FilaSwitch(
-                texto = "Avisos por WhatsApp",
-                subtitulo = "Recordatorios de tus próximas citas",
-                checked = ajustes.avisosWhatsApp,
-                onCheckedChange = { onAction(MiPerfilClienteAction.CambiarAvisosWhatsApp(it)) },
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-            FilaSwitch(
-                texto = "Ingreso Biométrico",
-                subtitulo = "Touch ID / Face ID",
-                checked = ajustes.ingresoBiometrico,
-                onCheckedChange = { onAction(MiPerfilClienteAction.CambiarIngresoBiometrico(it)) },
-            )
             Spacer(modifier = Modifier.height(10.dp))
             Row(
                 modifier = Modifier
@@ -938,30 +920,6 @@ private fun TarjetaAjustesYSeguridad(
                 Text(text = "Cerrar Sesión", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = RojoError40)
             }
         }
-    }
-}
-
-@Composable
-private fun FilaSwitch(
-    texto: String,
-    subtitulo: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = texto, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = TextoPrincipal)
-            Text(text = subtitulo, style = MaterialTheme.typography.labelSmall, color = LoginGrisTexto)
-        }
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(checkedTrackColor = LoginPrimarioOscuro),
-        )
     }
 }
 

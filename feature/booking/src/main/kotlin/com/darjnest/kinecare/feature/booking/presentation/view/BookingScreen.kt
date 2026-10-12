@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -327,6 +328,19 @@ private fun TarjetaServicio(
 
 @Composable
 private fun PasoFechaHora(state: BookingState, onAction: (BookingAction) -> Unit) {
+    if (state.cargandoCupos) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(KineCareSpacing.m),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CircularProgressIndicator(modifier = Modifier.size(KineCareSpacing.xl))
+            Text(
+                text = "Buscando horarios disponibles…",
+                style = MaterialTheme.typography.bodyLarge,
+            )
+        }
+        return
+    }
     if (state.dias.isEmpty()) {
         Text(
             text = "No hay horarios disponibles para este servicio en los próximos $DIAS_HORIZONTE días. " +

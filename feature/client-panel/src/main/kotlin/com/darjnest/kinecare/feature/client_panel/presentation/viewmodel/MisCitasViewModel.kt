@@ -2,6 +2,7 @@
 
 package com.darjnest.kinecare.feature.client_panel.presentation.viewmodel
 
+import com.darjnest.kinecare.core.common.data.error.CancelarReservaError
 import com.darjnest.kinecare.core.common.data.repository.ProfesionalRepository
 import com.darjnest.kinecare.core.common.data.repository.ResenaRepository
 import com.darjnest.kinecare.core.common.data.repository.ReservaRepository
@@ -9,6 +10,7 @@ import com.darjnest.kinecare.core.common.domain.model.EstadoPago
 import com.darjnest.kinecare.core.common.domain.model.EstadoReserva
 import com.darjnest.kinecare.core.common.domain.model.EstadoVerificacion
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
+import com.darjnest.kinecare.core.common.domain.model.ReembolsoCancelacion
 import com.darjnest.kinecare.core.common.domain.model.Profesional
 import com.darjnest.kinecare.core.common.domain.model.Resena
 import com.darjnest.kinecare.core.common.domain.model.Reserva
@@ -20,10 +22,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Instant
@@ -31,6 +36,8 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import javax.inject.Inject
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.milliseconds
 
 /** Pestana segmentada seleccionada en "Mis Citas". */
 enum class TabMisCitas { PROXIMAS, HISTORIAL, CANCELADAS }
@@ -109,7 +116,38 @@ data class CitaProxima(
     val puedePagar: Boolean
         get() = !porConfirmar && !yaComenzo &&
             (estadoPago == EstadoPago.PENDIENTE || estadoPago == EstadoPago.RECHAZADO)
+
+    /**
+     * Una cita `SOLICITADA` o `CONFIRMADA` (las unicas que llegan aqui) se
+     * puede cancelar hasta que comienza; el backend lo vuelve a validar en
+     * `cancelarReserva` (`CITA_YA_INICIADA`).
+     */
+    val puedeCancelar: Boolean
+        get() = !yaComenzo
 }
+
+/**
+ * Que pasa con el dinero si el cliente cancela, segun la politica de
+ * `cancelarReserva` (docs/DATA_MODEL.md): con el pago autorizado, 24 horas o
+ * mas de anticipacion devuelve el total y con menos no hay reembolso
+ * automatico; sin pago cobrado no hay nada que devolver.
+ */
+enum class PoliticaReembolso { TOTAL, SIN_REEMBOLSO_AUTOMATICO, SIN_COBRO }
+
+/** Cancelacion en curso (dialogo abierto): que cita, que pasara con el pago y el motivo que escribe el cliente. */
+data class CancelacionCita(
+    val citaId: String,
+    /** "Ana Soto - 14/10/2026 10:00", para identificar la cita en el dialogo. */
+    val resumen: String,
+    val politica: PoliticaReembolso,
+    val motivo: String = "",
+    val cancelando: Boolean = false,
+    /** Error reintentable (sin conexion, fallo del servidor) mostrado dentro del dialogo. */
+    val error: String? = null,
+)
+
+/** Largo maximo del motivo; el backend rechaza mas (`MOTIVO_INVALIDO`). */
+const val MAX_MOTIVO_CANCELACION = 300
 
 /** Sesion completada, mostrada en "Historial Reciente & Reembolsos". */
 data class CitaHistorial(
@@ -155,6 +193,8 @@ data class MisCitasState(
     val proximasCitas: List<CitaProxima> = emptyList(),
     val historial: List<CitaHistorial> = emptyList(),
     val canceladas: List<CitaCancelada> = emptyList(),
+    /** No nulo mientras el dialogo "Cancelar cita" esta abierto. */
+    val cancelacion: CancelacionCita? = null,
 ) {
     /** `true` si hay algo que pintar (aunque sea de una carga anterior). */
     val tieneCitas: Boolean
@@ -184,6 +224,12 @@ sealed interface MisCitasAction {
     /** Navegacion al formulario de reporte (`ReportarProblemaRoute`): la resuelve el `Root` via callback. */
     data class ReportarProblema(val reservaId: String, val profesionalId: String) : MisCitasAction
 
+    /** Abre el dialogo de confirmacion para cancelar una cita proxima. */
+    data class CancelarCita(val citaId: String) : MisCitasAction
+    data class CambiarMotivoCancelacion(val motivo: String) : MisCitasAction
+    data object ConfirmarCancelacion : MisCitasAction
+    data object DescartarCancelacion : MisCitasAction
+
     /**
      * Vuelve a cargar las reservas (p. ej. al volver de dejar una resena, para que el boton desaparezca).
      * Se ignora si ya hay una carga en curso.
@@ -193,6 +239,35 @@ sealed interface MisCitasAction {
     /** "Reintentar" tras un error de carga (misma recarga que [Recargar], pero iniciada por el usuario). */
     data object Reintentar : MisCitasAction
 }
+
+/** Eventos de una sola vez (no son estado): el `Root` los muestra en un Snackbar. */
+sealed interface MisCitasEvent {
+    data class MostrarMensaje(val texto: String) : MisCitasEvent
+}
+
+private fun CancelarReservaError.aMensaje(): String = when (this) {
+    CancelarReservaError.SIN_INTERNET -> "Sin conexión. Revisa tu internet e inténtalo de nuevo."
+    CancelarReservaError.SIN_SESION -> "Tu sesión expiró. Vuelve a iniciar sesión."
+    CancelarReservaError.NO_AUTORIZADO -> "No puedes cancelar esta cita."
+    CancelarReservaError.RESERVA_NO_ENCONTRADA -> "La cita ya no existe."
+    CancelarReservaError.ESTADO_INVALIDO -> "Esta cita ya no se puede cancelar: cambió de estado."
+    CancelarReservaError.CITA_YA_INICIADA -> "La hora de la cita ya llegó; no se puede cancelar."
+    CancelarReservaError.MOTIVO_INVALIDO -> "El motivo es demasiado largo. Acórtalo e inténtalo de nuevo."
+    CancelarReservaError.DATOS_INVALIDOS,
+    CancelarReservaError.DESCONOCIDO,
+    -> "No pudimos cancelar la cita. Inténtalo de nuevo."
+}
+
+/** Tras estos errores la cita ya cambio por otro lado: se cierra el dialogo y se recarga. */
+private val ERRORES_CANCELAR_QUE_RECARGAN = setOf(
+    CancelarReservaError.NO_AUTORIZADO,
+    CancelarReservaError.RESERVA_NO_ENCONTRADA,
+    CancelarReservaError.ESTADO_INVALIDO,
+    CancelarReservaError.CITA_YA_INICIADA,
+)
+
+/** Anticipacion minima para que cancelar el cliente devuelva el total del pago. */
+internal val ANTICIPACION_REEMBOLSO_TOTAL = 24.hours
 
 private fun ModalidadServicio.aTexto(): String = when (this) {
     ModalidadServicio.DOMICILIO -> "A domicilio"
@@ -327,7 +402,7 @@ private fun Reserva.aCitaCancelada(
         motivo = when (estado) {
             EstadoReserva.CANCELADA_CLIENTE -> "Cancelada por ti"
             EstadoReserva.CANCELADA_PROFESIONAL -> "Cancelada por el profesional"
-            EstadoReserva.RECHAZADA -> "Solicitud rechazada"
+            EstadoReserva.RECHAZADA -> if (expirada) "Solicitud vencida sin respuesta" else "Solicitud rechazada"
             else -> null
         },
         estadoReporte = reportes[id],
@@ -348,6 +423,9 @@ class MisCitasViewModel @Inject constructor(
     private val _state = MutableStateFlow(MisCitasState())
     val state: StateFlow<MisCitasState> = _state.asStateFlow()
 
+    private val _eventos = Channel<MisCitasEvent>(Channel.BUFFERED)
+    val eventos: Flow<MisCitasEvent> = _eventos.receiveAsFlow()
+
     private var cargaJob: Job? = null
 
     init {
@@ -361,6 +439,17 @@ class MisCitasViewModel @Inject constructor(
             MisCitasAction.Recargar,
             MisCitasAction.Reintentar,
             -> if (cargaJob?.isActive != true) cargarReservas()
+            is MisCitasAction.CancelarCita -> pedirCancelacion(action.citaId)
+            is MisCitasAction.CambiarMotivoCancelacion -> _state.update { estado ->
+                estado.cancelacion?.takeIf { !it.cancelando }?.let {
+                    estado.copy(cancelacion = it.copy(motivo = action.motivo, error = null))
+                } ?: estado
+            }
+            MisCitasAction.ConfirmarCancelacion -> confirmarCancelacion()
+            MisCitasAction.DescartarCancelacion ->
+                _state.update { estado ->
+                    if (estado.cancelacion?.cancelando == true) estado else estado.copy(cancelacion = null)
+                }
             // Dejar resena, reportar problema, pagar y agregar a Google Calendar
             // son navegacion/Intents: el Root las resuelve (NavGraph o Activity).
             is MisCitasAction.DejarResena,
@@ -381,6 +470,74 @@ class MisCitasViewModel @Inject constructor(
             MisCitasAction.ChatearConSoporte,
             -> Unit
         }
+    }
+
+    private fun pedirCancelacion(citaId: String) {
+        val cita = _state.value.proximasCitas.firstOrNull { it.id == citaId && it.puedeCancelar } ?: return
+        val politica = when (cita.estadoPago) {
+            EstadoPago.AUTORIZADO -> {
+                val anticipacion = (cita.inicioEpochMillis - clock.now().toEpochMilliseconds()).milliseconds
+                if (anticipacion >= ANTICIPACION_REEMBOLSO_TOTAL) PoliticaReembolso.TOTAL
+                else PoliticaReembolso.SIN_REEMBOLSO_AUTOMATICO
+            }
+            else -> PoliticaReembolso.SIN_COBRO
+        }
+        _state.update {
+            it.copy(
+                cancelacion = CancelacionCita(
+                    citaId = cita.id,
+                    resumen = "${cita.profesionalNombre} • ${cita.fechaHoraTexto}",
+                    politica = politica,
+                ),
+            )
+        }
+    }
+
+    private fun confirmarCancelacion() {
+        val cancelacion = _state.value.cancelacion ?: return
+        if (cancelacion.cancelando) return
+        _state.update { it.copy(cancelacion = cancelacion.copy(cancelando = true, error = null)) }
+        viewModelScope.launch {
+            when (val resultado = reservaRepository.cancelar(cancelacion.citaId, cancelacion.motivo.trim().ifBlank { null })) {
+                is Result.Success -> {
+                    _state.update { it.copy(cancelacion = null) }
+                    _eventos.send(MisCitasEvent.MostrarMensaje(mensajeCancelada(resultado.data.reembolso, cancelacion.politica)))
+                    recargarAhora()
+                }
+                is Result.Error -> {
+                    val mensaje = resultado.error.aMensaje()
+                    if (resultado.error in ERRORES_CANCELAR_QUE_RECARGAN) {
+                        _state.update { it.copy(cancelacion = null) }
+                        _eventos.send(MisCitasEvent.MostrarMensaje(mensaje))
+                        recargarAhora()
+                    } else {
+                        // Reintentable: el dialogo sigue abierto con el error a la vista.
+                        _state.update { it.copy(cancelacion = cancelacion.copy(cancelando = false, error = mensaje)) }
+                    }
+                }
+            }
+        }
+    }
+
+    /** Lo que informa el backend manda; si no lo trae, se usa la politica calculada al abrir el dialogo. */
+    private fun mensajeCancelada(reembolso: ReembolsoCancelacion?, politica: PoliticaReembolso): String {
+        val efectivo = when (reembolso) {
+            ReembolsoCancelacion.TOTAL -> PoliticaReembolso.TOTAL
+            ReembolsoCancelacion.NINGUNO -> PoliticaReembolso.SIN_REEMBOLSO_AUTOMATICO
+            ReembolsoCancelacion.NO_APLICA -> PoliticaReembolso.SIN_COBRO
+            null -> politica
+        }
+        return when (efectivo) {
+            PoliticaReembolso.TOTAL -> "Cita cancelada. Se reembolsará el total de tu pago."
+            PoliticaReembolso.SIN_REEMBOLSO_AUTOMATICO -> "Cita cancelada. Por la anticipación, no hay reembolso automático."
+            PoliticaReembolso.SIN_COBRO -> "Cita cancelada."
+        }
+    }
+
+    /** Recarga la lista tras cambiar una reserva, aunque haya una carga en curso (esa quedaria vieja). */
+    private fun recargarAhora() {
+        cargaJob?.cancel()
+        cargarReservas()
     }
 
     private fun cargarReservas() {

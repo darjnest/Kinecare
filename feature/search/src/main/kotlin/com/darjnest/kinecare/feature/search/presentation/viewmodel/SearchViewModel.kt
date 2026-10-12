@@ -24,6 +24,8 @@ import com.darjnest.kinecare.core.designsystem.theme.LoginMenta
 import com.darjnest.kinecare.core.designsystem.theme.LoginMentaSuave
 import com.darjnest.kinecare.feature.search.data.repository.UbicacionRepository
 import com.darjnest.kinecare.feature.search.domain.UbicacionError
+import com.darjnest.kinecare.feature.search.presentation.util.coincideConBusqueda
+import com.darjnest.kinecare.feature.search.presentation.util.normalizarParaBusqueda
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,6 +34,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+/** Orden de la lista de profesionales. */
+enum class OrdenBusqueda { MEJOR_CALIFICADOS, MENOR_PRECIO, MAS_RESENAS }
 
 /** Modalidad de entrega del servicio (pestanas de la seccion "Servicios cerca de ti"). */
 enum class ModalidadAtencion { A_DOMICILIO, EN_CONSULTA }
@@ -70,6 +75,12 @@ data class ProfesionalDestacado(
     val modalidades: Set<ModalidadServicio> = emptySet(),
     /** Ids de categoria de vitrina (tags de `especialidades`) a los que pertenece. */
     val categoriaIds: Set<String> = emptySet(),
+    /**
+     * Texto en que busca el cuadro de busqueda (nombre, especialidad y descripcion), ya normalizado
+     * con `normalizarParaBusqueda`. Los profesionales no tienen comuna en Firestore, asi que la
+     * comuna solo calza si la descripcion la menciona.
+     */
+    val indiceBusqueda: String = "",
 )
 
 data class SearchState(
@@ -85,7 +96,10 @@ data class SearchState(
     val categorias: List<CategoriaServicio> = categoriasPara(TipoAtencion.KINESIOLOGIA),
     /** Categoria de la vitrina por la que se filtra la lista; `null` = todas. */
     val categoriaSeleccionadaId: String? = null,
-    /** Profesionales ya filtrados por modalidad, verificacion y categoria. */
+    /** Texto libre del cuadro de busqueda; se aplica en vivo sobre los profesionales cargados. */
+    val textoBusqueda: String = "",
+    val orden: OrdenBusqueda = OrdenBusqueda.MEJOR_CALIFICADOS,
+    /** Profesionales ya filtrados por texto, modalidad, verificacion y categoria, y ordenados por [orden]. */
     val profesionalesDestacados: List<ProfesionalDestacado> = emptyList(),
     /** Cuantos profesionales trajo la busqueda antes de filtrar (distingue "no hay" de "los filtros no calzan"). */
     val totalProfesionalesCargados: Int = 0,
@@ -100,6 +114,8 @@ sealed interface SearchAction {
     data class CambiarTipoAtencion(val tipo: TipoAtencion) : SearchAction
     data class CambiarModalidad(val modalidad: ModalidadAtencion) : SearchAction
     data class CambiarSoloVerificados(val activo: Boolean) : SearchAction
+    data class CambiarTextoBusqueda(val texto: String) : SearchAction
+    data class CambiarOrden(val orden: OrdenBusqueda) : SearchAction
     data object ObtenerUbicacionActual : SearchAction
     data class CambiarUbicacionManual(val texto: String) : SearchAction
     data object Buscar : SearchAction
@@ -212,11 +228,13 @@ private fun Profesional.especialidadLegible(): String {
 /** Mapea el `Profesional` de dominio al modelo reducido de la tarjeta de inicio. */
 private fun Profesional.aProfesionalDestacado(): ProfesionalDestacado {
     val activos = servicios.filter { it.activo }
+    val especialidad = especialidadLegible()
     return ProfesionalDestacado(
         id = usuario.id,
         nombre = usuario.nombre,
         rnpi = rnpi,
-        especialidad = especialidadLegible(),
+        especialidad = especialidad,
+        indiceBusqueda = normalizarParaBusqueda("${usuario.nombre} $especialidad $descripcion"),
         calificacion = calificacionPromedio,
         totalResenas = totalResenas,
         precioDesde = (activos.ifEmpty { servicios }).minOfOrNull { it.precio } ?: 0L,
@@ -231,15 +249,40 @@ private fun ModalidadAtencion.aModalidadServicio(): ModalidadServicio = when (th
     ModalidadAtencion.EN_CONSULTA -> ModalidadServicio.CONSULTA
 }
 
-/** Aplica los filtros de la pantalla; el orden (mejor calificados primero) lo trae la consulta. */
+/** Aplica los filtros de la pantalla (el texto libre es opcional); el orden va aparte, en [ordenarPor]. */
 internal fun List<ProfesionalDestacado>.filtrarPor(
     modalidad: ModalidadAtencion,
     soloVerificados: Boolean,
     categoriaId: String?,
+    texto: String = "",
 ): List<ProfesionalDestacado> = filter { profesional ->
     modalidad.aModalidadServicio() in profesional.modalidades &&
         (!soloVerificados || profesional.verificado) &&
-        (categoriaId == null || categoriaId in profesional.categoriaIds)
+        (categoriaId == null || categoriaId in profesional.categoriaIds) &&
+        coincideConBusqueda(profesional.indiceBusqueda, texto)
+}
+
+/**
+ * Ordena por [orden]; los empates se desempatan con el otro criterio de calidad y luego por nombre
+ * para que el orden sea estable. En "menor precio" un profesional sin precio (0) va al final.
+ */
+internal fun List<ProfesionalDestacado>.ordenarPor(orden: OrdenBusqueda): List<ProfesionalDestacado> = when (orden) {
+    OrdenBusqueda.MEJOR_CALIFICADOS -> sortedWith(
+        compareByDescending<ProfesionalDestacado> { it.calificacion }
+            .thenByDescending { it.totalResenas }
+            .thenBy { it.nombre },
+    )
+    OrdenBusqueda.MENOR_PRECIO -> sortedWith(
+        compareBy<ProfesionalDestacado> { it.precioDesde <= 0 }
+            .thenBy { it.precioDesde }
+            .thenByDescending { it.calificacion }
+            .thenBy { it.nombre },
+    )
+    OrdenBusqueda.MAS_RESENAS -> sortedWith(
+        compareByDescending<ProfesionalDestacado> { it.totalResenas }
+            .thenByDescending { it.calificacion }
+            .thenBy { it.nombre },
+    )
 }
 
 /**
@@ -294,6 +337,9 @@ class SearchViewModel @Inject constructor(
                 cargarProfesionalesDestacados(action.tipo)
             }
             is SearchAction.CambiarModalidad -> _state.update { aplicarFiltros(it.copy(modalidad = action.modalidad)) }
+            is SearchAction.CambiarTextoBusqueda ->
+                _state.update { aplicarFiltros(it.copy(textoBusqueda = action.texto)) }
+            is SearchAction.CambiarOrden -> _state.update { aplicarFiltros(it.copy(orden = action.orden)) }
             is SearchAction.CambiarSoloVerificados ->
                 _state.update { aplicarFiltros(it.copy(soloVerificados = action.activo)) }
             SearchAction.ObtenerUbicacionActual -> obtenerUbicacionActual()
@@ -349,15 +395,21 @@ class SearchViewModel @Inject constructor(
 
     /** Recalcula la lista visible y los conteos de la vitrina con los filtros actuales de [estado]. */
     private fun aplicarFiltros(estado: SearchState): SearchState {
-        // Los conteos de cada categoria respetan modalidad y verificacion, pero no la categoria elegida.
-        val sinCategoria = cargados.filtrarPor(estado.modalidad, estado.soloVerificados, categoriaId = null)
+        // Los conteos de cada categoria respetan texto, modalidad y verificacion, pero no la categoria elegida.
+        val sinCategoria = cargados.filtrarPor(
+            estado.modalidad,
+            estado.soloVerificados,
+            categoriaId = null,
+            texto = estado.textoBusqueda,
+        )
         return estado.copy(
             categorias = categoriasPara(estado.tipoAtencion).conConteos(sinCategoria),
             profesionalesDestacados = cargados.filtrarPor(
                 estado.modalidad,
                 estado.soloVerificados,
                 estado.categoriaSeleccionadaId,
-            ),
+                estado.textoBusqueda,
+            ).ordenarPor(estado.orden),
             totalProfesionalesCargados = cargados.size,
         )
     }

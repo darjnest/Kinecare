@@ -24,6 +24,9 @@ object KineCareSpacing {
     /** Lado del avatar grande de encabezado de perfil. */
     val avatarGrande: Dp = 72.dp
 
+    /** Lado del avatar de la cabecera de "Mi Perfil" y de "Informacion Personal" del cliente. */
+    val avatarPerfil: Dp = 88.dp
+
     /** Tamano tactil minimo de un icono clickeable (barra superior). */
     val iconoTactil: Dp = 48.dp
 

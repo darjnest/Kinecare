@@ -12,6 +12,7 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Query
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.tasks.await
 import kotlinx.datetime.Instant
 import javax.inject.Inject
@@ -65,6 +66,19 @@ class ResenaRepositoryImpl @Inject constructor(
 
             firestore.collection(COLECCION_RESENAS).document(resena.reservaId).set(datos).await()
             Result.Success(Unit)
+        } catch (e: Exception) {
+            Result.Error(e.aResenaError())
+        }
+    }
+
+    override suspend fun responder(resenaId: String, texto: String): Result<Unit, ResenaError> {
+        return try {
+            firestore.collection(COLECCION_RESENAS).document(resenaId)
+                .update("respuestaProfesional", texto)
+                .await()
+            Result.Success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.Error(e.aResenaError())
         }

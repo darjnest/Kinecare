@@ -27,6 +27,8 @@ data class PacienteResumen(
     val rut: String,
     val ciudad: String,
     val verificadoClaveUnica: Boolean,
+    /** URL de la foto de perfil (`usuarios/{uid}.fotoUrl`); `null` = se muestran las iniciales. */
+    val fotoUrl: String? = null,
 )
 
 /** Metrica numerica mostrada en la fila de 3 columnas del perfil. */
@@ -79,11 +81,6 @@ data class FacturacionCliente(
     val email: String,
 )
 
-data class AjustesSeguridad(
-    val avisosWhatsApp: Boolean = false,
-    val ingresoBiometrico: Boolean = false,
-)
-
 /** Campos del formulario "Agregar nueva dirección". */
 enum class CampoDireccion { CALLE, NUMERO, COMUNA, CIUDAD, INDICACIONES }
 
@@ -111,9 +108,10 @@ data class MiPerfilClienteState(
     val direcciones: List<DireccionCliente> = emptyList(),
     val metodoPago: MetodoPagoGuardado? = null,
     val facturacion: FacturacionCliente? = null,
-    val ajustes: AjustesSeguridad = AjustesSeguridad(),
     /** No nulo mientras el diálogo de nueva dirección está abierto. */
     val formularioDireccion: FormularioDireccion? = null,
+    /** `true` mientras el dialogo informativo "Derechos del Paciente" esta abierto. */
+    val mostrandoDerechos: Boolean = false,
 )
 
 sealed interface MiPerfilClienteAction {
@@ -126,9 +124,11 @@ sealed interface MiPerfilClienteAction {
     data object GuardarDireccion : MiPerfilClienteAction
     data object CancelarDireccion : MiPerfilClienteAction
     data object EditarFacturacion : MiPerfilClienteAction
-    data class CambiarAvisosWhatsApp(val activo: Boolean) : MiPerfilClienteAction
-    data class CambiarIngresoBiometrico(val activo: Boolean) : MiPerfilClienteAction
     data object VerDerechosDelPaciente : MiPerfilClienteAction
+    data object CerrarDerechosDelPaciente : MiPerfilClienteAction
+
+    /** Al volver a la pantalla: la foto pudo cambiarse en "Informacion Personal". */
+    data object RefrescarFoto : MiPerfilClienteAction
 }
 
 /** Iniciales (hasta 2) a partir del nombre completo, para el avatar circular. */
@@ -179,10 +179,8 @@ class MiPerfilClienteViewModel @Inject constructor(
 
     fun onAction(action: MiPerfilClienteAction) {
         when (action) {
-            is MiPerfilClienteAction.CambiarAvisosWhatsApp ->
-                _state.update { it.copy(ajustes = it.ajustes.copy(avisosWhatsApp = action.activo)) }
-            is MiPerfilClienteAction.CambiarIngresoBiometrico ->
-                _state.update { it.copy(ajustes = it.ajustes.copy(ingresoBiometrico = action.activo)) }
+            MiPerfilClienteAction.VerDerechosDelPaciente -> _state.update { it.copy(mostrandoDerechos = true) }
+            MiPerfilClienteAction.CerrarDerechosDelPaciente -> _state.update { it.copy(mostrandoDerechos = false) }
             MiPerfilClienteAction.AgregarNuevaDireccion ->
                 _state.update { it.copy(formularioDireccion = FormularioDireccion()) }
             is MiPerfilClienteAction.CambiarCampoDireccion -> _state.update { estado ->
@@ -199,8 +197,9 @@ class MiPerfilClienteViewModel @Inject constructor(
             }
             MiPerfilClienteAction.CancelarDireccion -> _state.update { it.copy(formularioDireccion = null) }
             MiPerfilClienteAction.GuardarDireccion -> guardarDireccion()
+            MiPerfilClienteAction.RefrescarFoto -> refrescarFoto()
             // Editar facturacion, gestionar prevision y boletas SII, ver
-            // pauta activa/historial de evoluciones y ver los derechos del paciente: requieren escritura sobre el
+            // pauta activa/historial de evoluciones: requieren escritura sobre el
             // `Cliente` real y navegacion hacia otras features, ninguno
             // conectado todavia (sin modelo de producto/tratamiento clinico
             // en Firestore) — se conectan cuando la feature salga de esta
@@ -216,7 +215,6 @@ class MiPerfilClienteViewModel @Inject constructor(
             MiPerfilClienteAction.VerPautaActivaEnCasa,
             MiPerfilClienteAction.VerHistorialDeEvoluciones,
             MiPerfilClienteAction.EditarFacturacion,
-            MiPerfilClienteAction.VerDerechosDelPaciente,
             -> Unit
         }
     }
@@ -261,6 +259,18 @@ class MiPerfilClienteViewModel @Inject constructor(
         }
     }
 
+    /** Relee solo la foto de `usuarios/{uid}` (sin spinner ni tocar el resto del perfil). */
+    private fun refrescarFoto() {
+        val uid = firebaseAuth.currentUser?.uid ?: return
+        if (_state.value.resumen == null) return
+        viewModelScope.launch {
+            val usuario = (usuarioRepository.obtenerPorId(uid) as? Result.Success)?.data ?: return@launch
+            _state.update { estado ->
+                estado.copy(resumen = estado.resumen?.copy(fotoUrl = usuario.fotoUrl))
+            }
+        }
+    }
+
     private fun cargarPerfil() {
         val uid = firebaseAuth.currentUser?.uid ?: return
         viewModelScope.launch {
@@ -294,6 +304,7 @@ class MiPerfilClienteViewModel @Inject constructor(
                         // docs/TASKS.md) — se fija en `false` hasta que el
                         // backend de identidad lo resuelva.
                         verificadoClaveUnica = false,
+                        fotoUrl = usuario.fotoUrl,
                     ),
                     direcciones = direcciones.aDireccionesCliente(),
                 )

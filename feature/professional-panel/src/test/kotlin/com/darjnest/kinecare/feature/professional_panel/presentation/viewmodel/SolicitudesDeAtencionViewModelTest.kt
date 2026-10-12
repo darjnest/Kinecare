@@ -2,6 +2,7 @@
 
 package com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel
 
+import com.darjnest.kinecare.core.common.data.error.CancelarReservaError
 import com.darjnest.kinecare.core.common.data.error.CompletarReservaError
 import com.darjnest.kinecare.core.common.data.error.ReservaError
 import com.darjnest.kinecare.core.common.data.error.ResponderReservaError
@@ -16,7 +17,9 @@ import com.darjnest.kinecare.core.common.domain.model.EstadoReserva
 import com.darjnest.kinecare.core.common.domain.model.MetodoPago
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
 import com.darjnest.kinecare.core.common.domain.model.Pago
+import com.darjnest.kinecare.core.common.domain.model.ReembolsoCancelacion
 import com.darjnest.kinecare.core.common.domain.model.Reserva
+import com.darjnest.kinecare.core.common.domain.model.ResultadoCancelacion
 import com.darjnest.kinecare.core.common.domain.model.RespuestaReserva
 import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.domain.model.Servicio
@@ -447,6 +450,159 @@ class SolicitudesDeAtencionViewModelTest {
     }
 
     @Nested
+    inner class Expiradas {
+
+        @Test
+        fun `una solicitud RECHAZADA con expirada se muestra como vencida sin respuesta`() = runTest {
+            conReservas(
+                reserva("exp", AHORA - 2.hours, estado = EstadoReserva.RECHAZADA, expirada = true),
+                reserva("rech", AHORA - 2.hours, estado = EstadoReserva.RECHAZADA),
+            )
+
+            val historial = crearViewModel().state.value.historial.associate { it.id to it.estadoTexto }
+
+            assertEquals(mapOf("exp" to "Vencida sin respuesta", "rech" to "Rechazada"), historial)
+        }
+    }
+
+    @Nested
+    inner class Cancelar {
+
+        @Test
+        fun `solo una confirmada con la hora por llegar se puede cancelar`() = runTest {
+            conReservas(
+                reserva("futura", AHORA + 2.hours, estado = EstadoReserva.CONFIRMADA),
+                reserva("cumplida", AHORA - 2.hours, estado = EstadoReserva.CONFIRMADA),
+                reserva("solicitada", AHORA + 2.hours),
+                reserva("hecha", AHORA + 5.hours, estado = EstadoReserva.COMPLETADA),
+            )
+
+            val historial = crearViewModel().state.value.historial.associate { it.id to it.puedeCancelar }
+
+            assertEquals(mapOf("futura" to true, "cumplida" to false, "hecha" to false), historial)
+        }
+
+        @Test
+        fun `pedir cancelar abre el dialogo con el resumen de la cita`() = runTest {
+            conReservas(reserva("r1", AHORA + 2.hours, estado = EstadoReserva.CONFIRMADA))
+            val viewModel = crearViewModel()
+
+            viewModel.onAction(SolicitudesDeAtencionAction.CancelarCita("r1"))
+
+            val cancelacion = requireNotNull(viewModel.state.value.cancelacion)
+            assertEquals("r1", cancelacion.reservaId)
+            assertTrue(cancelacion.resumen.contains("Nombre cli-1"))
+        }
+
+        @Test
+        fun `pedir cancelar una cita que no se puede cancelar no abre el dialogo`() = runTest {
+            conReservas(reserva("r1", AHORA - 2.hours, estado = EstadoReserva.CONFIRMADA))
+            val viewModel = crearViewModel()
+
+            viewModel.onAction(SolicitudesDeAtencionAction.CancelarCita("r1"))
+            viewModel.onAction(SolicitudesDeAtencionAction.CancelarCita("no-existe"))
+
+            assertNull(viewModel.state.value.cancelacion)
+        }
+
+        @Test
+        fun `descartar cierra el dialogo sin llamar a la funcion`() = runTest {
+            conReservas(reserva("r1", AHORA + 2.hours, estado = EstadoReserva.CONFIRMADA))
+            val viewModel = crearViewModel()
+            viewModel.onAction(SolicitudesDeAtencionAction.CancelarCita("r1"))
+
+            viewModel.onAction(SolicitudesDeAtencionAction.DescartarCancelacion)
+
+            assertNull(viewModel.state.value.cancelacion)
+            coVerify(exactly = 0) { reservaRepository.cancelar(any(), any()) }
+        }
+
+        @Test
+        fun `confirmar cancela con el motivo, pasa la cita a canceladas y avisa`() = runTest {
+            conReservas(reserva("r1", AHORA + 2.hours, estado = EstadoReserva.CONFIRMADA))
+            coEvery { reservaRepository.cancelar("r1", "Me enferme") } returns
+                Result.Success(ResultadoCancelacion(EstadoReserva.CANCELADA_PROFESIONAL, ReembolsoCancelacion.TOTAL))
+            val viewModel = crearViewModel()
+            viewModel.onAction(SolicitudesDeAtencionAction.CancelarCita("r1"))
+            viewModel.onAction(SolicitudesDeAtencionAction.CambiarMotivoCancelacion(" Me enferme "))
+
+            viewModel.onAction(SolicitudesDeAtencionAction.ConfirmarCancelacion)
+
+            val state = viewModel.state.value
+            assertNull(state.cancelacion)
+            val fila = state.historial.single()
+            assertEquals(EstadoSolicitudResuelta.CANCELADA, fila.estado)
+            assertEquals("Cancelada por ti", fila.estadoTexto)
+            assertFalse(fila.puedeCancelar)
+            assertEquals("Cita con Nombre cli-1 cancelada. Se reembolsará el total al paciente.", state.mensaje)
+            coVerify(exactly = 1) { reservaRepository.obtenerPorProfesional(uid) }
+        }
+
+        @Test
+        fun `un motivo en blanco se envia como null`() = runTest {
+            conReservas(reserva("r1", AHORA + 2.hours, estado = EstadoReserva.CONFIRMADA))
+            coEvery { reservaRepository.cancelar("r1", null) } returns
+                Result.Success(ResultadoCancelacion(EstadoReserva.CANCELADA_PROFESIONAL, ReembolsoCancelacion.TOTAL))
+            val viewModel = crearViewModel()
+            viewModel.onAction(SolicitudesDeAtencionAction.CancelarCita("r1"))
+            viewModel.onAction(SolicitudesDeAtencionAction.CambiarMotivoCancelacion("  "))
+
+            viewModel.onAction(SolicitudesDeAtencionAction.ConfirmarCancelacion)
+
+            coVerify { reservaRepository.cancelar("r1", null) }
+        }
+
+        @Test
+        fun `mientras cancela el dialogo queda bloqueado y no se confirma dos veces`() = runTest {
+            conReservas(reserva("r1", AHORA + 2.hours, estado = EstadoReserva.CONFIRMADA))
+            val gate = CompletableDeferred<Result<ResultadoCancelacion, CancelarReservaError>>()
+            coEvery { reservaRepository.cancelar(any(), any()) } coAnswers { gate.await() }
+            val viewModel = crearViewModel()
+            viewModel.onAction(SolicitudesDeAtencionAction.CancelarCita("r1"))
+
+            viewModel.onAction(SolicitudesDeAtencionAction.ConfirmarCancelacion)
+            viewModel.onAction(SolicitudesDeAtencionAction.ConfirmarCancelacion)
+            viewModel.onAction(SolicitudesDeAtencionAction.DescartarCancelacion)
+
+            assertTrue(requireNotNull(viewModel.state.value.cancelacion).cancelando)
+            coVerify(exactly = 1) { reservaRepository.cancelar(any(), any()) }
+            gate.complete(Result.Success(ResultadoCancelacion(EstadoReserva.CANCELADA_PROFESIONAL, ReembolsoCancelacion.TOTAL)))
+        }
+
+        @Test
+        fun `un error reintentable deja el dialogo abierto con el mensaje y sin recargar`() = runTest {
+            conReservas(reserva("r1", AHORA + 2.hours, estado = EstadoReserva.CONFIRMADA))
+            coEvery { reservaRepository.cancelar(any(), any()) } returns Result.Error(CancelarReservaError.SIN_INTERNET)
+            val viewModel = crearViewModel()
+            viewModel.onAction(SolicitudesDeAtencionAction.CancelarCita("r1"))
+
+            viewModel.onAction(SolicitudesDeAtencionAction.ConfirmarCancelacion)
+
+            val cancelacion = requireNotNull(viewModel.state.value.cancelacion)
+            assertFalse(cancelacion.cancelando)
+            assertEquals("Sin conexión. Revisa tu internet e inténtalo de nuevo.", cancelacion.error)
+            coVerify(exactly = 1) { reservaRepository.obtenerPorProfesional(uid) }
+        }
+
+        @Test
+        fun `si la cita ya cambio cierra el dialogo, avisa y recarga el estado real`() = runTest {
+            conReservas(reserva("r1", AHORA + 2.hours, estado = EstadoReserva.CONFIRMADA))
+            coEvery { reservaRepository.cancelar(any(), any()) } returns Result.Error(CancelarReservaError.ESTADO_INVALIDO)
+            val viewModel = crearViewModel()
+            viewModel.onAction(SolicitudesDeAtencionAction.CancelarCita("r1"))
+            conReservas(reserva("r1", AHORA + 2.hours, estado = EstadoReserva.CANCELADA_CLIENTE))
+
+            viewModel.onAction(SolicitudesDeAtencionAction.ConfirmarCancelacion)
+
+            val state = viewModel.state.value
+            assertNull(state.cancelacion)
+            assertEquals("Esta cita ya no se puede cancelar: cambió de estado.", state.mensaje)
+            assertEquals("Cancelada por el paciente", state.historial.single().estadoTexto)
+            coVerify(exactly = 2) { reservaRepository.obtenerPorProfesional(uid) }
+        }
+    }
+
+    @Nested
     inner class Textos {
 
         @Test
@@ -479,6 +635,7 @@ private fun reserva(
     monto: Long = 30_000,
     comision: Double = 0.1,
     estadoPago: EstadoPago = EstadoPago.PENDIENTE,
+    expirada: Boolean = false,
 ) = Reserva(
     id = id,
     clienteId = clienteId,
@@ -497,6 +654,7 @@ private fun reserva(
         idTransaccionPasarela = null,
     ),
     comisionPorcentaje = comision,
+    expirada = expirada,
 )
 
 private fun usuario(id: String, nombre: String) = Usuario(

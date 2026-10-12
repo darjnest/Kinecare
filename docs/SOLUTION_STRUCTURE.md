@@ -64,6 +64,7 @@ feature/booking/src/main/kotlin/com/darjnest/kinecare/feature/booking/
 core/designsystem/src/main/kotlin/com/darjnest/kinecare/core/designsystem/
 ├── theme/            # Color.kt, Type.kt, Theme.kt (paleta + Material 3)
 └── components/
+    ├── avatar/        # KineCareAvatar (foto con Coil o iniciales) y rememberSelectorFoto
     ├── button/
     ├── card/
     ├── label/         # badges/insignias (tono semantico, sin conocer modelos de dominio)
@@ -77,7 +78,8 @@ core/designsystem/src/main/kotlin/com/darjnest/kinecare/core/designsystem/
 `:core:database` sigue `entity/`, `dao/`, `di/` (sin `presentation`, no
 tiene UI). `:core:network` sigue `di/` (y sumará `service/`,
 `dto/`, `firebase/` cuando existan endpoints reales — ver
-docs/TASKS.md Fase 2 en adelante).
+docs/TASKS.md Fase 2 en adelante); `firebase/storage/` tiene la lectura y
+reducción de la foto de perfil (`LectorImagenAndroid`) y sus cálculos puros.
 
 `:feature:client-panel` agrupa las pantallas de cuenta del rol Cliente
 (Mis Citas, Favoritos, Mi Perfil) bajo un solo módulo, igual que

@@ -72,6 +72,8 @@ class SearchViewModelTest {
         modalidad: ModalidadServicio = ModalidadServicio.DOMICILIO,
         precio: Long = 18000L,
         verificado: Boolean = true,
+        calificacion: Double = 4.5,
+        totalResenas: Int = 10,
     ): Profesional = Profesional(
         usuario = Usuario(
             id = id,
@@ -98,8 +100,8 @@ class SearchViewModelTest {
         ),
         insignias = emptyList(),
         disponibilidad = emptyList(),
-        calificacionPromedio = 4.5,
-        totalResenas = 10,
+        calificacionPromedio = calificacion,
+        totalResenas = totalResenas,
         descripcion = descripcion,
         estadoVerificacionGeneral = if (verificado) EstadoVerificacion.APROBADO else EstadoVerificacion.NO_SOLICITADO,
         tiposAtencion = listOf(TipoAtencion.KINESIOLOGIA),
@@ -219,6 +221,122 @@ class SearchViewModelTest {
 
         viewModel.onAction(SearchAction.CambiarSoloVerificados(false))
         assertEquals(2, viewModel.state.value.profesionalesDestacados.size)
+    }
+
+    @Test
+    fun `el texto libre busca por nombre, sin tildes ni mayusculas, y se puede borrar`() = runTest {
+        val viewModel = cargar(
+            profesionalDePrueba(id = "a", nombre = "Ana Pérez"),
+            profesionalDePrueba(id = "b", nombre = "Bruno Díaz"),
+        )
+
+        viewModel.onAction(SearchAction.CambiarTextoBusqueda("PEREZ"))
+        assertEquals(listOf("a"), viewModel.state.value.profesionalesDestacados.map { it.id })
+
+        viewModel.onAction(SearchAction.CambiarTextoBusqueda("diaz"))
+        assertEquals(listOf("b"), viewModel.state.value.profesionalesDestacados.map { it.id })
+
+        viewModel.onAction(SearchAction.CambiarTextoBusqueda(""))
+        assertEquals(2, viewModel.state.value.profesionalesDestacados.size)
+    }
+
+    @Test
+    fun `el texto libre busca en la especialidad y en la descripcion`() = runTest {
+        val viewModel = cargar(
+            profesionalDePrueba(id = "dep", especialidades = listOf("KINESIOLOGIA", "kine-deportiva")),
+            profesionalDePrueba(id = "resp", especialidades = listOf("KINESIOLOGIA", "kine-respiratoria")),
+            profesionalDePrueba(id = "desc", descripcion = "Atiendo en Ñuñoa y La Reina"),
+        )
+
+        viewModel.onAction(SearchAction.CambiarTextoBusqueda("deportiva"))
+        assertEquals(listOf("dep"), viewModel.state.value.profesionalesDestacados.map { it.id })
+
+        viewModel.onAction(SearchAction.CambiarTextoBusqueda("nunoa"))
+        assertEquals(listOf("desc"), viewModel.state.value.profesionalesDestacados.map { it.id })
+    }
+
+    @Test
+    fun `todas las palabras del texto deben calzar y un texto sin coincidencias deja la lista vacia`() = runTest {
+        val viewModel = cargar(
+            profesionalDePrueba(id = "a", nombre = "Ana Pérez", especialidades = listOf("KINESIOLOGIA", "kine-deportiva")),
+            profesionalDePrueba(id = "b", nombre = "Ana Díaz"),
+        )
+
+        viewModel.onAction(SearchAction.CambiarTextoBusqueda("ana deportiva"))
+        assertEquals(listOf("a"), viewModel.state.value.profesionalesDestacados.map { it.id })
+
+        viewModel.onAction(SearchAction.CambiarTextoBusqueda("zzz"))
+        assertTrue(viewModel.state.value.profesionalesDestacados.isEmpty())
+        assertEquals(2, viewModel.state.value.totalProfesionalesCargados)
+    }
+
+    @Test
+    fun `el texto libre se combina con los demas filtros y con los conteos de categorias`() = runTest {
+        val viewModel = cargar(
+            profesionalDePrueba(id = "a", nombre = "Ana", especialidades = listOf("KINESIOLOGIA", "kine-deportiva"), verificado = true),
+            profesionalDePrueba(id = "b", nombre = "Ana", especialidades = listOf("KINESIOLOGIA", "kine-deportiva"), verificado = false),
+            profesionalDePrueba(id = "c", nombre = "Carlos", especialidades = listOf("KINESIOLOGIA", "kine-deportiva")),
+        )
+
+        viewModel.onAction(SearchAction.CambiarTextoBusqueda("ana"))
+        viewModel.onAction(SearchAction.CambiarSoloVerificados(true))
+
+        assertEquals(listOf("a"), viewModel.state.value.profesionalesDestacados.map { it.id })
+        assertEquals(1, viewModel.state.value.categorias.first { it.id == "kine-deportiva" }.profesionalesActivos)
+    }
+
+    @Test
+    fun `el orden por defecto es mejor calificados, con mas resenas como desempate`() = runTest {
+        val viewModel = cargar(
+            profesionalDePrueba(id = "media", nombre = "Media", calificacion = 4.0, totalResenas = 50),
+            profesionalDePrueba(id = "top-poca", nombre = "Top poca", calificacion = 5.0, totalResenas = 2),
+            profesionalDePrueba(id = "top-mucha", nombre = "Top mucha", calificacion = 5.0, totalResenas = 20),
+        )
+
+        assertEquals(OrdenBusqueda.MEJOR_CALIFICADOS, viewModel.state.value.orden)
+        assertEquals(listOf("top-mucha", "top-poca", "media"), viewModel.state.value.profesionalesDestacados.map { it.id })
+    }
+
+    @Test
+    fun `ordenar por menor precio pone primero el desde mas barato y al final al que no tiene precio`() = runTest {
+        val viewModel = cargar(
+            profesionalDePrueba(id = "caro", nombre = "Caro", precio = 40_000),
+            profesionalDePrueba(id = "gratis", nombre = "Sin precio", precio = 0),
+            profesionalDePrueba(id = "barato", nombre = "Barato", precio = 15_000),
+        )
+
+        viewModel.onAction(SearchAction.CambiarOrden(OrdenBusqueda.MENOR_PRECIO))
+
+        assertEquals(listOf("barato", "caro", "gratis"), viewModel.state.value.profesionalesDestacados.map { it.id })
+    }
+
+    @Test
+    fun `ordenar por mas resenas y volver a mejor calificados`() = runTest {
+        val viewModel = cargar(
+            profesionalDePrueba(id = "estrella", nombre = "Estrella", calificacion = 5.0, totalResenas = 3),
+            profesionalDePrueba(id = "popular", nombre = "Popular", calificacion = 4.2, totalResenas = 90),
+        )
+
+        viewModel.onAction(SearchAction.CambiarOrden(OrdenBusqueda.MAS_RESENAS))
+        assertEquals(listOf("popular", "estrella"), viewModel.state.value.profesionalesDestacados.map { it.id })
+
+        viewModel.onAction(SearchAction.CambiarOrden(OrdenBusqueda.MEJOR_CALIFICADOS))
+        assertEquals(listOf("estrella", "popular"), viewModel.state.value.profesionalesDestacados.map { it.id })
+    }
+
+    @Test
+    fun `el texto y el orden se conservan al recargar con Buscar`() = runTest {
+        val viewModel = cargar(
+            profesionalDePrueba(id = "a", nombre = "Ana", precio = 30_000),
+            profesionalDePrueba(id = "b", nombre = "Ana Maria", precio = 10_000),
+        )
+        viewModel.onAction(SearchAction.CambiarTextoBusqueda("ana"))
+        viewModel.onAction(SearchAction.CambiarOrden(OrdenBusqueda.MENOR_PRECIO))
+
+        viewModel.onAction(SearchAction.Buscar)
+
+        assertEquals("ana", viewModel.state.value.textoBusqueda)
+        assertEquals(listOf("b", "a"), viewModel.state.value.profesionalesDestacados.map { it.id })
     }
 
     @Test

@@ -97,6 +97,9 @@ Núcleo transaccional del marketplace.
 - `estado: EstadoReserva`
 - `pago: Pago`
 - `comisionPorcentaje: Double` (ej. 0.10 — fijado por Cloud Function, no editable por el cliente)
+- `expirada: Boolean` (opcional, por defecto `false`: `true` si `expirarSolicitudes` cerró
+  una solicitud sin respuesta; el `estado` queda `RECHAZADA` y la UI la muestra como
+  "vencida sin respuesta")
 
 ### EstadoReserva
 `SOLICITADA → CONFIRMADA → EN_CURSO → COMPLETADA` con ramas
@@ -107,7 +110,23 @@ Núcleo transaccional del marketplace.
 `responderReserva`; solo se puede aceptar antes de la hora de la cita. Una
 `SOLICITADA` cuya hora ya pasó no cambia de estado en Firestore (no hay
 plazo de respuesta todavía), pero el panel profesional la muestra como
-vencida.
+vencida. La función programada `expirarSolicitudes` (pendiente de deploy) la
+cierra: como `EstadoReserva` no tiene `EXPIRADA`, pasa a `RECHAZADA` con
+`expirada = true` (ver DATA_MODEL.md); si el enum incorpora `EXPIRADA` se
+cambia ahí.
+
+### Cancelación
+El cliente o el profesional dueño cancelan una reserva `SOLICITADA` o
+`CONFIRMADA` antes de la hora de la cita (`ReservaRepository.cancelar`, Cloud
+Function `cancelarReserva`). Resultado: `ResultadoCancelacion(estado:
+EstadoReserva, reembolso: ReembolsoCancelacion?)`, con `ReembolsoCancelacion` =
+`NO_APLICA` (sin pago autorizado) | `TOTAL` | `NINGUNO`. Política: cancela el
+profesional → reembolso total; el cliente con 24 h o más de anticipación →
+total; con menos → sin reembolso automático.
+
+### CupoOcupado
+Tramo `[inicio, fin)` de la agenda de un profesional ya tomado por una reserva
+activa, sin datos de quién la hizo (`ReservaRepository.obtenerCuposOcupados`).
 
 ## Pago
 - `id: String`
@@ -133,7 +152,8 @@ Resuelto exclusivamente por las Cloud Functions `iniciarPago` / `estadoPago`
 - `calificacion: Int` (1–5)
 - `comentario: String?`
 - `fecha: Instant`
-- `respuestaProfesional: String?`
+- `respuestaProfesional: String?` (la escribe el profesional dueño una sola vez, 1–500
+  caracteres, directo en `resenas/{id}`; no se edita ni se borra)
 
 ## ReporteProblema
 Vive en `:feature:client-panel` (`domain/`), no en `:core:common`: solo esa

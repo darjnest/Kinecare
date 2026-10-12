@@ -32,4 +32,13 @@ interface ResenaRepository {
      * datos no cumplen las reglas de validacion.
      */
     suspend fun crear(resena: Resena): Result<Unit, ResenaError>
+
+    /**
+     * El profesional dueño responde a una resena: escribe solo
+     * `respuestaProfesional` en `resenas/{resenaId}` (firestore.rules limita
+     * el `update` a ese campo y al profesional de la resena). [texto] ya
+     * viene recortado y sin vacios; el limite de 500 caracteres lo valida la
+     * UI.
+     */
+    suspend fun responder(resenaId: String, texto: String): Result<Unit, ResenaError>
 }

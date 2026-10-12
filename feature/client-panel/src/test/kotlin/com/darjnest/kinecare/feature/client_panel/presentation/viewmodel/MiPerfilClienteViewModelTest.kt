@@ -52,7 +52,11 @@ class MiPerfilClienteViewModelTest {
     private fun crearViewModel(): MiPerfilClienteViewModel =
         MiPerfilClienteViewModel(usuarioRepository, clienteRepository, firebaseAuth)
 
-    private fun usuarioDePrueba(nombre: String = "Ana Maria Soto", rut: String = "12345678-5"): Usuario = Usuario(
+    private fun usuarioDePrueba(
+        nombre: String = "Ana Maria Soto",
+        rut: String = "12345678-5",
+        fotoUrl: String? = null,
+    ): Usuario = Usuario(
         id = uid,
         nombre = nombre,
         rut = rut,
@@ -60,7 +64,7 @@ class MiPerfilClienteViewModelTest {
         correoContacto = null,
         telefono = null,
         rol = RolUsuario.CLIENTE,
-        fotoUrl = null,
+        fotoUrl = fotoUrl,
         fechaRegistro = Instant.fromEpochMilliseconds(0),
     )
 
@@ -233,6 +237,18 @@ class MiPerfilClienteViewModelTest {
     }
 
     @Test
+    fun `ver los derechos del paciente abre el dialogo informativo y cerrarlo lo oculta`() = runTest {
+        val viewModel = cargarVacio()
+        assertFalse(viewModel.state.value.mostrandoDerechos)
+
+        viewModel.onAction(MiPerfilClienteAction.VerDerechosDelPaciente)
+        assertTrue(viewModel.state.value.mostrandoDerechos)
+
+        viewModel.onAction(MiPerfilClienteAction.CerrarDerechosDelPaciente)
+        assertFalse(viewModel.state.value.mostrandoDerechos)
+    }
+
+    @Test
     fun `cancelar cierra el formulario sin guardar`() = runTest {
         val viewModel = cargarVacio()
         viewModel.onAction(MiPerfilClienteAction.AgregarNuevaDireccion)
@@ -241,5 +257,43 @@ class MiPerfilClienteViewModelTest {
 
         assertNull(viewModel.state.value.formularioDireccion)
         coVerify(exactly = 0) { clienteRepository.agregarDireccion(any(), any()) }
+    }
+
+    @Test
+    fun `el resumen trae la foto de perfil del usuario`() = runTest {
+        coEvery { usuarioRepository.obtenerPorId(uid) } returns Result.Success(usuarioDePrueba(fotoUrl = "https://dl/a.jpg"))
+        coEvery { clienteRepository.obtenerPorId(uid) } returns Result.Success(clienteDePrueba())
+
+        val viewModel = crearViewModel()
+
+        assertEquals("https://dl/a.jpg", viewModel.state.value.resumen?.fotoUrl)
+    }
+
+    @Test
+    fun `al volver a la pantalla se relee la foto sin tocar el resto del perfil`() = runTest {
+        coEvery { usuarioRepository.obtenerPorId(uid) } returns Result.Success(usuarioDePrueba(fotoUrl = null))
+        coEvery { clienteRepository.obtenerPorId(uid) } returns Result.Success(clienteDePrueba())
+        val viewModel = crearViewModel()
+        assertNull(viewModel.state.value.resumen?.fotoUrl)
+
+        coEvery { usuarioRepository.obtenerPorId(uid) } returns Result.Success(usuarioDePrueba(fotoUrl = "https://dl/nueva.jpg"))
+        viewModel.onAction(MiPerfilClienteAction.RefrescarFoto)
+
+        val estado = viewModel.state.value
+        assertEquals("https://dl/nueva.jpg", estado.resumen?.fotoUrl)
+        assertEquals("Ana Maria Soto", estado.resumen?.nombreCompleto)
+        assertFalse(estado.cargando)
+    }
+
+    @Test
+    fun `refrescar la foto sin conexion deja la foto que ya se mostraba`() = runTest {
+        coEvery { usuarioRepository.obtenerPorId(uid) } returns Result.Success(usuarioDePrueba(fotoUrl = "https://dl/a.jpg"))
+        coEvery { clienteRepository.obtenerPorId(uid) } returns Result.Success(clienteDePrueba())
+        val viewModel = crearViewModel()
+
+        coEvery { usuarioRepository.obtenerPorId(uid) } returns Result.Error(UsuarioError.SIN_INTERNET)
+        viewModel.onAction(MiPerfilClienteAction.RefrescarFoto)
+
+        assertEquals("https://dl/a.jpg", viewModel.state.value.resumen?.fotoUrl)
     }
 }

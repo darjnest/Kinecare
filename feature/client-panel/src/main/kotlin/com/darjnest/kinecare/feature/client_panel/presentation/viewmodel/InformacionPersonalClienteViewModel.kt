@@ -2,7 +2,10 @@ package com.darjnest.kinecare.feature.client_panel.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.darjnest.kinecare.core.common.data.error.FotoPerfilError
+import com.darjnest.kinecare.core.common.data.repository.FotoPerfilRepository
 import com.darjnest.kinecare.core.common.data.repository.UsuarioRepository
+import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.result.Result
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -32,6 +35,10 @@ data class InformacionPersonalClienteState(
      */
     val guardadoExitoso: Boolean = false,
     val fotoUrl: String? = null,
+    /** Subiendo la foto elegida (se muestra progreso sobre el avatar). */
+    val subiendoFoto: Boolean = false,
+    /** Mensaje del ultimo intento fallido de cambiar la foto; `null` si no hay. */
+    val errorFoto: String? = null,
     val nombre: String = "",
     val rut: String = "",
     val telefono: String = "",
@@ -48,7 +55,12 @@ data class InformacionPersonalClienteState(
 
 sealed interface InformacionPersonalClienteAction {
     data object VolverAtras : InformacionPersonalClienteAction
+
+    /** Abrir el selector de fotos: lo resuelve el `Root` (necesita el contexto de la Activity). */
     data object CambiarFoto : InformacionPersonalClienteAction
+
+    /** El usuario eligio una imagen en el selector ([uri] es un `content://`). */
+    data class FotoElegida(val uri: String) : InformacionPersonalClienteAction
     data class CambiarNombre(val valor: String) : InformacionPersonalClienteAction
     data class CambiarTelefono(val valor: String) : InformacionPersonalClienteAction
     data class CambiarCorreoContacto(val valor: String) : InformacionPersonalClienteAction
@@ -61,6 +73,7 @@ sealed interface InformacionPersonalClienteAction {
 @HiltViewModel
 class InformacionPersonalClienteViewModel @Inject constructor(
     private val usuarioRepository: UsuarioRepository,
+    private val fotoPerfilRepository: FotoPerfilRepository,
     private val firebaseAuth: FirebaseAuth,
 ) : ViewModel() {
 
@@ -82,12 +95,12 @@ class InformacionPersonalClienteViewModel @Inject constructor(
             InformacionPersonalClienteAction.GuardarCambios -> guardarCambios()
             InformacionPersonalClienteAction.Reintentar ->
                 if (!_state.value.cargando && _state.value.cargaFallida) cargarUsuario()
-            // Volver atras y cambiar la foto de perfil: volver atras es
-            // navegacion pura que el Root resuelve directo contra el
-            // NavGraph (ver ClientPanelNavGraph); cambiar la foto sigue
-            // bloqueado porque Storage no esta disponible (plan Spark, ver
-            // docs/TASKS.md Fase 2) — ambos se mantienen como no-op aca
-            // solo para que el `when` siga exhaustivo.
+            is InformacionPersonalClienteAction.FotoElegida -> subirFoto(action.uri)
+            // Volver atras es navegacion pura que el Root resuelve directo
+            // contra el NavGraph (ver ClientPanelNavGraph) y abrir el
+            // selector de fotos tambien es del Root (necesita la Activity):
+            // ambos se mantienen como no-op aca solo para que el `when`
+            // siga exhaustivo.
             InformacionPersonalClienteAction.VolverAtras,
             InformacionPersonalClienteAction.CambiarFoto,
             -> Unit
@@ -117,6 +130,25 @@ class InformacionPersonalClienteViewModel @Inject constructor(
         }
     }
 
+    private fun subirFoto(uri: String) {
+        val uid = firebaseAuth.currentUser?.uid ?: return
+        if (_state.value.subiendoFoto) return
+        viewModelScope.launch {
+            _state.update { it.copy(subiendoFoto = true, errorFoto = null) }
+            when (val subida = fotoPerfilRepository.subir(uid, RolUsuario.CLIENTE, uri)) {
+                is Result.Error -> _state.update {
+                    it.copy(subiendoFoto = false, errorFoto = subida.error.aMensaje())
+                }
+                is Result.Success -> when (usuarioRepository.actualizarFotoUrl(uid, subida.data)) {
+                    is Result.Success -> _state.update { it.copy(subiendoFoto = false, fotoUrl = subida.data) }
+                    is Result.Error -> _state.update {
+                        it.copy(subiendoFoto = false, errorFoto = "No pudimos guardar la foto en tu perfil. Intenta de nuevo.")
+                    }
+                }
+            }
+        }
+    }
+
     private fun guardarCambios() {
         val uid = firebaseAuth.currentUser?.uid ?: return
         val actual = _state.value
@@ -138,4 +170,13 @@ class InformacionPersonalClienteViewModel @Inject constructor(
             }
         }
     }
+}
+
+private fun FotoPerfilError.aMensaje(): String = when (this) {
+    FotoPerfilError.SIN_INTERNET -> "Sin conexión. Revisa tu internet e intenta de nuevo."
+    FotoPerfilError.SIN_PERMISO -> "No pudimos autorizar el cambio de foto. Cierra sesión, vuelve a entrar e intenta de nuevo."
+    FotoPerfilError.IMAGEN_INVALIDA -> "No pudimos leer esa imagen. Elige otra foto."
+    FotoPerfilError.IMAGEN_MUY_GRANDE -> "La foto es demasiado pesada. Elige otra más liviana."
+    FotoPerfilError.ALMACENAMIENTO_NO_DISPONIBLE -> "Cambiar la foto de perfil aún no está disponible. Estamos trabajando en ello."
+    FotoPerfilError.DESCONOCIDO -> "No pudimos subir la foto. Intenta de nuevo."
 }

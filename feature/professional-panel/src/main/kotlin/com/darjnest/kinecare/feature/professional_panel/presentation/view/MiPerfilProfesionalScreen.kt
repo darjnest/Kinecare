@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Edit
@@ -72,6 +73,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.darjnest.kinecare.core.designsystem.components.avatar.KineCareAvatar
+import com.darjnest.kinecare.core.designsystem.components.avatar.rememberSelectorFoto
 import com.darjnest.kinecare.core.designsystem.theme.AzulPetroleo30
 import com.darjnest.kinecare.core.designsystem.theme.InicioDorado
 import com.darjnest.kinecare.core.designsystem.theme.KineCareSpacing
@@ -111,6 +114,9 @@ fun MiPerfilProfesionalRoot(
     onIrAAgenda: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val abrirSelectorFoto = rememberSelectorFoto { uri ->
+        viewModel.onAction(MiPerfilProfesionalAction.FotoElegida(uri))
+    }
     MiPerfilProfesionalScreen(
         state = state,
         onAction = { accion ->
@@ -122,6 +128,8 @@ fun MiPerfilProfesionalRoot(
                 MiPerfilProfesionalAction.VerTodasLasResenas -> state.profesionalId?.let(onVerResenas)
                 MiPerfilProfesionalAction.PrevisualizarPerfilPublico -> state.profesionalId?.let(onPrevisualizarPerfil)
                 MiPerfilProfesionalAction.EditarPerfilYCredenciales -> onEditarCredenciales()
+                // El selector de fotos necesita el contexto de la Activity: lo abre el Root.
+                MiPerfilProfesionalAction.CambiarFoto -> abrirSelectorFoto()
                 else -> viewModel.onAction(accion)
             }
         },
@@ -189,7 +197,13 @@ fun MiPerfilProfesionalScreen(
                 }
 
                 state.identidad?.let { identidad ->
-                    TarjetaIdentidadProfesional(identidad = identidad)
+                    TarjetaIdentidadProfesional(
+                        identidad = identidad,
+                        fotoUrl = state.fotoUrl,
+                        subiendoFoto = state.subiendoFoto,
+                        errorFoto = state.errorFoto,
+                        onAction = onAction,
+                    )
                 }
 
                 state.metricas?.let { metricas ->
@@ -331,7 +345,13 @@ private fun ErrorCargaPerfil(onReintentar: () -> Unit) {
 }
 
 @Composable
-private fun TarjetaIdentidadProfesional(identidad: IdentidadProfesional) {
+private fun TarjetaIdentidadProfesional(
+    identidad: IdentidadProfesional,
+    fotoUrl: String?,
+    subiendoFoto: Boolean,
+    errorFoto: String?,
+    onAction: (MiPerfilProfesionalAction) -> Unit,
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -345,19 +365,33 @@ private fun TarjetaIdentidadProfesional(identidad: IdentidadProfesional) {
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box {
+                    KineCareAvatar(
+                        iniciales = inicialesDeNombre(identidad.nombre),
+                        fotoUrl = fotoUrl,
+                        tamano = KineCareSpacing.avatarGrande,
+                        colorFondo = LoginGrisClaro,
+                        colorContenido = LoginGrisTexto,
+                        cargando = subiendoFoto,
+                        contentDescription = "Foto de perfil",
+                    )
+                    // Cambiar la foto: insignia de camara abajo a la derecha, igual que en Mi Perfil del cliente.
                     Box(
                         modifier = Modifier
-                            .size(72.dp)
+                            .align(Alignment.BottomEnd)
+                            .size(26.dp)
                             .clip(CircleShape)
-                            .background(LoginGrisClaro),
+                            .background(LoginPrimarioOscuro)
+                            .clickable(enabled = !subiendoFoto, role = Role.Button) {
+                                onAction(MiPerfilProfesionalAction.CambiarFoto)
+                            },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(Icons.Filled.Person, contentDescription = null, tint = LoginGrisTexto, modifier = Modifier.size(36.dp))
+                        Icon(Icons.Filled.CameraAlt, contentDescription = "Cambiar foto", tint = Color.White, modifier = Modifier.size(14.dp))
                     }
                     if (identidad.credencialesAlDia) {
                         Box(
                             modifier = Modifier
-                                .align(Alignment.BottomEnd)
+                                .align(Alignment.TopEnd)
                                 .size(22.dp)
                                 .clip(CircleShape)
                                 .background(LoginPrimarioOscuro),
@@ -418,6 +452,15 @@ private fun TarjetaIdentidadProfesional(identidad: IdentidadProfesional) {
                         }
                     }
                 }
+            }
+
+            errorFoto?.let { mensaje ->
+                Text(
+                    text = mensaje,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = RojoError40,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
             }
 
             if (identidad.habilitadoIsapreFonasa != null || identidad.credencialesAlDia) {
@@ -1201,6 +1244,14 @@ private fun ItemNavegacionInferiorPerfil(
         Text(text = texto, style = MaterialTheme.typography.labelSmall, color = color, fontWeight = if (activo) FontWeight.Bold else FontWeight.Normal)
     }
 }
+
+private fun inicialesDeNombre(nombre: String): String =
+    nombre.trim()
+        .split(" ")
+        .filter { it.isNotBlank() }
+        .take(2)
+        .mapNotNull { it.firstOrNull()?.uppercaseChar() }
+        .joinToString("")
 
 private fun formatearClp(monto: Long): String {
     val agrupado = monto.toString()

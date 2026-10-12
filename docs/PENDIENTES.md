@@ -87,8 +87,9 @@ casi todo esto, y varias casillas se cierran a la vez:
 - [ ] **Desplegar `completarReserva` en QA** (`firebase deploy --only functions:completarReserva -P qa`)
       y probar en dispositivo "Marcar como completada" → reseña del cliente →
       "Por liquidar". Código y tests listos (200/200 en el emulador).
-- [ ] **Cancelar una cita confirmada** (`CANCELADA_CLIENTE` /
-      `CANCELADA_PROFESIONAL`) con su política de reembolso.
+- [x] **Cancelar una cita confirmada**: cliente y profesional en la app (ver
+      TASKS.md, Fase 7). Falta desplegar `cancelarReserva` y el reembolso real
+      de Mercado Pago (hoy solo queda `reembolsoPendiente`).
 - [ ] **Expirar solicitudes sin respuesta** (función programada; requiere
       Blaze).
 - [ ] **Notificaciones push (FCM)**: la dependencia está en el catálogo pero no
@@ -117,20 +118,22 @@ casi todo esto, y varias casillas se cierran a la vez:
 - [ ] Modo oscuro real: hoy el tema está fijo en claro (`KineCareTheme`,
       `darkTheme = false`) porque ~1.000 usos de la paleta `Login*`/`Color.White`
       están pensados para fondo claro. Requiere diseño oscuro y repasar cada pantalla.
-- [ ] Cliente — "Mi perfil": previsión, tratamiento, método de pago,
-      facturación y avisos son mock/vacíos; las acciones `GestionarPrevision…`,
-      `AgregarNuevaDireccion`, `EditarFacturacion`, `VerDerechosDelPaciente`,
-      `VerPauta…` y `VerHistorialDeEvoluciones` son no-op. *Agregar nueva
-      dirección* es la más útil (la reserva a domicilio ya usa direcciones).
-- [ ] Búsqueda: solo filtra por Kinesiología/Masoterapia y ubicación (sin
-      texto libre, ordenamiento ni mapa); la vitrina de categorías
-      (`categoriasPara()`) es mock local.
-- [ ] Reseñas: responder (el profesional), editar/borrar, paginar más de 100.
+- [ ] Cliente — "Mi perfil": previsión, tratamiento, método de pago y
+      facturación siguen ocultos (sin datos en Firestore; sus acciones
+      `GestionarPrevision…`, `EditarFacturacion`, `VerPauta…` y
+      `VerHistorialDeEvoluciones` quedan sin conectar hasta que existan).
+      "Derechos del Paciente" ya abre un diálogo informativo y los
+      interruptores sin backend (WhatsApp, biométrico) se quitaron.
+- [ ] Búsqueda: ya filtra por texto libre y ordena (calificación, precio,
+      reseñas), pero no hay mapa, ni comuna del profesional en Firestore
+      (el texto solo la encuentra si está en la descripción); la vitrina de
+      categorías (`categoriasPara()`) es mock local.
+- [ ] Reseñas: editar/borrar la respuesta del profesional, paginar más de 100
+      (responder ya existe, una sola vez).
 - [ ] Reportes de problema: adjuntar fotos (Storage), aviso a soporte,
       reportar desde el panel profesional.
-- [ ] Un cliente puede ver como disponible un cupo ya tomado (no ve reservas
-      ajenas por Security Rules); se detecta recién al confirmar. Evaluar una
-      función `obtenerCuposOcupados` si molesta en pruebas.
+- [ ] Cupos ocupados: la app ya llama `obtenerCuposOcupados`; falta desplegar
+      la función en QA y probarla en dispositivo.
 
 ### Arquitectura / deuda técnica
 
