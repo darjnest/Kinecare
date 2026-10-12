@@ -207,8 +207,8 @@ internal fun Reserva.aSolicitudAtencion(
         fechaHoraTexto = fechaHora.aFechaHoraTexto(ahora),
         direccion = ubicacionTexto(),
         honorarioClp = honorarioNeto(),
-        custodiaTexto = if (pagoAutorizado) "Pago en custodia KineCare" else null,
-        avisoPagoTexto = if (pagoAutorizado) "El paciente ya pagó; el monto se libera al completar la atención." else null,
+        custodiaTexto = if (pagoAutorizado) "Pago recibido en tu cuenta de Mercado Pago" else null,
+        avisoPagoTexto = if (pagoAutorizado) "El paciente ya pagó; el monto llega directo a tu cuenta de Mercado Pago." else null,
     )
 }
 

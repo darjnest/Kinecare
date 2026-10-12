@@ -29,11 +29,12 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MyLocation
-import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -46,12 +47,16 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -133,9 +138,17 @@ fun SearchScreen(
     onIrAMiPerfil: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(state.mensaje) {
+        state.mensaje?.let {
+            snackbarHostState.showSnackbar(it)
+            onAction(SearchAction.MensajeMostrado)
+        }
+    }
     Scaffold(
         modifier = modifier,
         containerColor = LoginFondo,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             KineCareBottomNavBar(
                 pestanaActiva = PestanaClienteInferior.EXPLORAR,
@@ -198,7 +211,11 @@ fun SearchScreen(
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         state.profesionalesDestacados.forEach { profesional ->
-                            TarjetaProfesionalDestacado(profesional = profesional, onAction = onAction)
+                            TarjetaProfesionalDestacado(
+                                profesional = profesional,
+                                esFavorito = profesional.id in state.favoritos,
+                                onAction = onAction,
+                            )
                         }
                     }
                 }
@@ -240,12 +257,6 @@ private fun EncabezadoInicio(onCerrarSesion: () -> Unit) {
             )
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                Icons.Filled.NotificationsNone,
-                contentDescription = "Notificaciones",
-                tint = Color(0xFF16241C),
-            )
-            Spacer(modifier = Modifier.width(12.dp))
             MenuPerfil(onCerrarSesion = onCerrarSesion)
         }
     }
@@ -781,6 +792,7 @@ private fun FilaDestacadosTitulo() {
 @Composable
 private fun TarjetaProfesionalDestacado(
     profesional: ProfesionalDestacado,
+    esFavorito: Boolean,
     onAction: (SearchAction) -> Unit,
 ) {
     Card(
@@ -873,7 +885,14 @@ private fun TarjetaProfesionalDestacado(
                 }
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            IconButton(onClick = { onAction(SearchAction.AlternarFavorito(profesional.id)) }) {
+                Icon(
+                    imageVector = if (esFavorito) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                    contentDescription = if (esFavorito) "Quitar de favoritos" else "Guardar en favoritos",
+                    tint = if (esFavorito) MaterialTheme.colorScheme.error else LoginGrisTexto,
+                )
+            }
             Box(
                 modifier = Modifier
                     .size(36.dp)

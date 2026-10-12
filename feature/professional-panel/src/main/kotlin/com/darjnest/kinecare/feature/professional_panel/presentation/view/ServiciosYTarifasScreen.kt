@@ -174,10 +174,6 @@ fun ServiciosYTarifasScreen(
                     }
                 }
 
-                TarjetaMaterialInsumos()
-
-                TarjetaKineCareProtect()
-
                 Spacer(modifier = Modifier.height(8.dp))
             }
         }
@@ -533,110 +529,6 @@ private fun TarjetaServicio(
                     Icon(Icons.Filled.Edit, contentDescription = null, tint = TextoPrincipal, modifier = Modifier.size(14.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(text = "Editar", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = TextoPrincipal)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TarjetaMaterialInsumos() {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = LoginGrisClaro),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color.White),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Filled.LocalHospital, contentDescription = null, tint = LoginGrisTexto, modifier = Modifier.size(24.dp))
-            }
-            Spacer(modifier = Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Material e Insumos Pro",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = TextoPrincipal,
-                )
-                Text(
-                    text = "Recuerda llevar tu Camilla KineCare homologada para las sesiones a domicilio activas.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = LoginGrisTexto,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun TarjetaKineCareProtect() {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = LoginGrisClaro),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-    ) {
-        Row(modifier = Modifier.padding(16.dp)) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(LoginMenta),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Filled.Security, contentDescription = null, tint = LoginPrimarioOscuro, modifier = Modifier.size(20.dp))
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "Custodia KineCare Protect",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = TextoPrincipal,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "100% Blindado",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = LoginPrimarioOscuro,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(LoginMenta)
-                            .padding(horizontal = 8.dp, vertical = 3.dp),
-                    )
-                }
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = "Tu tiempo está completamente resguardado. Cada paciente ingresa un medio de pago con pre-autorización previa. La retención de garantía y cobro puntual de honorarios aplica estrictamente a todas las tarifas fijadas, incluso ante inasistencias o cancelaciones tardías (menos de 4 horas).",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = LoginGrisTexto,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.VerifiedUser, contentDescription = null, tint = LoginPrimario, modifier = Modifier.size(14.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Garantía de liquidación bancaria semanal directa a tu cuenta",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = LoginPrimario,
-                    )
                 }
             }
         }

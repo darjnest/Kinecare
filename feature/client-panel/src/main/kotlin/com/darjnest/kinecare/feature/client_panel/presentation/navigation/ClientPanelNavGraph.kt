@@ -19,6 +19,7 @@ fun NavGraphBuilder.client_panelGraph(
     onProfesionalClick: (String) -> Unit = {},
     onDejarResena: (reservaId: String, profesionalId: String) -> Unit = { _, _ -> },
     onPagar: (reservaId: String, titulo: String, montoClp: Long) -> Unit = { _, _, _ -> },
+    onReservar: (profesionalId: String) -> Unit = {},
 ) {
     composable<MisCitasRoute> {
         MisCitasRoot(
@@ -36,6 +37,7 @@ fun NavGraphBuilder.client_panelGraph(
     composable<FavoritosRoute> {
         FavoritosRoot(
             onProfesionalClick = onProfesionalClick,
+            onReservar = onReservar,
             onIrAExplorar = onIrAExplorar,
             onIrAMisCitas = onIrAMisCitas,
             onIrAMiPerfil = onIrAMiPerfil,

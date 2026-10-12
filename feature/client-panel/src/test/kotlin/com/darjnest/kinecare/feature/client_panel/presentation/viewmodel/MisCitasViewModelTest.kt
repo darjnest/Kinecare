@@ -13,6 +13,7 @@ import com.darjnest.kinecare.core.common.domain.model.Direccion
 import com.darjnest.kinecare.core.common.domain.model.EstadoPago
 import com.darjnest.kinecare.core.common.domain.model.EstadoReserva
 import com.darjnest.kinecare.core.common.domain.model.EstadoVerificacion
+import com.darjnest.kinecare.core.common.domain.model.Insignia
 import com.darjnest.kinecare.core.common.domain.model.MetodoPago
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
 import com.darjnest.kinecare.core.common.domain.model.Pago
@@ -21,6 +22,7 @@ import com.darjnest.kinecare.core.common.domain.model.Resena
 import com.darjnest.kinecare.core.common.domain.model.Reserva
 import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.domain.model.Servicio
+import com.darjnest.kinecare.core.common.domain.model.TipoInsignia
 import com.darjnest.kinecare.core.common.domain.model.TipoMetodoPago
 import com.darjnest.kinecare.core.common.domain.model.Usuario
 import com.darjnest.kinecare.core.common.result.Result
@@ -35,6 +37,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -207,11 +210,139 @@ class MisCitasViewModelTest {
         viewModel.state.test {
             val estado = awaitItem()
             assertFalse(estado.cargando)
+            // Error de carga distinguible del estado vacio: la vista ofrece "Reintentar".
+            assertTrue(estado.errorCarga)
             assertNull(estado.citaEnCurso)
             assertTrue(estado.proximasCitas.isEmpty())
             assertTrue(estado.historial.isEmpty())
             assertTrue(estado.canceladas.isEmpty())
         }
+    }
+
+    @Test
+    fun `mientras carga el estado esta cargando y sin error`() = runTest {
+        val gate = CompletableDeferred<Result<List<Reserva>, ReservaError>>()
+        coEvery { reservaRepository.obtenerPorCliente(uid) } coAnswers { gate.await() }
+
+        val viewModel = crearViewModel()
+
+        assertTrue(viewModel.state.value.cargando)
+        assertFalse(viewModel.state.value.errorCarga)
+        gate.complete(Result.Success(emptyList()))
+        assertFalse(viewModel.state.value.cargando)
+    }
+
+    @Test
+    fun `Reintentar tras un error vuelve a cargar y limpia errorCarga`() = runTest {
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns Result.Error(ReservaError.SIN_INTERNET)
+        val viewModel = crearViewModel()
+        assertTrue(viewModel.state.value.errorCarga)
+
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns
+            Result.Success(listOf(reservaDePrueba("r-1", "prof-1", EstadoReserva.CONFIRMADA)))
+        coEvery { profesionalRepository.obtenerPorId("prof-1") } returns
+            Result.Success(profesionalDePrueba("prof-1", "Bruno Diaz"))
+        viewModel.onAction(MisCitasAction.Reintentar)
+
+        val estado = viewModel.state.value
+        assertFalse(estado.errorCarga)
+        assertFalse(estado.cargando)
+        assertEquals(1, estado.proximasCitas.size)
+        coVerify(exactly = 2) { reservaRepository.obtenerPorCliente(uid) }
+    }
+
+    @Test
+    fun `un error al recargar conserva las citas ya cargadas`() = runTest {
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns
+            Result.Success(listOf(reservaDePrueba("r-1", "prof-1", EstadoReserva.CONFIRMADA)))
+        coEvery { profesionalRepository.obtenerPorId("prof-1") } returns
+            Result.Success(profesionalDePrueba("prof-1", "Bruno Diaz"))
+        val viewModel = crearViewModel()
+
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns Result.Error(ReservaError.SIN_INTERNET)
+        viewModel.onAction(MisCitasAction.Recargar)
+
+        assertTrue(viewModel.state.value.errorCarga)
+        assertTrue(viewModel.state.value.tieneCitas)
+        assertEquals(1, viewModel.state.value.proximasCitas.size)
+    }
+
+    // --- verificacion del profesional ---
+
+    @Test
+    fun `la cita en curso marca verificado segun la verificacion general y el RNPI segun la insignia CREDENCIALES`() = runTest {
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns
+            Result.Success(listOf(reservaDePrueba("r-en-curso", "prof-1", EstadoReserva.EN_CURSO)))
+        val sinCredenciales = profesionalDePrueba("prof-1", "Bruno Diaz")
+        coEvery { profesionalRepository.obtenerPorId("prof-1") } returns Result.Success(sinCredenciales)
+
+        val sin = requireNotNull(crearViewModel().state.value.citaEnCurso)
+        assertTrue(sin.verificado)
+        assertFalse(sin.rnpiVerificado)
+
+        val conCredenciales = sinCredenciales.copy(
+            insignias = listOf(
+                Insignia(
+                    tipo = TipoInsignia.CREDENCIALES,
+                    estado = EstadoVerificacion.APROBADO,
+                    detalle = null,
+                    fechaActualizacion = Instant.fromEpochMilliseconds(0),
+                ),
+            ),
+        )
+        coEvery { profesionalRepository.obtenerPorId("prof-1") } returns Result.Success(conCredenciales)
+        val con = requireNotNull(crearViewModel().state.value.citaEnCurso)
+        assertTrue(con.rnpiVerificado)
+
+        coEvery { profesionalRepository.obtenerPorId("prof-1") } returns Result.Success(
+            sinCredenciales.copy(estadoVerificacionGeneral = EstadoVerificacion.PENDIENTE),
+        )
+        val pendiente = requireNotNull(crearViewModel().state.value.citaEnCurso)
+        assertFalse(pendiente.verificado)
+        assertFalse(pendiente.rnpiVerificado)
+    }
+
+    @Test
+    fun `si el profesional no se puede resolver la cita en curso no se marca verificada`() = runTest {
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns
+            Result.Success(listOf(reservaDePrueba("r-en-curso", "prof-x", EstadoReserva.EN_CURSO)))
+        coEvery { profesionalRepository.obtenerPorId("prof-x") } returns Result.Error(ProfesionalError.NO_ENCONTRADO)
+
+        val cita = requireNotNull(crearViewModel().state.value.citaEnCurso)
+
+        assertFalse(cita.verificado)
+        assertFalse(cita.rnpiVerificado)
+    }
+
+    // --- agregar a Google Calendar ---
+
+    @Test
+    fun `la cita proxima lleva inicio, duracion y direccion para el evento de calendario`() = runTest {
+        val cita = cargarReservaConfirmadaConPago(EstadoPago.AUTORIZADO)
+
+        assertEquals(1_700_000_000_000, cita.inicioEpochMillis)
+        assertEquals(60, cita.duracionMinutos)
+        assertEquals("Los Aromos 123, Providencia, Santiago", cita.direccionTexto)
+    }
+
+    @Test
+    fun `si el servicio no se puede resolver la cita no trae duracion`() = runTest {
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns
+            Result.Success(listOf(reservaDePrueba("r-1", "prof-x", EstadoReserva.CONFIRMADA)))
+        coEvery { profesionalRepository.obtenerPorId("prof-x") } returns Result.Error(ProfesionalError.NO_ENCONTRADO)
+
+        assertNull(crearViewModel().state.value.proximasCitas.single().duracionMinutos)
+    }
+
+    @Test
+    fun `AgregarAGoogleCalendar lo resuelve el Root y no cambia el estado`() = runTest {
+        cargarReservaConfirmadaConPago(EstadoPago.PENDIENTE)
+        val viewModel = crearViewModel()
+        val antes = viewModel.state.value
+
+        viewModel.onAction(MisCitasAction.AgregarAGoogleCalendar("r-pago"))
+
+        assertEquals(antes, viewModel.state.value)
     }
 
     @Test

@@ -84,17 +84,18 @@ fun FavoritosRoot(
     onIrAMisCitas: () -> Unit = {},
     onIrAMiPerfil: () -> Unit = {},
     onProfesionalClick: (String) -> Unit = {},
+    onReservar: (profesionalId: String) -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     FavoritosScreen(
         state = state,
         onAction = { accion ->
-            // Abrir el perfil es navegacion, no estado del ViewModel: el Root
-            // la resuelve contra el NavGraph.
-            if (accion is FavoritosAction.VerPerfil) {
-                onProfesionalClick(accion.profesionalId)
-            } else {
-                viewModel.onAction(accion)
+            // Abrir el perfil o agendar es navegacion, no estado del ViewModel:
+            // el Root la resuelve contra el NavGraph (por callback hacia `:app`).
+            when (accion) {
+                is FavoritosAction.VerPerfil -> onProfesionalClick(accion.profesionalId)
+                is FavoritosAction.AgendarConProfesional -> onReservar(accion.profesionalId)
+                else -> viewModel.onAction(accion)
             }
         },
         onIrAExplorar = onIrAExplorar,
@@ -159,7 +160,7 @@ fun FavoritosScreen(
                         color = TextoPrincipal,
                     )
                     Text(
-                        text = "Acceso directo a tus terapeutas de cabecera con disponibilidad prioritaria.",
+                        text = "Acceso directo a tus terapeutas de cabecera.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = LoginGrisTexto,
                         modifier = Modifier.padding(top = 4.dp),
@@ -172,7 +173,15 @@ fun FavoritosScreen(
                     onAction = onAction,
                 )
 
-                if (favoritosFiltrados.isEmpty()) {
+                if (state.favoritos.isEmpty() && state.cargando) {
+                    // Sin datos todavia: spinner, nunca el estado vacio.
+                    CargandoListaCliente()
+                } else if (state.favoritos.isEmpty() && state.errorCarga) {
+                    ErrorCargaCliente(
+                        mensaje = "No pudimos cargar tus favoritos",
+                        onReintentar = { onAction(FavoritosAction.Reintentar) },
+                    )
+                } else if (favoritosFiltrados.isEmpty()) {
                     EstadoVacioFavoritos()
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -407,29 +416,21 @@ private fun TarjetaFavoritoDestacado(
                     ) {
                         Icon(Icons.Filled.Person, contentDescription = null, tint = LoginPrimarioOscuro, modifier = Modifier.size(32.dp))
                     }
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .size(20.dp)
-                            .clip(CircleShape)
-                            .background(LoginPrimarioOscuro),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(Icons.Filled.Verified, contentDescription = "Verificado", tint = Color.White, modifier = Modifier.size(12.dp))
+                    if (favorito.verificado) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .size(20.dp)
+                                .clip(CircleShape)
+                                .background(LoginPrimarioOscuro),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(Icons.Filled.Verified, contentDescription = "Verificado", tint = Color.White, modifier = Modifier.size(12.dp))
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.width(14.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Star, contentDescription = null, tint = InicioDorado, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Terapeuta Principal",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = InicioDorado,
-                        )
-                    }
                     Text(
                         text = favorito.nombre,
                         style = MaterialTheme.typography.titleMedium,
@@ -445,13 +446,15 @@ private fun TarjetaFavoritoDestacado(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Text(
-                        text = favorito.universidad,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = LoginGrisTexto,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    if (favorito.universidad.isNotBlank()) {
+                        Text(
+                            text = favorito.universidad,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = LoginGrisTexto,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
                 Box(
                     modifier = Modifier
@@ -472,7 +475,7 @@ private fun TarjetaFavoritoDestacado(
                 }
                 if (favorito.numeroRegistroSis.isNotBlank()) {
                     EtiquetaInsignia(
-                        texto = "SIS N° ${favorito.numeroRegistroSis}",
+                        texto = "RNPI N° ${favorito.numeroRegistroSis}",
                         icono = Icons.Filled.Sell,
                         fuenteMonoespaciada = true,
                     )
@@ -509,7 +512,7 @@ private fun TarjetaFavoritoDestacado(
                 Icon(Icons.Filled.PinDrop, contentDescription = null, tint = LoginGrisTexto, modifier = Modifier.size(14.dp))
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = "${etiquetaModalidad(favorito.modalidad)} (${favorito.lugarAtencion})",
+                    text = textoModalidadLugar(favorito),
                     style = MaterialTheme.typography.labelSmall,
                     color = LoginGrisTexto,
                     maxLines = 1,
@@ -517,7 +520,7 @@ private fun TarjetaFavoritoDestacado(
                 )
             }
 
-            favorito.ultimaAtencionTexto?.let { ultimaAtencion ->
+            favorito.ultimaAtencionTexto?.takeIf { it.isNotBlank() }?.let { ultimaAtencion ->
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     modifier = Modifier
@@ -536,7 +539,7 @@ private fun TarjetaFavoritoDestacado(
                 }
             }
 
-            favorito.proximoCupoTexto?.let { proximoCupo ->
+            favorito.proximoCupoTexto?.takeIf { it.isNotBlank() }?.let { proximoCupo ->
                 Spacer(modifier = Modifier.height(10.dp))
                 Row(
                     modifier = Modifier
@@ -641,13 +644,15 @@ private fun TarjetaFavoritoSecundario(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Text(
-                        text = favorito.universidad,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = LoginGrisTexto,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    if (favorito.universidad.isNotBlank()) {
+                        Text(
+                            text = favorito.universidad,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = LoginGrisTexto,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
                 Box(
                     modifier = Modifier
@@ -663,10 +668,16 @@ private fun TarjetaFavoritoSecundario(
 
             Spacer(modifier = Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                EtiquetaInsignia(
-                    texto = if (favorito.identidadVerificada) "Credenciales Validadas" else "SIS Verificado",
-                    icono = Icons.Filled.VerifiedUser,
-                )
+                // "Validadas" solo con la insignia CREDENCIALES aprobada; si no, el RNPI a secas.
+                if (favorito.credencialesVerificadas) {
+                    EtiquetaInsignia(texto = "Credenciales Validadas", icono = Icons.Filled.VerifiedUser)
+                } else if (favorito.numeroRegistroSis.isNotBlank()) {
+                    EtiquetaInsignia(
+                        texto = "RNPI N° ${favorito.numeroRegistroSis}",
+                        icono = Icons.Filled.Sell,
+                        fuenteMonoespaciada = true,
+                    )
+                }
                 favorito.insigniaSecundariaTexto?.let { insignia ->
                     EtiquetaInsignia(texto = insignia, icono = Icons.Filled.Shield)
                 }
@@ -704,7 +715,7 @@ private fun TarjetaFavoritoSecundario(
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = "${etiquetaModalidad(favorito.modalidad)} (${favorito.lugarAtencion})",
+                    text = textoModalidadLugar(favorito),
                     style = MaterialTheme.typography.labelSmall,
                     color = LoginGrisTexto,
                     maxLines = 1,
@@ -718,11 +729,17 @@ private fun TarjetaFavoritoSecundario(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = favorito.proximoCupoTexto ?: "Sin cupos próximos",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = LoginGrisTexto,
-                )
+                val proximoCupo = favorito.proximoCupoTexto
+                if (!proximoCupo.isNullOrBlank()) {
+                    Text(
+                        text = proximoCupo,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = LoginGrisTexto,
+                    )
+                } else {
+                    // Sin dato de cupos no se afirma nada: el boton queda a la derecha.
+                    Spacer(modifier = Modifier.weight(1f))
+                }
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(50))
@@ -772,6 +789,12 @@ private fun TarjetaEquipoHabitual() {
             )
         }
     }
+}
+
+/** "A Domicilio (lugar)", o solo la modalidad si no hay lugar: nunca parentesis vacios. */
+private fun textoModalidadLugar(favorito: ProfesionalFavorito): String {
+    val modalidad = etiquetaModalidad(favorito.modalidad)
+    return if (favorito.lugarAtencion.isBlank()) modalidad else "$modalidad (${favorito.lugarAtencion})"
 }
 
 private fun etiquetaModalidad(modalidad: ModalidadServicio): String = when (modalidad) {

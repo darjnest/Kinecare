@@ -467,6 +467,16 @@ private fun PasoRevision(state: BookingState) {
     val servicio = state.servicioSeleccionado ?: return
     val horario = state.horarioSeleccionado ?: return
     ResumenReserva(state = state, servicio = servicio, horario = horario)
+    if (state.profesionalSinPagos) {
+        // Honesto antes de confirmar: si no, el cliente descubre recien al pagar que no puede.
+        Text(
+            text = "${state.profesionalNombre} aún no activa los pagos con Mercado Pago. " +
+                "Puedes solicitar la hora igual, pero solo podrás pagarla cuando los active.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = KineCareSpacing.m),
+        )
+    }
 }
 
 @Composable

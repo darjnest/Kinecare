@@ -125,6 +125,7 @@ class BookingViewModelTest {
     private fun profesional(
         servicios: List<Servicio> = listOf(domicilio, consulta, consultaLarga, pausado),
         disponibilidad: List<Disponibilidad> = turnoDeLunes,
+        mercadoPagoConectado: Boolean = false,
     ) = Profesional(
         usuario = usuario(profesionalId, "Dra. Paula Rojas"),
         especialidades = listOf("Kinesiologia"),
@@ -136,6 +137,7 @@ class BookingViewModelTest {
         totalResenas = 10,
         descripcion = "",
         estadoVerificacionGeneral = EstadoVerificacion.PENDIENTE,
+        mercadoPagoConectado = mercadoPagoConectado,
     )
 
     private fun cliente(direcciones: List<Direccion> = listOf(direccionGuardada)) = Cliente(
@@ -262,6 +264,15 @@ class BookingViewModelTest {
             assertFalse(state.cargando, "cargando colgado para $error")
             assertTrue(state.servicios.isEmpty())
         }
+    }
+
+    @Test
+    fun `avisa que el profesional no activo pagos solo si no tiene Mercado Pago conectado`() = runTest {
+        val sinPagos = crearViewModel(profesional = Result.Success(profesional(mercadoPagoConectado = false)))
+        assertTrue(sinPagos.state.value.profesionalSinPagos)
+
+        val conPagos = crearViewModel(profesional = Result.Success(profesional(mercadoPagoConectado = true)))
+        assertFalse(conPagos.state.value.profesionalSinPagos)
     }
 
     @Test

@@ -7,10 +7,12 @@ import com.darjnest.kinecare.core.common.data.repository.ResenaRepository
 import com.darjnest.kinecare.core.common.data.repository.ReservaRepository
 import com.darjnest.kinecare.core.common.domain.model.EstadoPago
 import com.darjnest.kinecare.core.common.domain.model.EstadoReserva
+import com.darjnest.kinecare.core.common.domain.model.EstadoVerificacion
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
 import com.darjnest.kinecare.core.common.domain.model.Profesional
 import com.darjnest.kinecare.core.common.domain.model.Resena
 import com.darjnest.kinecare.core.common.domain.model.Reserva
+import com.darjnest.kinecare.core.common.domain.model.TipoInsignia
 import com.darjnest.kinecare.core.common.result.Result
 import com.darjnest.kinecare.feature.client_panel.data.repository.ReporteProblemaRepository
 import com.darjnest.kinecare.feature.client_panel.domain.EstadoReporte
@@ -56,6 +58,10 @@ data class CitaEnCurso(
     val estadoReporte: EstadoReporte? = null,
     /** Ver [CitaProxima.estadoPago]: la cita en curso conserva el indicador "Pagada"/"Reembolsada". */
     val estadoPago: EstadoPago? = null,
+    /** `true` si el profesional completo la verificacion general (`estadoVerificacionGeneral == APROBADO`): habilita el icono "Verificado" del avatar. */
+    val verificado: Boolean = false,
+    /** `true` solo si la insignia `CREDENCIALES` esta aprobada: sin ella el RNPI se muestra sin la palabra "Verificado". */
+    val rnpiVerificado: Boolean = false,
 )
 
 /** Cita agendada en dias proximos, distinta de la cita de hoy. */
@@ -88,6 +94,12 @@ data class CitaProxima(
      * la pantalla del reporte vuelve a comprobar.
      */
     val estadoReporte: EstadoReporte? = null,
+    /** Inicio de la cita en epoch millis (para "Agregar a Google Calendar"); `0` si no se conoce. */
+    val inicioEpochMillis: Long = 0L,
+    /** Duracion del servicio reservado; `null` si el servicio ya no se pudo resolver (el evento queda sin hora de fin). */
+    val duracionMinutos: Int? = null,
+    /** Direccion completa de la cita (calle, numero, comuna); `null` si no es a domicilio / sin direccion. */
+    val direccionTexto: String? = null,
 ) {
     /**
      * Solo una reserva `CONFIRMADA` (no `SOLICITADA`) que aun no comienza, con
@@ -136,12 +148,18 @@ data class CitaCancelada(
 
 data class MisCitasState(
     val cargando: Boolean = false,
+    /** `true` si la ultima carga fallo; la vista ofrece "Reintentar" en vez del estado vacio. */
+    val errorCarga: Boolean = false,
     val tabSeleccionado: TabMisCitas = TabMisCitas.PROXIMAS,
     val citaEnCurso: CitaEnCurso? = null,
     val proximasCitas: List<CitaProxima> = emptyList(),
     val historial: List<CitaHistorial> = emptyList(),
     val canceladas: List<CitaCancelada> = emptyList(),
-)
+) {
+    /** `true` si hay algo que pintar (aunque sea de una carga anterior). */
+    val tieneCitas: Boolean
+        get() = citaEnCurso != null || proximasCitas.isNotEmpty() || historial.isNotEmpty() || canceladas.isNotEmpty()
+}
 
 sealed interface MisCitasAction {
     data class SeleccionarTab(val tab: TabMisCitas) : MisCitasAction
@@ -166,8 +184,14 @@ sealed interface MisCitasAction {
     /** Navegacion al formulario de reporte (`ReportarProblemaRoute`): la resuelve el `Root` via callback. */
     data class ReportarProblema(val reservaId: String, val profesionalId: String) : MisCitasAction
 
-    /** Vuelve a cargar las reservas (p. ej. al volver de dejar una resena, para que el boton desaparezca). */
+    /**
+     * Vuelve a cargar las reservas (p. ej. al volver de dejar una resena, para que el boton desaparezca).
+     * Se ignora si ya hay una carga en curso.
+     */
     data object Recargar : MisCitasAction
+
+    /** "Reintentar" tras un error de carga (misma recarga que [Recargar], pero iniciada por el usuario). */
+    data object Reintentar : MisCitasAction
 }
 
 private fun ModalidadServicio.aTexto(): String = when (this) {
@@ -187,6 +211,13 @@ private fun Instant.aFechaTexto(): String {
 }
 
 private fun Instant.aFechaHoraTexto(): String = "${aFechaTexto()} ${aHoraTexto()}"
+
+/** Verificacion general aprobada (no solo un RNPI escrito a mano). */
+private fun Profesional.estaVerificado(): Boolean = estadoVerificacionGeneral == EstadoVerificacion.APROBADO
+
+/** El RNPI solo cuenta como verificado con la insignia `CREDENCIALES` aprobada. */
+private fun Profesional.rnpiEstaVerificado(): Boolean =
+    insignias.any { it.tipo == TipoInsignia.CREDENCIALES && it.estado == EstadoVerificacion.APROBADO }
 
 /** Estado del pago a mostrar: `null` mientras la reserva sigue `SOLICITADA` (aun no corresponde pagar). */
 private fun Reserva.estadoPagoVisible(): EstadoPago? =
@@ -223,6 +254,8 @@ private fun Reserva.aCitaEnCurso(
         } ?: modalidad.aTexto(),
         estadoReporte = reportes[id],
         estadoPago = estadoPagoVisible(),
+        verificado = profesional?.estaVerificado() == true,
+        rnpiVerificado = profesional?.rnpiEstaVerificado() == true,
     )
 }
 
@@ -247,6 +280,11 @@ private fun Reserva.aCitaProxima(
         estadoPago = estadoPagoVisible(),
         yaComenzo = fechaHora <= ahora,
         estadoReporte = reportes[id],
+        inicioEpochMillis = fechaHora.toEpochMilliseconds(),
+        duracionMinutos = servicio?.duracionMinutos,
+        direccionTexto = direccion?.let { d ->
+            listOf("${d.calle} ${d.numero}".trim(), d.comuna, d.ciudad).filter { it.isNotBlank() }.joinToString(", ")
+        }?.takeIf { it.isNotBlank() },
     )
 }
 
@@ -320,21 +358,24 @@ class MisCitasViewModel @Inject constructor(
         when (action) {
             is MisCitasAction.SeleccionarTab ->
                 _state.update { it.copy(tabSeleccionado = action.tab) }
-            MisCitasAction.Recargar -> if (cargaJob?.isActive != true) cargarReservas()
-            // Dejar resena y reportar problema son navegacion: el Root las resuelve contra el NavGraph.
+            MisCitasAction.Recargar,
+            MisCitasAction.Reintentar,
+            -> if (cargaJob?.isActive != true) cargarReservas()
+            // Dejar resena, reportar problema, pagar y agregar a Google Calendar
+            // son navegacion/Intents: el Root las resuelve (NavGraph o Activity).
             is MisCitasAction.DejarResena,
             is MisCitasAction.ReportarProblema,
             is MisCitasAction.Pagar,
+            is MisCitasAction.AgregarAGoogleCalendar,
             -> Unit
-            // Seguir en vivo/chat, reprogramar, ver pauta digital, agregar a
-            // Google Calendar, ver preparacion, descargar boleta y chatear
-            // con soporte: requieren backend de Pagos/Boletas y navegacion
-            // hacia otras features, ninguno conectado todavia — se conectan
-            // cuando la feature salga de esta fase (docs/TASKS.md).
+            // Seguir en vivo/chat, reprogramar, ver pauta digital, ver
+            // preparacion, descargar boleta y chatear con soporte: no existe
+            // backend ni pantalla todavia, y la vista ya no renderiza sus
+            // botones; se conectan cuando la feature salga de esta fase
+            // (docs/TASKS.md).
             MisCitasAction.SeguirEnVivo,
             MisCitasAction.Reprogramar,
             MisCitasAction.VerPautaDigital,
-            is MisCitasAction.AgregarAGoogleCalendar,
             is MisCitasAction.VerPreparacion,
             is MisCitasAction.DescargarBoleta,
             MisCitasAction.ChatearConSoporte,
@@ -345,10 +386,10 @@ class MisCitasViewModel @Inject constructor(
     private fun cargarReservas() {
         val uid = firebaseAuth.currentUser?.uid ?: return
         cargaJob = viewModelScope.launch {
-            _state.update { it.copy(cargando = true) }
+            _state.update { it.copy(cargando = true, errorCarga = false) }
             when (val resultado = reservaRepository.obtenerPorCliente(uid)) {
                 is Result.Success -> aplicarReservas(uid, resultado.data)
-                is Result.Error -> _state.update { it.copy(cargando = false) }
+                is Result.Error -> _state.update { it.copy(cargando = false, errorCarga = true) }
             }
         }
     }
@@ -403,6 +444,7 @@ class MisCitasViewModel @Inject constructor(
         _state.update {
             it.copy(
                 cargando = false,
+                errorCarga = false,
                 citaEnCurso = citaEnCurso,
                 proximasCitas = proximasCitas,
                 historial = historial,

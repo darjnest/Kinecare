@@ -76,6 +76,11 @@ data class BookingState(
     val cargando: Boolean = true,
     val errorCarga: ProfesionalError? = null,
     val profesionalNombre: String = "",
+    /**
+     * `true` si el profesional aun no vinculo Mercado Pago: la reserva se puede solicitar, pero el
+     * cliente no podra pagarla hasta que lo haga (`iniciarPago` responde `PROFESIONAL_SIN_CUENTA_MP`).
+     */
+    val profesionalSinPagos: Boolean = false,
     /** Solo servicios con `activo == true`: un servicio pausado no se puede reservar. */
     val servicios: List<Servicio> = emptyList(),
     val paso: PasoReserva = PasoReserva.MODALIDAD,
@@ -218,6 +223,7 @@ class BookingViewModel @Inject constructor(
                         it.copy(
                             cargando = false,
                             profesionalNombre = profesional.usuario.nombre,
+                            profesionalSinPagos = !profesional.mercadoPagoConectado,
                             servicios = activos,
                         )
                     }

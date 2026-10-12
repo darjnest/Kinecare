@@ -97,6 +97,9 @@ fun SolicitudesDeAtencionRoot(
     modifier: Modifier = Modifier,
     viewModel: SolicitudesDeAtencionViewModel = hiltViewModel(),
     onVolver: () -> Unit = {},
+    onIrAInicio: () -> Unit = {},
+    onIrAAgenda: () -> Unit = {},
+    onIrAPerfil: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     SolicitudesDeAtencionScreen(
@@ -110,6 +113,9 @@ fun SolicitudesDeAtencionRoot(
                 viewModel.onAction(accion)
             }
         },
+        onIrAInicio = onIrAInicio,
+        onIrAAgenda = onIrAAgenda,
+        onIrAPerfil = onIrAPerfil,
         modifier = modifier,
     )
 }
@@ -118,6 +124,9 @@ fun SolicitudesDeAtencionRoot(
 fun SolicitudesDeAtencionScreen(
     state: SolicitudesDeAtencionState,
     onAction: (SolicitudesDeAtencionAction) -> Unit = {},
+    onIrAInicio: () -> Unit = {},
+    onIrAAgenda: () -> Unit = {},
+    onIrAPerfil: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -144,7 +153,13 @@ fun SolicitudesDeAtencionScreen(
         modifier = modifier,
         containerColor = LoginFondo,
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        bottomBar = { BarraNavegacionInferiorSolicitudes() },
+        bottomBar = {
+            BarraNavegacionInferiorSolicitudes(
+                onIrAInicio = onIrAInicio,
+                onIrAAgenda = onIrAAgenda,
+                onIrAPerfil = onIrAPerfil,
+            )
+        },
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -624,7 +639,7 @@ private fun TarjetaSolicitud(
                             .padding(horizontal = 10.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(Icons.Filled.Shield, contentDescription = null, tint = LoginPrimarioOscuro, modifier = Modifier.size(14.dp))
+                        Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = LoginPrimarioOscuro, modifier = Modifier.size(14.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = custodia,
@@ -646,7 +661,7 @@ private fun TarjetaSolicitud(
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Filled.Lock, contentDescription = null, tint = LoginTerciario, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = LoginTerciario, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = avisoPago,
@@ -874,7 +889,11 @@ private fun BadgeModalidad(modalidad: ModalidadSolicitud, texto: String) {
 }
 
 @Composable
-private fun BarraNavegacionInferiorSolicitudes() {
+private fun BarraNavegacionInferiorSolicitudes(
+    onIrAInicio: () -> Unit,
+    onIrAAgenda: () -> Unit,
+    onIrAPerfil: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -882,13 +901,10 @@ private fun BarraNavegacionInferiorSolicitudes() {
             .padding(vertical = 10.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
     ) {
-        // Inicio, Agenda, Pacientes y Perfil se conectan cuando existan sus
-        // subpantallas (Fase 7).
-        ItemNavegacionInferiorSolicitudes(texto = "Inicio", icono = Icons.Filled.Dashboard, activo = false)
+        ItemNavegacionInferiorSolicitudes(texto = "Inicio", icono = Icons.Filled.Dashboard, activo = false, onClick = onIrAInicio)
         ItemNavegacionInferiorSolicitudes(texto = "Solicitudes", icono = Icons.Filled.NotificationsActive, activo = true)
-        ItemNavegacionInferiorSolicitudes(texto = "Agenda", icono = Icons.Filled.CalendarMonth, activo = false)
-        ItemNavegacionInferiorSolicitudes(texto = "Pacientes", icono = Icons.Filled.HowToReg, activo = false)
-        ItemNavegacionInferiorSolicitudes(texto = "Perfil", icono = Icons.Filled.Badge, activo = false)
+        ItemNavegacionInferiorSolicitudes(texto = "Agenda", icono = Icons.Filled.CalendarMonth, activo = false, onClick = onIrAAgenda)
+        ItemNavegacionInferiorSolicitudes(texto = "Perfil", icono = Icons.Filled.Badge, activo = false, onClick = onIrAPerfil)
     }
 }
 
@@ -897,9 +913,13 @@ private fun ItemNavegacionInferiorSolicitudes(
     texto: String,
     icono: ImageVector,
     activo: Boolean,
+    onClick: (() -> Unit)? = null,
 ) {
     val color = if (activo) LoginPrimarioOscuro else LoginGrisTexto
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        modifier = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Icon(icono, contentDescription = texto, tint = color, modifier = Modifier.size(22.dp))
         Spacer(modifier = Modifier.height(2.dp))
         Text(text = texto, style = MaterialTheme.typography.labelSmall, color = color, fontWeight = if (activo) FontWeight.Bold else FontWeight.Normal)
@@ -946,8 +966,8 @@ private fun SolicitudesDeAtencionScreenConDatosPreview() {
                         direccion = "Av. Pocuro 2150, Depto 402, Providencia",
                         motivoConsulta = "Dolor lumbar agudo tras entrenamiento de running, dificultad severa para flexionar el tronco desde hace 4 horas.",
                         honorarioClp = 25000,
-                        custodiaTexto = "Custodia KineCare Activa",
-                        avisoPagoTexto = "El paciente ya realizó el pago garantizado vía Webpay Plus.",
+                        custodiaTexto = "Pago recibido en tu cuenta de Mercado Pago",
+                        avisoPagoTexto = "El paciente ya pagó; el monto llega directo a tu cuenta de Mercado Pago.",
                     ),
                 ),
             ),

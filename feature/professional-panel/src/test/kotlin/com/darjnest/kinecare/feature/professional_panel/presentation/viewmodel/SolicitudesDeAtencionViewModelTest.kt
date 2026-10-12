@@ -143,7 +143,7 @@ class SolicitudesDeAtencionViewModelTest {
     }
 
     @Test
-    fun `la custodia solo se muestra con el pago autorizado`() = runTest {
+    fun `el aviso de pago recibido solo se muestra con el pago autorizado`() = runTest {
         conReservas(
             reserva("pendiente", AHORA + 3.hours),
             reserva("pagada", AHORA + 4.hours, estadoPago = EstadoPago.AUTORIZADO),
@@ -153,7 +153,7 @@ class SolicitudesDeAtencionViewModelTest {
 
         assertNull(pendiente.custodiaTexto)
         assertNull(pendiente.avisoPagoTexto)
-        assertEquals("Pago en custodia KineCare", pagada.custodiaTexto)
+        assertEquals("Pago recibido en tu cuenta de Mercado Pago", pagada.custodiaTexto)
         assertTrue(pagada.avisoPagoTexto!!.isNotBlank())
     }
 

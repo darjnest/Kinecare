@@ -159,7 +159,7 @@ fun LiquidacionesYFinanzasScreen(
 
             if (state.historialPagos.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(24.dp))
-                SeccionHistorialPagos(pagos = state.historialPagos, onAction = onAction)
+                SeccionHistorialPagos(pagos = state.historialPagos)
             } else if (state.resumenMensual != null) {
                 Spacer(modifier = Modifier.height(24.dp))
                 Text(
@@ -168,9 +168,6 @@ fun LiquidacionesYFinanzasScreen(
                     color = LoginGrisTexto,
                 )
             }
-
-            Spacer(modifier = Modifier.height(24.dp))
-            TarjetaOperacionRenta(onClick = { onAction(LiquidacionesYFinanzasAction.DescargarCertificadoAnual) })
 
             Spacer(modifier = Modifier.height(24.dp))
         }
@@ -202,8 +199,6 @@ private fun EncabezadoFinanzas(onVolver: () -> Unit) {
             color = TextoPrincipal,
             modifier = Modifier.weight(1f).padding(start = 4.dp),
         )
-        Icon(Icons.Filled.MoreVert, contentDescription = "Más opciones", tint = LoginGrisTexto)
-        Spacer(modifier = Modifier.width(12.dp))
         Box(
             modifier = Modifier
                 .size(32.dp)
@@ -335,7 +330,7 @@ private fun TarjetaMontoPorLiquidar(resumenFinanciero: ResumenFinanciero) {
                 Icon(Icons.Filled.Shield, contentDescription = null, tint = LoginMenta, modifier = Modifier.size(14.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "En custodia KineCare Protect • 100% garantizado",
+                    text = "Pagado vía Mercado Pago",
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
@@ -559,7 +554,7 @@ private fun SeccionResumenMensual(resumenMensual: ResumenMensual) {
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(text = "Comisión de plataforma KineCare", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = TextoPrincipal)
-                            Text(text = "Infraestructura, pasarelas y soporte 24/7", style = MaterialTheme.typography.labelSmall, color = LoginGrisTexto)
+                            Text(text = "Infraestructura y pasarela de pago", style = MaterialTheme.typography.labelSmall, color = LoginGrisTexto)
                         }
                     }
                     Text(text = "${resumenMensual.comisionPlataformaPorcentaje}%", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = AzulPetroleo30)
@@ -614,10 +609,7 @@ private fun SeccionResumenMensual(resumenMensual: ResumenMensual) {
 }
 
 @Composable
-private fun SeccionHistorialPagos(
-    pagos: List<PagoHistorico>,
-    onAction: (LiquidacionesYFinanzasAction) -> Unit,
-) {
+private fun SeccionHistorialPagos(pagos: List<PagoHistorico>) {
     Column {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -630,17 +622,14 @@ private fun SeccionHistorialPagos(
         Spacer(modifier = Modifier.height(10.dp))
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             pagos.forEach { pago ->
-                TarjetaPagoHistorico(pago = pago, onClick = { onAction(LiquidacionesYFinanzasAction.DescargarComprobante(pago.id)) })
+                TarjetaPagoHistorico(pago = pago)
             }
         }
     }
 }
 
 @Composable
-private fun TarjetaPagoHistorico(
-    pago: PagoHistorico,
-    onClick: () -> Unit,
-) {
+private fun TarjetaPagoHistorico(pago: PagoHistorico) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -699,17 +688,8 @@ private fun TarjetaPagoHistorico(
                     )
                 }
             }
-            Column(horizontalAlignment = Alignment.End) {
-                Text(text = formatearClp(pago.monto), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = TextoPrincipal)
-                Row(
-                    modifier = Modifier.clickable(onClick = onClick),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Filled.PictureAsPdf, contentDescription = null, tint = AzulPetroleo30, modifier = Modifier.size(13.dp))
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Text(text = "Comprobante", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = AzulPetroleo30)
-                }
-            }
+            // Sin boton de comprobante: los documentos tributarios aun no se generan.
+            Text(text = formatearClp(pago.monto), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = TextoPrincipal)
         }
     }
 }
@@ -748,55 +728,6 @@ private fun TarjetaErrorCarga(onReintentar: () -> Unit) {
                     .clickable(onClick = onReintentar)
                     .padding(horizontal = 24.dp, vertical = 10.dp),
             )
-        }
-    }
-}
-
-@Composable
-private fun TarjetaOperacionRenta(onClick: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = LiquidacionesCelesteRenta),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(AzulPetroleo30),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.Filled.Assignment, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Text(text = "Operación Renta 2025", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = LiquidacionesCelesteRentaTexto)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Obtén el consolidado fiscal timbrado de todas tus atenciones kine para tu declaración anual de impuestos (F22).",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = LiquidacionesCelesteRentaTexto,
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(14.dp))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(50))
-                    .background(LoginPrimarioOscuro)
-                    .clickable(onClick = onClick)
-                    .padding(vertical = 14.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.Filled.Download, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(text = "Descargar Certificado Anual de Ingresos", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color.White)
-            }
         }
     }
 }
