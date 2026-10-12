@@ -115,6 +115,7 @@ creadoEn: timestamp
 actualizadoEn: timestamp
 respondidaEn: timestamp?             // lo escribe responderReserva al aceptar/rechazar;
                                      // ausente mientras la reserva sigue SOLICITADA
+completadaEn: timestamp?             // lo escribe completarReserva; solo en reservas COMPLETADA
 ```
 `pago` lo inicializa `crearReserva` como `{ id: null, monto: servicio.precio,
 estado: "PENDIENTE" }`: **`pago.id` es `null` hasta que el cliente paga**:
@@ -422,6 +423,42 @@ Pruebas: `test/unit/responderReserva.test.ts` (validación del payload) y
 Firestore Emulator: camino feliz, cada `motivo`, reserva ajena, concurrencia).
 Desplegada con `firebase deploy --only functions:responderReserva -P qa`;
 verificado que sin sesión responde 401 `SIN_SESION`.
+
+### `completarReserva` (callable) — **sin desplegar** (código y tests listos)
+Mismo protocolo que `responderReserva` (`POST .../completarReserva`). El
+profesional dueño da por realizada una atención `CONFIRMADA` (o `EN_CURSO`)
+cuya hora ya llegó. Es el paso que habilita dejar una reseña, el "por
+liquidar" del dashboard y las liquidaciones.
+
+Request `data`: `{ reservaId: string }`. Cualquier otra clave se ignora (el
+estado nunca lo elige el cliente). Response `result`:
+`{ estado: "COMPLETADA" }`. Actualiza `reservas/{reservaId}`: `estado`,
+`completadaEn` y `actualizadoEn` (hora del servidor); no toca pago, comisión
+ni `bloqueosAgenda`.
+
+| `status` (HTTP) | `motivo` | Cuándo |
+|---|---|---|
+| `UNAUTHENTICATED` (401) | `SIN_SESION` | Sin sesión |
+| `INVALID_ARGUMENT` (400) | `DATOS_INVALIDOS` | `reservaId` vacío/no texto/con `/`/> 128 caracteres |
+| `PERMISSION_DENIED` (403) | `ROL_INVALIDO` | `usuarios/{uid}.rol != "PROFESIONAL"` (o sin documento) |
+| `NOT_FOUND` (404) | `RESERVA_NO_ENCONTRADA` | No existe **o es de otro profesional** |
+| `FAILED_PRECONDITION` (400) | `RESERVA_NO_COMPLETABLE` | `estado` no es `CONFIRMADA`/`EN_CURSO` (solicitada, rechazada, cancelada o ya completada) |
+| `FAILED_PRECONDITION` (400) | `CITA_NO_INICIADA` | `fechaHora > ahora` (o sin `fechaHora`) |
+
+Reglas de detalle:
+- Solo el profesional puede completar: un cliente podría dar por hecha una
+  atención que no ocurrió.
+- Lectura y escritura en una transacción: dos llamadas simultáneas → una gana
+  y la otra recibe `RESERVA_NO_COMPLETABLE` (probado en el emulador).
+- **No libera ni captura pagos:** con Mercado Pago Marketplace el dinero va
+  directo al profesional (ver "Liquidaciones y finanzas" en TASKS.md).
+- La app la ofrece en "Solicitudes de atención → Historial" como "Marcar como
+  completada", con confirmación.
+
+Pruebas: `test/unit/completarReserva.test.ts` y
+`test/integration/completarReserva.integration.test.ts` (camino feliz, cada
+`motivo`, reserva ajena, concurrencia). Despliegue pendiente:
+`firebase deploy --only functions:completarReserva -P qa`.
 
 ### `recalcularCalificacion` (trigger Firestore) — **desplegada en QA**, no en producción
 `onDocumentWritten` sobre `resenas/{resenaId}` (`us-central1`, `retry: true`).

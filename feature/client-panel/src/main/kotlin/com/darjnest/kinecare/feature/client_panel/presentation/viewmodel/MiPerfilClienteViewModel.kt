@@ -84,6 +84,24 @@ data class AjustesSeguridad(
     val ingresoBiometrico: Boolean = false,
 )
 
+/** Campos del formulario "Agregar nueva dirección". */
+enum class CampoDireccion { CALLE, NUMERO, COMUNA, CIUDAD, INDICACIONES }
+
+/** Borrador de la dirección que el cliente está agregando. */
+data class FormularioDireccion(
+    val calle: String = "",
+    val numero: String = "",
+    val comuna: String = "",
+    val ciudad: String = "",
+    val indicaciones: String = "",
+    val guardando: Boolean = false,
+    val error: String? = null,
+) {
+    /** Calle, número, comuna y ciudad son obligatorios; las indicaciones no. */
+    val puedeGuardar: Boolean
+        get() = !guardando && calle.isNotBlank() && numero.isNotBlank() && comuna.isNotBlank() && ciudad.isNotBlank()
+}
+
 data class MiPerfilClienteState(
     val cargando: Boolean = false,
     val resumen: PacienteResumen? = null,
@@ -94,6 +112,8 @@ data class MiPerfilClienteState(
     val metodoPago: MetodoPagoGuardado? = null,
     val facturacion: FacturacionCliente? = null,
     val ajustes: AjustesSeguridad = AjustesSeguridad(),
+    /** No nulo mientras el diálogo de nueva dirección está abierto. */
+    val formularioDireccion: FormularioDireccion? = null,
 )
 
 sealed interface MiPerfilClienteAction {
@@ -102,6 +122,9 @@ sealed interface MiPerfilClienteAction {
     data object VerPautaActivaEnCasa : MiPerfilClienteAction
     data object VerHistorialDeEvoluciones : MiPerfilClienteAction
     data object AgregarNuevaDireccion : MiPerfilClienteAction
+    data class CambiarCampoDireccion(val campo: CampoDireccion, val valor: String) : MiPerfilClienteAction
+    data object GuardarDireccion : MiPerfilClienteAction
+    data object CancelarDireccion : MiPerfilClienteAction
     data object EditarFacturacion : MiPerfilClienteAction
     data class CambiarAvisosWhatsApp(val activo: Boolean) : MiPerfilClienteAction
     data class CambiarIngresoBiometrico(val activo: Boolean) : MiPerfilClienteAction
@@ -144,6 +167,9 @@ class MiPerfilClienteViewModel @Inject constructor(
     private val firebaseAuth: FirebaseAuth,
 ) : ViewModel() {
 
+    /** Direcciones tal como están en Firestore; la primera es la principal. */
+    private var direccionesGuardadas: List<Direccion> = emptyList()
+
     private val _state = MutableStateFlow(MiPerfilClienteState())
     val state: StateFlow<MiPerfilClienteState> = _state.asStateFlow()
 
@@ -157,9 +183,24 @@ class MiPerfilClienteViewModel @Inject constructor(
                 _state.update { it.copy(ajustes = it.ajustes.copy(avisosWhatsApp = action.activo)) }
             is MiPerfilClienteAction.CambiarIngresoBiometrico ->
                 _state.update { it.copy(ajustes = it.ajustes.copy(ingresoBiometrico = action.activo)) }
+            MiPerfilClienteAction.AgregarNuevaDireccion ->
+                _state.update { it.copy(formularioDireccion = FormularioDireccion()) }
+            is MiPerfilClienteAction.CambiarCampoDireccion -> _state.update { estado ->
+                val f = estado.formularioDireccion ?: return@update estado
+                estado.copy(
+                    formularioDireccion = when (action.campo) {
+                        CampoDireccion.CALLE -> f.copy(calle = action.valor, error = null)
+                        CampoDireccion.NUMERO -> f.copy(numero = action.valor, error = null)
+                        CampoDireccion.COMUNA -> f.copy(comuna = action.valor, error = null)
+                        CampoDireccion.CIUDAD -> f.copy(ciudad = action.valor, error = null)
+                        CampoDireccion.INDICACIONES -> f.copy(indicaciones = action.valor, error = null)
+                    },
+                )
+            }
+            MiPerfilClienteAction.CancelarDireccion -> _state.update { it.copy(formularioDireccion = null) }
+            MiPerfilClienteAction.GuardarDireccion -> guardarDireccion()
             // Editar facturacion, gestionar prevision y boletas SII, ver
-            // pauta activa/historial de evoluciones, agregar una direccion
-            // y ver los derechos del paciente: requieren escritura sobre el
+            // pauta activa/historial de evoluciones y ver los derechos del paciente: requieren escritura sobre el
             // `Cliente` real y navegacion hacia otras features, ninguno
             // conectado todavia (sin modelo de producto/tratamiento clinico
             // en Firestore) — se conectan cuando la feature salga de esta
@@ -174,10 +215,49 @@ class MiPerfilClienteViewModel @Inject constructor(
             MiPerfilClienteAction.GestionarPrevisionYBoletas,
             MiPerfilClienteAction.VerPautaActivaEnCasa,
             MiPerfilClienteAction.VerHistorialDeEvoluciones,
-            MiPerfilClienteAction.AgregarNuevaDireccion,
             MiPerfilClienteAction.EditarFacturacion,
             MiPerfilClienteAction.VerDerechosDelPaciente,
             -> Unit
+        }
+    }
+
+    private fun guardarDireccion() {
+        val uid = firebaseAuth.currentUser?.uid ?: return
+        val formulario = _state.value.formularioDireccion ?: return
+        if (!formulario.puedeGuardar) return
+        val direccion = Direccion(
+            calle = formulario.calle.trim(),
+            numero = formulario.numero.trim(),
+            comuna = formulario.comuna.trim(),
+            ciudad = formulario.ciudad.trim(),
+            lat = null,
+            lng = null,
+            indicaciones = formulario.indicaciones.trim().ifBlank { null },
+        )
+        viewModelScope.launch {
+            _state.update { it.copy(formularioDireccion = formulario.copy(guardando = true, error = null)) }
+            when (clienteRepository.agregarDireccion(uid, direccion)) {
+                is Result.Success -> {
+                    direccionesGuardadas = direccionesGuardadas + direccion
+                    _state.update {
+                        it.copy(
+                            formularioDireccion = null,
+                            direcciones = direccionesGuardadas.aDireccionesCliente(),
+                            resumen = it.resumen?.let { r ->
+                                if (r.ciudad.isBlank()) r.copy(ciudad = direccionesGuardadas.first().ciudad) else r
+                            },
+                        )
+                    }
+                }
+                is Result.Error -> _state.update {
+                    it.copy(
+                        formularioDireccion = formulario.copy(
+                            guardando = false,
+                            error = "No pudimos guardar la dirección. Intenta de nuevo.",
+                        ),
+                    )
+                }
+            }
         }
     }
 
@@ -200,6 +280,7 @@ class MiPerfilClienteViewModel @Inject constructor(
                 is Result.Error -> emptyList()
             }
 
+            direccionesGuardadas = direcciones
             _state.update {
                 it.copy(
                     cargando = false,

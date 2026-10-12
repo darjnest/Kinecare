@@ -59,9 +59,27 @@ service cloud.firestore {
             || tiposAtencionValidos(request.resource.data));
       allow delete: if false;
 
+      // Catalogo del profesional. crearReserva toma de aqui modalidad, duracion y
+      // precio, asi que se acotan para que un valor absurdo no llegue al cobro.
+      // Pausar/activar (solo `activo`) no revalida el resto: hay servicios
+      // sembrados anteriores a estos limites.
+      function servicioValido(d) {
+        return d.keys().hasAll(['nombre', 'descripcion', 'modalidad', 'duracionMinutos', 'precio', 'activo'])
+          && d.nombre is string && d.nombre.size() >= 3 && d.nombre.size() <= 80
+          && d.descripcion is string && d.descripcion.size() <= 300
+          && d.modalidad in ['DOMICILIO', 'CONSULTA', 'ONLINE']
+          && d.duracionMinutos is int && d.duracionMinutos >= 15 && d.duracionMinutos <= 480
+          && d.precio is int && d.precio >= 1000 && d.precio <= 1000000
+          && d.activo is bool;
+      }
+
       match /servicios/{servicioId} {
         allow read: if true;
-        allow write: if esDueno(usuarioId);
+        allow create: if esDueno(usuarioId) && servicioValido(request.resource.data);
+        allow update: if esDueno(usuarioId)
+          && (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['activo'])
+              || servicioValido(request.resource.data));
+        allow delete: if esDueno(usuarioId);
       }
     }
 

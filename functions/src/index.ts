@@ -5,6 +5,7 @@ import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { onCall, onRequest } from "firebase-functions/v2/https";
 import { calificacionTriggerHandler } from "./calificacion.js";
 import { conectarMercadoPagoHandler, oauthCallbackHandler, type RespuestaHttp } from "./conectarMercadoPago.js";
+import { completarReservaHandler } from "./completarReserva.js";
 import { crearReservaHandler } from "./crearReserva.js";
 import { iniciarPagoHandler, type DepsPago } from "./iniciarPago.js";
 import { parseClave } from "./mercadopago/cifrado.js";
@@ -21,6 +22,10 @@ export const crearReserva = onCall({ region: "us-central1" }, (request) =>
 
 export const responderReserva = onCall({ region: "us-central1" }, (request) =>
   responderReservaHandler(getFirestore(), request.auth?.uid, request.data, new Date()),
+);
+
+export const completarReserva = onCall({ region: "us-central1" }, (request) =>
+  completarReservaHandler(getFirestore(), request.auth?.uid, request.data, new Date()),
 );
 
 // Mantiene `profesionales.calificacionPromedio`/`totalResenas` al día cuando cambia una reseña (el

@@ -2,6 +2,7 @@
 
 package com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel
 
+import com.darjnest.kinecare.core.common.data.error.CompletarReservaError
 import com.darjnest.kinecare.core.common.data.error.ReservaError
 import com.darjnest.kinecare.core.common.data.error.ResponderReservaError
 import com.darjnest.kinecare.core.common.data.error.ServicioError
@@ -368,6 +369,80 @@ class SolicitudesDeAtencionViewModelTest {
             viewModel.onAction(SolicitudesDeAtencionAction.MensajeMostrado)
 
             assertNull(viewModel.state.value.mensaje)
+        }
+    }
+
+    @Nested
+    inner class Completar {
+
+        @Test
+        fun `solo una confirmada con la hora cumplida se puede completar`() = runTest {
+            conReservas(
+                reserva("lista", AHORA - 2.hours, estado = EstadoReserva.CONFIRMADA),
+                reserva("en-curso", AHORA - 1.hours, estado = EstadoReserva.EN_CURSO),
+                reserva("futura", AHORA + 2.hours, estado = EstadoReserva.CONFIRMADA),
+                reserva("hecha", AHORA - 5.hours, estado = EstadoReserva.COMPLETADA),
+            )
+
+            val historial = crearViewModel().state.value.historial.associate { it.id to it.puedeCompletar }
+
+            assertEquals(mapOf("lista" to true, "en-curso" to true, "futura" to false, "hecha" to false), historial)
+        }
+
+        @Test
+        fun `completar pasa la atencion a COMPLETADA, la cuenta en la semana y avisa`() = runTest {
+            conReservas(reserva("r1", AHORA - 2.hours, estado = EstadoReserva.CONFIRMADA))
+            coEvery { reservaRepository.completar("r1") } returns Result.Success(EstadoReserva.COMPLETADA)
+            val viewModel = crearViewModel()
+
+            viewModel.onAction(SolicitudesDeAtencionAction.CompletarAtencion("r1"))
+
+            val state = viewModel.state.value
+            val fila = state.historial.single()
+            assertEquals(EstadoSolicitudResuelta.COMPLETADA, fila.estado)
+            assertFalse(fila.puedeCompletar)
+            assertEquals(1, state.completadasEstaSemana)
+            assertEquals("Atención con Nombre cli-1 completada.", state.mensaje)
+            assertNull(state.respondiendoId)
+        }
+
+        @Test
+        fun `una cita que todavia no empieza no llama a la funcion`() = runTest {
+            conReservas(reserva("r1", AHORA + 2.hours, estado = EstadoReserva.CONFIRMADA))
+            val viewModel = crearViewModel()
+
+            viewModel.onAction(SolicitudesDeAtencionAction.CompletarAtencion("r1"))
+
+            coVerify(exactly = 0) { reservaRepository.completar(any()) }
+        }
+
+        @Test
+        fun `si la reserva cambio por otro lado avisa y recarga el estado real`() = runTest {
+            conReservas(reserva("r1", AHORA - 2.hours, estado = EstadoReserva.CONFIRMADA))
+            coEvery { reservaRepository.completar("r1") } returns
+                Result.Error(CompletarReservaError.RESERVA_NO_COMPLETABLE)
+            val viewModel = crearViewModel()
+            conReservas(reserva("r1", AHORA - 2.hours, estado = EstadoReserva.CANCELADA_CLIENTE))
+
+            viewModel.onAction(SolicitudesDeAtencionAction.CompletarAtencion("r1"))
+
+            val state = viewModel.state.value
+            assertEquals("Esta atención ya no está confirmada.", state.mensaje)
+            assertEquals(EstadoSolicitudResuelta.CANCELADA, state.historial.single().estado)
+            coVerify(exactly = 2) { reservaRepository.obtenerPorProfesional(uid) }
+        }
+
+        @Test
+        fun `sin internet avisa y no recarga`() = runTest {
+            conReservas(reserva("r1", AHORA - 2.hours, estado = EstadoReserva.CONFIRMADA))
+            coEvery { reservaRepository.completar("r1") } returns Result.Error(CompletarReservaError.SIN_INTERNET)
+            val viewModel = crearViewModel()
+
+            viewModel.onAction(SolicitudesDeAtencionAction.CompletarAtencion("r1"))
+
+            assertEquals("Sin conexión. Revisa tu internet e inténtalo de nuevo.", viewModel.state.value.mensaje)
+            assertTrue(viewModel.state.value.historial.single().puedeCompletar)
+            coVerify(exactly = 1) { reservaRepository.obtenerPorProfesional(uid) }
         }
     }
 

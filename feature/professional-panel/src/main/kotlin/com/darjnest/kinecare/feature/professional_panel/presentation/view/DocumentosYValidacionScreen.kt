@@ -57,6 +57,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.darjnest.kinecare.core.designsystem.theme.AzulPetroleo30
@@ -84,7 +91,37 @@ fun DocumentosYValidacionRoot(
     onVolver: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    DocumentosYValidacionScreen(state = state, onAction = viewModel::onAction, onVolver = onVolver, modifier = modifier)
+    val context = LocalContext.current
+    DocumentosYValidacionScreen(
+        state = state,
+        onAction = { accion ->
+            // Copiar al portapapeles y abrir el sitio de la Superintendencia necesitan un
+            // Context: las resuelve el Root. El resto sigue en el ViewModel.
+            when (accion) {
+                DocumentosYValidacionAction.CopiarNumeroSis ->
+                    state.acreditacion?.numeroSis?.let { copiarAlPortapapeles(context, "N° SIS", it) }
+                DocumentosYValidacionAction.ConsultarEnSuperSalud -> abrirSuperSalud(context)
+                else -> viewModel.onAction(accion)
+            }
+        },
+        onVolver = onVolver,
+        modifier = modifier,
+    )
+}
+
+private const val URL_SUPERSALUD = "https://www.supersalud.gob.cl"
+
+private fun copiarAlPortapapeles(context: Context, etiqueta: String, texto: String) {
+    val portapapeles = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
+    portapapeles.setPrimaryClip(ClipData.newPlainText(etiqueta, texto))
+}
+
+private fun abrirSuperSalud(context: Context) {
+    try {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(URL_SUPERSALUD)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    } catch (e: ActivityNotFoundException) {
+        // Sin navegador instalado: no hay nada que abrir.
+    }
 }
 
 @Composable

@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -178,7 +179,11 @@ fun SearchScreen(
                 FilaModalidad(modalidad = state.modalidad, onAction = onAction)
 
                 Spacer(modifier = Modifier.height(16.dp))
-                GrillaCategorias(categorias = state.categorias, onAction = onAction)
+                GrillaCategorias(
+                    categorias = state.categorias,
+                    seleccionadaId = state.categoriaSeleccionadaId,
+                    onAction = onAction,
+                )
 
                 Spacer(modifier = Modifier.height(28.dp))
                 FilaDestacadosTitulo()
@@ -188,6 +193,8 @@ fun SearchScreen(
                     Box(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = LoginPrimarioOscuro)
                     }
+                } else if (state.profesionalesDestacados.isEmpty()) {
+                    MensajeSinProfesionales(hayCargados = state.totalProfesionalesCargados > 0)
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         state.profesionalesDestacados.forEach { profesional ->
@@ -634,6 +641,7 @@ private fun OpcionModalidad(
 @Composable
 private fun GrillaCategorias(
     categorias: List<CategoriaServicio>,
+    seleccionadaId: String?,
     onAction: (SearchAction) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -645,6 +653,7 @@ private fun GrillaCategorias(
                 fila.forEach { categoria ->
                     TarjetaCategoria(
                         categoria = categoria,
+                        seleccionada = categoria.id == seleccionadaId,
                         onClick = { onAction(SearchAction.SeleccionarCategoria(categoria.id)) },
                         modifier = Modifier.weight(1f),
                     )
@@ -660,6 +669,7 @@ private fun GrillaCategorias(
 @Composable
 private fun TarjetaCategoria(
     categoria: CategoriaServicio,
+    seleccionada: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -668,7 +678,8 @@ private fun TarjetaCategoria(
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = if (seleccionada) LoginMenta else Color.White),
+        border = if (seleccionada) BorderStroke(2.dp, LoginPrimarioOscuro) else null,
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
@@ -686,7 +697,10 @@ private fun TarjetaCategoria(
                 ) {
                     Icon(categoria.icono, contentDescription = null, tint = LoginPrimarioOscuro, modifier = Modifier.size(20.dp))
                 }
-                KineCareBadge(texto = "${categoria.profesionalesActivos} activos", tono = BadgeTono.NEUTRO)
+                // Sin profesionales no hay cifra que mostrar: nada de "0 activos".
+                if (categoria.profesionalesActivos > 0) {
+                    KineCareBadge(texto = "${categoria.profesionalesActivos} activos", tono = BadgeTono.NEUTRO)
+                }
             }
             Spacer(modifier = Modifier.height(10.dp))
             Text(
@@ -712,10 +726,10 @@ private fun TarjetaCategoria(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "Desde ${formatearClp(categoria.precioDesde)}",
+                    text = if (categoria.precioDesde > 0) "Desde ${formatearClp(categoria.precioDesde)}" else "Sin oferta aún",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
-                    color = LoginPrimarioOscuro,
+                    color = if (categoria.precioDesde > 0) LoginPrimarioOscuro else LoginGrisTexto,
                 )
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowForwardIos,
@@ -726,6 +740,22 @@ private fun TarjetaCategoria(
             }
         }
     }
+}
+
+@Composable
+private fun MensajeSinProfesionales(hayCargados: Boolean) {
+    Text(
+        text = if (hayCargados) {
+            "Ningún profesional calza con tus filtros. Prueba otra modalidad, otra categoría o quita \"Solo verificados\"."
+        } else {
+            "Todavía no hay profesionales disponibles en esta especialidad."
+        },
+        style = MaterialTheme.typography.bodyMedium,
+        color = LoginGrisTexto,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 16.dp),
+    )
 }
 
 @Composable

@@ -2,6 +2,7 @@ package com.darjnest.kinecare.core.common.data.repository
 
 import com.darjnest.kinecare.core.common.data.error.ClienteError
 import com.darjnest.kinecare.core.common.domain.model.Cliente
+import com.darjnest.kinecare.core.common.domain.model.Direccion
 import com.darjnest.kinecare.core.common.result.Result
 
 /**
@@ -17,4 +18,11 @@ interface ClienteRepository {
 
     /** `arrayRemove` sobre `clientes/{clienteId}.favoritos`. */
     suspend fun quitarFavorito(clienteId: String, profesionalId: String): Result<Unit, ClienteError>
+
+    /**
+     * `arrayUnion` sobre `clientes/{clienteId}.direcciones`, creando el
+     * documento si no existe (clientes registrados antes de que el registro
+     * lo creara). La primera direccion de la lista es la principal.
+     */
+    suspend fun agregarDireccion(clienteId: String, direccion: Direccion): Result<Unit, ClienteError>
 }

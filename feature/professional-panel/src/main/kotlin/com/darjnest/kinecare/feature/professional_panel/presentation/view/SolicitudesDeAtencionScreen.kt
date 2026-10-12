@@ -51,7 +51,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -206,7 +208,13 @@ fun SolicitudesDeAtencionScreen(
                     if (state.historial.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(16.dp))
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            state.historial.forEach { FilaSolicitudResuelta(it) }
+                            state.historial.forEach { fila ->
+                                FilaSolicitudResuelta(
+                                    solicitud = fila,
+                                    completando = state.respondiendoId == fila.id,
+                                    onCompletar = { onAction(SolicitudesDeAtencionAction.CompletarAtencion(fila.id)) },
+                                )
+                            }
                         }
                     }
                 }
@@ -728,7 +736,11 @@ private fun TarjetaErrorCarga(onReintentar: () -> Unit) {
 }
 
 @Composable
-private fun FilaSolicitudResuelta(solicitud: SolicitudResuelta) {
+private fun FilaSolicitudResuelta(
+    solicitud: SolicitudResuelta,
+    completando: Boolean,
+    onCompletar: () -> Unit,
+) {
     val (fondo, color) = when (solicitud.estado) {
         EstadoSolicitudResuelta.CONFIRMADA,
         EstadoSolicitudResuelta.EN_CURSO,
@@ -739,42 +751,81 @@ private fun FilaSolicitudResuelta(solicitud: SolicitudResuelta) {
         -> RojoError90 to RojoError40
         EstadoSolicitudResuelta.VENCIDA -> LoginGrisClaro to LoginGrisTexto
     }
-    Row(
+    var confirmando by remember { mutableStateOf(false) }
+    if (confirmando) {
+        KineCareConfirmDialog(
+            titulo = "Completar atención",
+            mensaje = "¿Confirmas que la atención con ${solicitud.pacienteNombre} ya se realizó? " +
+                "El paciente podrá dejar su reseña y no se puede deshacer.",
+            textoConfirmar = "Sí, completar",
+            textoCancelar = "Volver",
+            onConfirmar = {
+                confirmando = false
+                onCompletar()
+            },
+            onCancelar = { confirmando = false },
+        )
+    }
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(Color.White)
             .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(modifier = Modifier.weight(1f)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = solicitud.pacienteNombre,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = TextoPrincipal,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "${solicitud.servicioNombre} • ${solicitud.fechaHoraTexto}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = LoginGrisTexto,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = solicitud.pacienteNombre,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Bold,
-                color = TextoPrincipal,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = "${solicitud.servicioNombre} • ${solicitud.fechaHoraTexto}",
+                text = solicitud.estadoTexto,
                 style = MaterialTheme.typography.labelSmall,
-                color = LoginGrisTexto,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                fontWeight = FontWeight.Bold,
+                color = color,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(fondo)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
             )
         }
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = solicitud.estadoTexto,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = color,
-            modifier = Modifier
-                .clip(RoundedCornerShape(50))
-                .background(fondo)
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-        )
+        if (solicitud.puedeCompletar) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(50))
+                    .background(if (completando) LoginGrisClaro else LoginPrimarioOscuro)
+                    .clickable(enabled = !completando) { confirmando = true }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (completando) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = LoginPrimarioOscuro)
+                } else {
+                    Text(
+                        text = "Marcar como completada",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                    )
+                }
+            }
+        }
     }
 }
 

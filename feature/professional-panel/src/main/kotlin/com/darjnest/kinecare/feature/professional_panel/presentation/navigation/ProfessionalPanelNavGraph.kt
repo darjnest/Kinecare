@@ -16,6 +16,7 @@ fun NavGraphBuilder.professional_panelGraph(
     navController: NavController,
     onCerrarSesion: () -> Unit = {},
     onVerResenas: (String) -> Unit = {},
+    onPrevisualizarPerfil: (String) -> Unit = {},
     onConectarMercadoPago: () -> Unit = {},
 ) {
     composable<ProfessionalPanelRoute> {
@@ -32,6 +33,7 @@ fun NavGraphBuilder.professional_panelGraph(
         MiPerfilProfesionalRoot(
             onVolver = navController::popBackStack,
             onVerResenas = onVerResenas,
+            onPrevisualizarPerfil = onPrevisualizarPerfil,
             onCerrarSesion = onCerrarSesion,
         )
     }

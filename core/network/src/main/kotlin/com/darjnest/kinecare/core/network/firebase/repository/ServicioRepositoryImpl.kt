@@ -46,6 +46,29 @@ class ServicioRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun guardar(profesionalId: String, servicio: Servicio): Result<Servicio, ServicioError> {
+        return try {
+            val campos = mapOf(
+                "nombre" to servicio.nombre,
+                "descripcion" to servicio.descripcion,
+                "modalidad" to servicio.modalidad.name,
+                "duracionMinutos" to servicio.duracionMinutos,
+                "precio" to servicio.precio,
+            )
+            if (servicio.id.isBlank()) {
+                val referencia = servicios(profesionalId).add(campos + ("activo" to true)).await()
+                Result.Success(servicio.copy(id = referencia.id, activo = true))
+            } else {
+                servicios(profesionalId).document(servicio.id).update(campos).await()
+                Result.Success(servicio)
+            }
+        } catch (e: FirebaseNetworkException) {
+            Result.Error(ServicioError.SIN_INTERNET)
+        } catch (e: Exception) {
+            Result.Error(ServicioError.DESCONOCIDO)
+        }
+    }
+
     private fun servicios(profesionalId: String): CollectionReference =
         firestore.collection(COLECCION_PROFESIONALES)
             .document(profesionalId)

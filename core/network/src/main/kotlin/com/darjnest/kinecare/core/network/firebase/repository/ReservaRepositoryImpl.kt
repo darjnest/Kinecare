@@ -4,6 +4,7 @@ package com.darjnest.kinecare.core.network.firebase.repository
 
 import com.darjnest.kinecare.core.common.data.error.CrearReservaError
 import com.darjnest.kinecare.core.common.data.error.ReservaError
+import com.darjnest.kinecare.core.common.data.error.CompletarReservaError
 import com.darjnest.kinecare.core.common.data.error.ResponderReservaError
 import com.darjnest.kinecare.core.common.data.repository.ReservaRepository
 import com.darjnest.kinecare.core.common.domain.model.Direccion
@@ -21,6 +22,7 @@ import com.darjnest.kinecare.core.network.functions.CloudFunctionsApi
 import com.darjnest.kinecare.core.network.functions.llamarCallable
 import com.darjnest.kinecare.core.network.functions.dto.CallableErrorDto
 import com.darjnest.kinecare.core.network.functions.dto.CallableRequest
+import com.darjnest.kinecare.core.network.functions.dto.CompletarReservaRequestDto
 import com.darjnest.kinecare.core.network.functions.dto.CrearReservaRequestDto
 import com.darjnest.kinecare.core.network.functions.dto.DireccionDto
 import com.darjnest.kinecare.core.network.functions.dto.ResponderReservaRequestDto
@@ -135,6 +137,42 @@ class ReservaRepositoryImpl @Inject constructor(
                 ?.let { Result.Success(it) }
                 ?: Result.Error(ResponderReservaError.DESCONOCIDO)
             is Result.Error -> resultado
+        }
+    }
+
+    override suspend fun completar(reservaId: String): Result<EstadoReserva, CompletarReservaError> {
+        val resultado = llamarCallable(
+            firebaseAuth = firebaseAuth,
+            json = json,
+            sinSesion = CompletarReservaError.SIN_SESION,
+            sinInternet = CompletarReservaError.SIN_INTERNET,
+            desconocido = CompletarReservaError.DESCONOCIDO,
+            aError = ::errorDeCompletar,
+            llamada = { autorizacion ->
+                cloudFunctionsApi.completarReserva(autorizacion, CallableRequest(CompletarReservaRequestDto(reservaId)))
+            },
+        )
+        return when (resultado) {
+            is Result.Success -> EstadoReserva.entries.firstOrNull { it.name == resultado.data.estado }
+                ?.let { Result.Success(it) }
+                ?: Result.Error(CompletarReservaError.DESCONOCIDO)
+            is Result.Error -> resultado
+        }
+    }
+
+    /** Igual que [errorDeCrear], con los motivos de `completarReserva`. */
+    private fun errorDeCompletar(error: CallableErrorDto?): CompletarReservaError {
+        if (error == null) return CompletarReservaError.DESCONOCIDO
+        val porMotivo = error.details?.motivo?.let { motivo ->
+            CompletarReservaError.entries.firstOrNull { it.name == motivo }
+        }
+        return porMotivo ?: when (error.status) {
+            "UNAUTHENTICATED" -> CompletarReservaError.SIN_SESION
+            "PERMISSION_DENIED" -> CompletarReservaError.ROL_INVALIDO
+            "INVALID_ARGUMENT" -> CompletarReservaError.DATOS_INVALIDOS
+            "NOT_FOUND" -> CompletarReservaError.RESERVA_NO_ENCONTRADA
+            "FAILED_PRECONDITION" -> CompletarReservaError.RESERVA_NO_COMPLETABLE
+            else -> CompletarReservaError.DESCONOCIDO
         }
     }
 

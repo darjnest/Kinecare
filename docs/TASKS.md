@@ -719,6 +719,34 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       `:feature:professional-panel:testDebugUnitTest`, `lintDebug` y
       `:app:assembleQaDebug`. **No verificado visualmente** en dispositivo.
 
+### Cierre de la parte gráfica (2026-10-12)
+- [x] Tema claro fijo + barras del sistema con iconos oscuros (el modo oscuro
+      del sistema dejaba el login ilegible; verificado en emulador). Modo oscuro
+      real queda como diseño pendiente (ver PENDIENTES.md).
+- [x] Login/registro: botón Ayuda con diálogo informativo; placeholders con
+      menos contraste (parecían texto escrito).
+- [x] Cliente — Mi perfil: "Agregar nueva dirección" (diálogo +
+      `ClienteRepository.agregarDireccion`); la tarjeta de direcciones ya no se
+      oculta cuando no hay ninguna. **Bug de fondo corregido:** el registro nunca
+      creaba `clientes/{uid}`, así que `obtenerPorId` daba `NO_ENCONTRADO` y los
+      favoritos fallaban; ahora lo crea vacío y las escrituras usan `set` con merge
+      (cubre clientes antiguos).
+- [x] Panel profesional: crear/editar servicio (`ServicioRepository.guardar`,
+      con límites también en las Security Rules de `servicios`), selector de hora
+      para los turnos, copiar N° SIS y abrir supersalud.gob.cl, "Previsualizar"
+      perfil público. Subir/ver documentos y "Editar credenciales" siguen
+      pendientes (los documentos los maneja el backend, Fase 6).
+- [x] Búsqueda: filtros de modalidad, "Solo verificados" y categoría ahora
+      filtran de verdad sobre los profesionales cargados; los conteos y precios
+      "desde" de la vitrina salen de datos reales (antes eran cifras inventadas).
+      "Solo verificados" parte apagado porque nadie puede verificarse aún.
+      Sin texto libre, orden ni mapa.
+- [x] Backend: Cloud Function `completarReserva` (`CONFIRMADA`/`EN_CURSO` →
+      `COMPLETADA`) + "Marcar como completada" en Solicitudes. **Sin desplegar.**
+- [ ] **Reglas de `servicios` y `completarReserva` sin desplegar en QA**
+      (`firebase deploy --only firestore:rules,functions:completarReserva -P qa`).
+- [ ] No verificado en pantalla después del login (requiere una sesión real).
+
 ## Fase 8 — QA, pulido y publicación
 - [ ] Cobertura de tests (JUnit5, MockK, Turbine, Compose UI Testing)
 - [x] GitHub Actions CI (`.github/workflows/ci.yml`), en cada PR hacia

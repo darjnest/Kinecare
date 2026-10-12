@@ -72,12 +72,22 @@ data class DisponibilidadYHorariosState(
     val guardando: Boolean = false,
     /** Aviso puntual para un Snackbar; la vista lo consume con [DisponibilidadYHorariosAction.MensajeMostrado]. */
     val mensaje: String? = null,
+    /** Turno cuyas horas se estan editando en el dialogo; `null` con el dialogo cerrado. */
+    val turnoEnEdicion: TurnoHorario? = null,
+    /** Motivo por el que no se acepto la hora ingresada, mostrado dentro del dialogo. */
+    val errorEdicionTurno: String? = null,
 )
 
 sealed interface DisponibilidadYHorariosAction {
     data class CambiarReservasInmediatas(val activo: Boolean) : DisponibilidadYHorariosAction
     data class SeleccionarDia(val diaId: String) : DisponibilidadYHorariosAction
     data class EditarTurno(val turnoId: String) : DisponibilidadYHorariosAction
+    data class ConfirmarEdicionTurno(
+        val turnoId: String,
+        val horaInicio: LocalTime,
+        val horaFin: LocalTime,
+    ) : DisponibilidadYHorariosAction
+    data object CancelarEdicionTurno : DisponibilidadYHorariosAction
     data object Replicar : DisponibilidadYHorariosAction
     data class SeleccionarMinutosTraslado(val minutos: Int) : DisponibilidadYHorariosAction
     data class CambiarRadioKm(val km: Int) : DisponibilidadYHorariosAction
@@ -102,6 +112,8 @@ internal fun numeroDiaDeLaSemana(hoy: LocalDate, dia: DayOfWeek): Int {
     val lunes = hoy.plus(-hoy.dayOfWeek.ordinal, DateTimeUnit.DAY)
     return lunes.plus(dia.ordinal, DateTimeUnit.DAY).day
 }
+
+private const val DURACION_MINIMA_TURNO_SEGUNDOS = 30 * 60
 
 private fun LocalTime.aTexto(): String = "%02d:%02d".format(hour, minute)
 
@@ -166,9 +178,16 @@ class DisponibilidadYHorariosViewModel @Inject constructor(
             DisponibilidadYHorariosAction.GuardarDisponibilidad -> guardar()
             DisponibilidadYHorariosAction.MensajeMostrado -> _state.update { it.copy(mensaje = null) }
 
-            // Editar un turno requiere un selector de hora que los mockups
-            // no definen todavia (docs/TASKS.md, Fase 7).
-            is DisponibilidadYHorariosAction.EditarTurno -> Unit
+            is DisponibilidadYHorariosAction.EditarTurno -> _state.update { estado ->
+                estado.copy(
+                    turnoEnEdicion = estado.turnos.firstOrNull { it.id == action.turnoId },
+                    errorEdicionTurno = null,
+                )
+            }
+            is DisponibilidadYHorariosAction.ConfirmarEdicionTurno ->
+                confirmarEdicionTurno(action.turnoId, action.horaInicio, action.horaFin)
+            DisponibilidadYHorariosAction.CancelarEdicionTurno ->
+                _state.update { it.copy(turnoEnEdicion = null, errorEdicionTurno = null) }
         }
     }
 
@@ -202,6 +221,31 @@ class DisponibilidadYHorariosViewModel @Inject constructor(
         if (destinos.isEmpty()) return
         horarios = horarios.filter { it.diaSemana !in destinos } +
             destinos.flatMap { destino -> origen.map { it.copy(diaSemana = destino) } }
+        refrescarHorarios()
+    }
+
+    /**
+     * Cambia las horas del turno `turnoId` (`DIA-indice`, indice sobre los turnos del
+     * dia ordenados por inicio). Rechaza un tramo menor a 30 minutos o que se pise con
+     * otro turno activo del mismo dia. Solo cambia el estado local: persiste con Guardar.
+     */
+    private fun confirmarEdicionTurno(turnoId: String, inicio: LocalTime, fin: LocalTime) {
+        val indice = turnoId.substringAfterLast('-').toIntOrNull() ?: return
+        val delDia = horarios.filter { it.diaSemana == diaSeleccionado }.sortedBy { it.horaInicio }
+        val original = delDia.getOrNull(indice) ?: return
+        val error = when {
+            fin.toSecondOfDay() - inicio.toSecondOfDay() < DURACION_MINIMA_TURNO_SEGUNDOS ->
+                "El turno debe durar al menos 30 minutos."
+            delDia.any { it != original && it.activo && inicio < it.horaFin && fin > it.horaInicio } ->
+                "Se superpone con otro turno de ese día."
+            else -> null
+        }
+        if (error != null) {
+            _state.update { it.copy(errorEdicionTurno = error) }
+            return
+        }
+        horarios = horarios.map { if (it == original) it.copy(horaInicio = inicio, horaFin = fin) else it }
+        _state.update { it.copy(turnoEnEdicion = null, errorEdicionTurno = null) }
         refrescarHorarios()
     }
 

@@ -15,6 +15,8 @@ import com.darjnest.kinecare.core.common.result.Result
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.slot
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
@@ -157,5 +159,87 @@ class MiPerfilClienteViewModelTest {
                 assertEquals("", resumen.ciudad)
             }
         }
+    }
+
+    private fun cargarVacio(): MiPerfilClienteViewModel {
+        coEvery { usuarioRepository.obtenerPorId(uid) } returns Result.Success(usuarioDePrueba())
+        coEvery { clienteRepository.obtenerPorId(uid) } returns Result.Success(clienteDePrueba())
+        return crearViewModel()
+    }
+
+    private fun MiPerfilClienteViewModel.completarFormulario() {
+        onAction(MiPerfilClienteAction.CambiarCampoDireccion(CampoDireccion.CALLE, " Los Aromos "))
+        onAction(MiPerfilClienteAction.CambiarCampoDireccion(CampoDireccion.NUMERO, "123"))
+        onAction(MiPerfilClienteAction.CambiarCampoDireccion(CampoDireccion.COMUNA, "Providencia"))
+        onAction(MiPerfilClienteAction.CambiarCampoDireccion(CampoDireccion.CIUDAD, "Santiago"))
+    }
+
+    @Test
+    fun `agregar nueva direccion abre un formulario vacio que aun no se puede guardar`() = runTest {
+        val viewModel = cargarVacio()
+
+        viewModel.onAction(MiPerfilClienteAction.AgregarNuevaDireccion)
+
+        val formulario = requireNotNull(viewModel.state.value.formularioDireccion)
+        assertFalse(formulario.puedeGuardar)
+    }
+
+    @Test
+    fun `guardar sin los campos obligatorios no llama al repositorio`() = runTest {
+        val viewModel = cargarVacio()
+        viewModel.onAction(MiPerfilClienteAction.AgregarNuevaDireccion)
+        viewModel.onAction(MiPerfilClienteAction.CambiarCampoDireccion(CampoDireccion.CALLE, "Los Aromos"))
+
+        viewModel.onAction(MiPerfilClienteAction.GuardarDireccion)
+
+        coVerify(exactly = 0) { clienteRepository.agregarDireccion(any(), any()) }
+        assertTrue(viewModel.state.value.formularioDireccion != null)
+    }
+
+    @Test
+    fun `guardar una direccion valida la persiste recortada, cierra el formulario y la lista`() = runTest {
+        val guardada = slot<Direccion>()
+        coEvery { clienteRepository.agregarDireccion(uid, capture(guardada)) } returns Result.Success(Unit)
+        val viewModel = cargarVacio()
+        viewModel.onAction(MiPerfilClienteAction.AgregarNuevaDireccion)
+        viewModel.completarFormulario()
+
+        viewModel.onAction(MiPerfilClienteAction.GuardarDireccion)
+
+        assertEquals("Los Aromos", guardada.captured.calle)
+        assertNull(guardada.captured.indicaciones)
+        val estado = viewModel.state.value
+        assertNull(estado.formularioDireccion)
+        assertEquals(1, estado.direcciones.size)
+        assertEquals("Los Aromos 123", estado.direcciones[0].calle)
+        assertTrue(estado.direcciones[0].predeterminada)
+        assertEquals("Santiago", estado.resumen?.ciudad)
+    }
+
+    @Test
+    fun `si guardar falla el formulario sigue abierto con el borrador y un mensaje`() = runTest {
+        coEvery { clienteRepository.agregarDireccion(uid, any()) } returns Result.Error(ClienteError.SIN_INTERNET)
+        val viewModel = cargarVacio()
+        viewModel.onAction(MiPerfilClienteAction.AgregarNuevaDireccion)
+        viewModel.completarFormulario()
+
+        viewModel.onAction(MiPerfilClienteAction.GuardarDireccion)
+
+        val formulario = requireNotNull(viewModel.state.value.formularioDireccion)
+        assertEquals(" Los Aromos ", formulario.calle)
+        assertFalse(formulario.guardando)
+        assertTrue(formulario.error != null)
+        assertTrue(viewModel.state.value.direcciones.isEmpty())
+    }
+
+    @Test
+    fun `cancelar cierra el formulario sin guardar`() = runTest {
+        val viewModel = cargarVacio()
+        viewModel.onAction(MiPerfilClienteAction.AgregarNuevaDireccion)
+
+        viewModel.onAction(MiPerfilClienteAction.CancelarDireccion)
+
+        assertNull(viewModel.state.value.formularioDireccion)
+        coVerify(exactly = 0) { clienteRepository.agregarDireccion(any(), any()) }
     }
 }
