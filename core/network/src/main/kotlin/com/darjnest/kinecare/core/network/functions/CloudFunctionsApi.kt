@@ -4,6 +4,8 @@ import com.darjnest.kinecare.core.network.functions.dto.CallableRequest
 import com.darjnest.kinecare.core.network.functions.dto.CallableResponse
 import com.darjnest.kinecare.core.network.functions.dto.ConectarMercadoPagoRequestDto
 import com.darjnest.kinecare.core.network.functions.dto.ConectarMercadoPagoResultadoDto
+import com.darjnest.kinecare.core.network.functions.dto.CompletarReservaRequestDto
+import com.darjnest.kinecare.core.network.functions.dto.CompletarReservaResultadoDto
 import com.darjnest.kinecare.core.network.functions.dto.CrearReservaRequestDto
 import com.darjnest.kinecare.core.network.functions.dto.CrearReservaResultadoDto
 import com.darjnest.kinecare.core.network.functions.dto.EstadoPagoRequestDto
@@ -38,6 +40,12 @@ interface CloudFunctionsApi {
         @Header("Authorization") autorizacion: String,
         @Body cuerpo: CallableRequest<ResponderReservaRequestDto>,
     ): Response<CallableResponse<ResponderReservaResultadoDto>>
+
+    @POST("completarReserva")
+    suspend fun completarReserva(
+        @Header("Authorization") autorizacion: String,
+        @Body cuerpo: CallableRequest<CompletarReservaRequestDto>,
+    ): Response<CallableResponse<CompletarReservaResultadoDto>>
 
     @POST("iniciarPago")
     suspend fun iniciarPago(

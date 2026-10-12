@@ -4,6 +4,7 @@ package com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.darjnest.kinecare.core.common.data.error.CompletarReservaError
 import com.darjnest.kinecare.core.common.data.error.ResponderReservaError
 import com.darjnest.kinecare.core.common.data.repository.ReservaRepository
 import com.darjnest.kinecare.core.common.data.repository.ServicioRepository
@@ -84,6 +85,8 @@ data class SolicitudResuelta(
     val fechaHoraTexto: String,
     val estado: EstadoSolicitudResuelta,
     val estadoTexto: String,
+    /** Confirmada (o en curso) y con la hora ya cumplida: el profesional puede darla por realizada. */
+    val puedeCompletar: Boolean = false,
 )
 
 data class SolicitudesDeAtencionState(
@@ -115,6 +118,8 @@ sealed interface SolicitudesDeAtencionAction {
     data class RechazarSolicitud(val solicitudId: String) : SolicitudesDeAtencionAction
     data object ConfirmarRechazo : SolicitudesDeAtencionAction
     data object CancelarRechazo : SolicitudesDeAtencionAction
+    /** Da por realizada una atencion confirmada cuya hora ya llego (`completarReserva`). */
+    data class CompletarAtencion(val reservaId: String) : SolicitudesDeAtencionAction
     data object Reintentar : SolicitudesDeAtencionAction
     data object MensajeMostrado : SolicitudesDeAtencionAction
 }
@@ -227,6 +232,10 @@ private fun Reserva.textoEstadoResuelto(estado: EstadoSolicitudResuelta): String
     EstadoSolicitudResuelta.VENCIDA -> "Vencida sin respuesta"
 }
 
+/** Solo una atencion confirmada (o en curso) cuya hora ya llego; coincide con las reglas de `completarReserva`. */
+internal fun Reserva.puedeCompletarse(ahora: Instant): Boolean =
+    (estado == EstadoReserva.CONFIRMADA || estado == EstadoReserva.EN_CURSO) && fechaHora <= ahora
+
 /** Lunes de la semana (lunes a domingo) de [fecha]. */
 private fun lunesDe(fecha: LocalDate): LocalDate = fecha.minus(fecha.dayOfWeek.ordinal, DateTimeUnit.DAY)
 
@@ -241,6 +250,25 @@ private fun ResponderReservaError.aMensaje(): String = when (this) {
     ResponderReservaError.DESCONOCIDO,
     -> "No pudimos enviar tu respuesta. Inténtalo de nuevo."
 }
+
+private fun CompletarReservaError.aMensaje(): String = when (this) {
+    CompletarReservaError.SIN_INTERNET -> "Sin conexión. Revisa tu internet e inténtalo de nuevo."
+    CompletarReservaError.SIN_SESION -> "Tu sesión expiró. Vuelve a iniciar sesión."
+    CompletarReservaError.ROL_INVALIDO -> "Solo un profesional puede completar una atención."
+    CompletarReservaError.RESERVA_NO_ENCONTRADA -> "La atención ya no existe."
+    CompletarReservaError.RESERVA_NO_COMPLETABLE -> "Esta atención ya no está confirmada."
+    CompletarReservaError.CITA_NO_INICIADA -> "La atención todavía no empieza."
+    CompletarReservaError.DATOS_INVALIDOS,
+    CompletarReservaError.DESCONOCIDO,
+    -> "No pudimos completar la atención. Inténtalo de nuevo."
+}
+
+/** Tras estos errores la reserva cambio por otro lado: se recarga para mostrar el estado real. */
+private val ERRORES_COMPLETAR_QUE_RECARGAN = setOf(
+    CompletarReservaError.RESERVA_NO_ENCONTRADA,
+    CompletarReservaError.RESERVA_NO_COMPLETABLE,
+    CompletarReservaError.CITA_NO_INICIADA,
+)
 
 /**
  * Errores tras los cuales la lista local quedo desactualizada (otra
@@ -301,6 +329,8 @@ class SolicitudesDeAtencionViewModel @Inject constructor(
 
             SolicitudesDeAtencionAction.CancelarRechazo ->
                 _state.update { it.copy(solicitudPorRechazar = null) }
+
+            is SolicitudesDeAtencionAction.CompletarAtencion -> completar(action.reservaId)
 
             SolicitudesDeAtencionAction.Reintentar -> cargar()
 
@@ -363,6 +393,7 @@ class SolicitudesDeAtencionViewModel @Inject constructor(
                         fechaHoraTexto = reserva.fechaHora.aFechaHoraTexto(ahora),
                         estado = resuelto,
                         estadoTexto = reserva.textoEstadoResuelto(resuelto),
+                        puedeCompletar = reserva.puedeCompletarse(ahora),
                     ) to reserva.fechaHora
                 }
             }
@@ -377,6 +408,29 @@ class SolicitudesDeAtencionViewModel @Inject constructor(
             historial = historial,
             completadasEstaSemana = completadasEstaSemana,
         )
+    }
+
+    private fun completar(reservaId: String) {
+        if (_state.value.respondiendoId != null) return
+        val fila = _state.value.historial.firstOrNull { it.id == reservaId && it.puedeCompletar } ?: return
+        _state.update { it.copy(respondiendoId = reservaId) }
+        viewModelScope.launch {
+            when (val resultado = reservaRepository.completar(reservaId)) {
+                is Result.Success -> {
+                    reservas = reservas.map { if (it.id == reservaId) it.copy(estado = resultado.data) else it }
+                    _state.update {
+                        derivar(it).copy(
+                            respondiendoId = null,
+                            mensaje = "Atención con ${fila.pacienteNombre} completada.",
+                        )
+                    }
+                }
+                is Result.Error -> {
+                    _state.update { it.copy(respondiendoId = null, mensaje = resultado.error.aMensaje()) }
+                    if (resultado.error in ERRORES_COMPLETAR_QUE_RECARGAN) cargar()
+                }
+            }
+        }
     }
 
     private fun responder(reservaId: String, respuesta: RespuestaReserva) {
