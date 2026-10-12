@@ -391,6 +391,10 @@ private fun EncabezadoAuth(modo: ModoAuth, onAction: (AuthAction) -> Unit) {
 
 @Composable
 private fun EncabezadoRegistro(titulo: String, subtitulo: String, onVolver: () -> Unit) {
+    var mostrarAyuda by remember { mutableStateOf(false) }
+    if (mostrarAyuda) {
+        DialogoAyudaRegistro(onCerrar = { mostrarAyuda = false })
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -410,7 +414,7 @@ private fun EncabezadoRegistro(titulo: String, subtitulo: String, onVolver: () -
             Spacer(modifier = Modifier.weight(1f))
             LogoKineCare(tamanoLogo = 32.dp, tamanoTexto = 18.sp)
             Spacer(modifier = Modifier.weight(1f))
-            IconButton(onClick = {}) {
+            IconButton(onClick = { mostrarAyuda = true }) {
                 Icon(Icons.Filled.HelpOutline, contentDescription = "Ayuda", tint = LoginGrisTexto)
             }
         }
@@ -586,6 +590,26 @@ private fun CamposLogin(
             style = MaterialTheme.typography.bodyMedium,
         )
     }
+}
+
+@Composable
+private fun DialogoAyudaRegistro(onCerrar: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onCerrar,
+        title = { Text("¿Necesitas ayuda?") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("• Tu RUT es tu usuario: lo usarás cada vez que inicies sesión.")
+                Text("• El correo y el teléfono son solo de contacto; no se usan para entrar.")
+                Text("• La contraseña debe tener al menos 6 caracteres.")
+                Text("• Si eres profesional, elige al menos una atención (Kinesiología o Masoterapia) para aparecer en las búsquedas.")
+                Text("• Tus datos de identidad se verifican siempre en nuestros servidores, nunca en este dispositivo.")
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onCerrar) { Text("Entendido") }
+        },
+    )
 }
 
 @Composable

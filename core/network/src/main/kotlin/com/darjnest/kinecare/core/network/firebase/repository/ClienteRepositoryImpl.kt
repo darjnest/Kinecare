@@ -12,6 +12,7 @@ import com.darjnest.kinecare.core.common.result.Result
 import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
@@ -73,10 +74,17 @@ class ClienteRepositoryImpl @Inject constructor(
     override suspend fun quitarFavorito(clienteId: String, profesionalId: String): Result<Unit, ClienteError> =
         actualizarFavoritos(clienteId, FieldValue.arrayRemove(profesionalId))
 
-    private suspend fun actualizarFavoritos(clienteId: String, valor: FieldValue): Result<Unit, ClienteError> {
+    override suspend fun agregarDireccion(clienteId: String, direccion: Direccion): Result<Unit, ClienteError> =
+        escribirCampo(clienteId, "direcciones", FieldValue.arrayUnion(direccion.aMapa()))
+
+    private suspend fun actualizarFavoritos(clienteId: String, valor: FieldValue): Result<Unit, ClienteError> =
+        escribirCampo(clienteId, "favoritos", valor)
+
+    /** `set` con merge: crea `clientes/{id}` si un cliente antiguo no lo tiene todavia. */
+    private suspend fun escribirCampo(clienteId: String, campo: String, valor: FieldValue): Result<Unit, ClienteError> {
         return try {
             firestore.collection(COLECCION_CLIENTES).document(clienteId)
-                .update("favoritos", valor)
+                .set(mapOf(campo to valor), SetOptions.merge())
                 .await()
             Result.Success(Unit)
         } catch (e: FirebaseNetworkException) {
@@ -92,6 +100,16 @@ private fun UsuarioError.aClienteError(): ClienteError = when (this) {
     UsuarioError.NO_ENCONTRADO -> ClienteError.NO_ENCONTRADO
     UsuarioError.DESCONOCIDO -> ClienteError.DESCONOCIDO
 }
+
+private fun Direccion.aMapa(): Map<String, Any?> = mapOf(
+    "calle" to calle,
+    "numero" to numero,
+    "comuna" to comuna,
+    "ciudad" to ciudad,
+    "lat" to lat,
+    "lng" to lng,
+    "indicaciones" to indicaciones,
+)
 
 private fun Map<String, Any?>.aDireccion(): Direccion = Direccion(
     calle = this["calle"] as? String ?: "",

@@ -130,6 +130,9 @@ fun MiPerfilClienteScreen(
     onCerrarSesion: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    state.formularioDireccion?.let { formulario ->
+        DialogoNuevaDireccion(formulario = formulario, onAction = onAction)
+    }
     Scaffold(
         modifier = modifier,
         containerColor = LoginFondo,
@@ -170,9 +173,8 @@ fun MiPerfilClienteScreen(
                     TarjetaFichaClinica(tratamiento = tratamiento, onAction = onAction)
                 }
 
-                if (state.direcciones.isNotEmpty()) {
-                    TarjetaDirecciones(direcciones = state.direcciones, onAction = onAction)
-                }
+                // Siempre visible: sin direcciones el cliente no tendría cómo agregar la primera.
+                TarjetaDirecciones(direcciones = state.direcciones, onAction = onAction)
 
                 if (state.metodoPago != null || state.facturacion != null) {
                     TarjetaPagosYFacturacion(
@@ -698,8 +700,16 @@ private fun TarjetaDirecciones(
                 )
             }
             Spacer(modifier = Modifier.height(10.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                direcciones.forEach { direccion -> FilaDireccion(direccion = direccion) }
+            if (direcciones.isEmpty()) {
+                Text(
+                    text = "Aún no tienes direcciones. Agrega una para pedir atenciones a domicilio.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LoginGrisTexto,
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    direcciones.forEach { direccion -> FilaDireccion(direccion = direccion) }
+                }
             }
             Spacer(modifier = Modifier.height(12.dp))
             Row(
