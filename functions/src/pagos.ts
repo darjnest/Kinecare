@@ -1,6 +1,6 @@
 import { FieldValue, type Firestore } from "firebase-admin/firestore";
 import { logger } from "firebase-functions/v2";
-import { COLECCION_PAGOS, ESQUEMA_APP } from "./constantes.js";
+import { COLECCION_PAGOS, ESQUEMA_APP, ESTADOS_RESERVA_SIN_ATENCION } from "./constantes.js";
 import { errorDeNegocio } from "./errores.js";
 import type { RespuestaHttp } from "./conectarMercadoPago.js";
 import type { DepsPago } from "./iniciarPago.js";
@@ -29,6 +29,14 @@ function metodoDesde(pago: PagoMP): { tipo: "TARJETA" | "TRANSFERENCIA"; ultimos
  * notificaciones repetidas o desordenadas (ver `transicionValida`). Devuelve el estado final
  * del pago. Un pago que Mercado Pago da por aprobado con un monto distinto al cobrado NO se
  * autoriza: se deja constancia en el log para revisarlo a mano.
+ *
+ * Pago tardio: si el cobro se aprueba cuando la reserva ya fue cancelada o rechazada (el cliente
+ * dejo abierta la preferencia de Checkout Pro y pago despues), el pago se registra `AUTORIZADO`
+ * porque el dinero si se cobro, pero queda con reembolso TOTAL pendiente (`reembolsoMotivo:
+ * "PAGO_TARDIO"`), sin importar la politica de anticipacion: cobrar algo que nadie va a atender
+ * nunca corresponde. Cancelar y aplicar el pago leen y escriben ambos documentos en transaccion,
+ * asi que se serializan: gana uno y el otro ve el resultado (si cancela primero, esto lo marca;
+ * si el pago entra primero, `cancelarReserva` ve `AUTORIZADO` y aplica su politica).
  */
 export async function aplicarPago(db: Firestore, pagoId: string, pagoMP: PagoMP): Promise<EstadoPago> {
   const pagoRef = db.collection(COLECCION_PAGOS).doc(pagoId);
@@ -55,10 +63,30 @@ export async function aplicarPago(db: Firestore, pagoId: string, pagoMP: PagoMP)
     const reservaRef = db.collection("reservas").doc(pago.get("reservaId") as string);
     const reserva = await tx.get(reservaRef);
 
+    const pagoTardio =
+      nuevo === "AUTORIZADO" &&
+      reserva.exists &&
+      (ESTADOS_RESERVA_SIN_ATENCION as readonly string[]).includes(reserva.get("estado") as string);
+    if (pagoTardio) {
+      logger.warn("Mercado Pago: pago aprobado sobre una reserva sin atencion; queda con reembolso pendiente", {
+        pagoId,
+        reservaId: reservaRef.id,
+        estadoReserva: reserva.get("estado"),
+      });
+    }
+
     tx.update(pagoRef, {
       estado: nuevo,
       idTransaccionPasarela: pagoMP.id,
       metodo: metodoDesde(pagoMP),
+      ...(pagoTardio
+        ? {
+            reembolsoPendiente: true,
+            reembolsoPolitica: "TOTAL",
+            reembolsoMotivo: "PAGO_TARDIO",
+            reembolsoSolicitadoEn: FieldValue.serverTimestamp(),
+          }
+        : {}),
       actualizadoEn: FieldValue.serverTimestamp(),
     });
     // Un intento viejo (otro pagoId) no debe pisar el estado del intento vigente.
