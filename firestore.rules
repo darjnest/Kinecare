@@ -14,6 +14,23 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Tokens FCM del propio usuario (id del documento = token). Solo el dueno los lee, crea,
+    // refresca (re-registrar el mismo token actualiza actualizadoEn) y borra; claves exactas.
+    // Quien envia los push es una Cloud Function (Admin SDK), que ignora estas reglas.
+    function dispositivoValido(token) {
+      return request.resource.data.keys().hasAll(['plataforma', 'actualizadoEn'])
+        && request.resource.data.keys().hasOnly(['plataforma', 'actualizadoEn'])
+        && request.resource.data.plataforma == 'ANDROID'
+        && request.resource.data.actualizadoEn == request.time
+        && token.size() >= 1 && token.size() <= 4096;
+    }
+
+    match /usuarios/{usuarioId}/dispositivos/{token} {
+      allow read: if esDueno(usuarioId);
+      allow create, update: if esDueno(usuarioId) && dispositivoValido(token);
+      allow delete: if esDueno(usuarioId);
+    }
+
     match /clientes/{usuarioId} {
       allow read, write: if esDueno(usuarioId);
     }
@@ -123,9 +140,17 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/reservas/$(request.resource.data.reservaId)).data.estado == 'COMPLETADA'
         && get(/databases/$(database)/documents/reservas/$(request.resource.data.reservaId)).data.clienteId == request.auth.uid
         && get(/databases/$(database)/documents/reservas/$(request.resource.data.reservaId)).data.profesionalId == request.resource.data.profesionalId;
+      // Responder: solo el profesional de la resena (rol leido de usuarios/{uid}), solo la clave
+      // respuestaProfesional, una sola vez (no se edita ni se borra), texto 1..500. No toca
+      // calificacion/profesionalId, asi que recalcularCalificacion no recalcula.
       allow update: if request.auth != null
         && request.auth.uid == resource.data.profesionalId
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['respuestaProfesional']);
+        && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'PROFESIONAL'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['respuestaProfesional'])
+        && (!('respuestaProfesional' in resource.data) || resource.data.respuestaProfesional == null)
+        && request.resource.data.respuestaProfesional is string
+        && request.resource.data.respuestaProfesional.trim().size() >= 1
+        && request.resource.data.respuestaProfesional.size() <= 500;
       allow delete: if false;
     }
 

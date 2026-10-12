@@ -43,6 +43,14 @@
       ]
     },
     {
+      "collectionGroup": "reservas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "fechaHora", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "resenas",
       "queryScope": "COLLECTION",
       "fields": [

@@ -17,6 +17,19 @@ service firebase.storage {
       allow delete: if false;
     }
 
+    // Foto de perfil del cliente. A diferencia de la del profesional no es publica: la lee solo
+    // su dueno por ruta. Quien deba verla (usuarios/{uid}.fotoUrl) lo hace con la URL de
+    // descarga con token, que no pasa por estas reglas. Escritura: solo el dueno, JPEG, < 5 MB,
+    // sin deletes (reemplazar es sobreescribir), igual que la del profesional.
+    match /clientes/{usuarioId}/foto-perfil.jpg {
+      allow read: if request.auth != null && request.auth.uid == usuarioId;
+      allow create, update: if request.auth != null
+        && request.auth.uid == usuarioId
+        && request.resource.contentType == 'image/jpeg'
+        && request.resource.size < 5 * 1024 * 1024;
+      allow delete: if false;
+    }
+
     // Documentos de credenciales: contienen datos de identidad/titulos. No los
     // lee ni los escribe la app; los maneja el backend / proveedor de
     // verificacion (Admin SDK ignora estas reglas). Fase 6 define el flujo.
