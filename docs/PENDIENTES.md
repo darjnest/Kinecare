@@ -99,7 +99,7 @@ casi todo esto, y varias casillas se cierran a la vez:
       `sendPasswordResetEmail` no sirve tal cual; hace falta una Cloud Function
       que busque `correoContacto` y envíe el enlace con un proveedor de correo
       (SendGrid, Trigger Email, etc.). Hoy el diálogo solo dice "contáctanos"
-      y no hay canal de soporte definido. Antes de esto se anotó: el diálogo de `AuthScreen` ("¿Olvidaste tu
+      y no hay canal de soporte definido. Nota previa: el diálogo de `AuthScreen` ("¿Olvidaste tu
       contraseña?") solo dice "contáctanos". `FirebaseAuth.sendPasswordResetEmail`
       resuelve esto en pocas líneas.
 - [ ] **Liquidaciones y finanzas** y **Documentos y validación**
