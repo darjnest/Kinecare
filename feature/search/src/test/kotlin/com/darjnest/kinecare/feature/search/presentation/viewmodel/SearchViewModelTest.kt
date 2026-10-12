@@ -43,6 +43,9 @@ class SearchViewModelTest {
         nombre: String = "Ana Soto",
         especialidades: List<String> = listOf("KINESIOLOGIA"),
         descripcion: String = "desc",
+        modalidad: ModalidadServicio = ModalidadServicio.DOMICILIO,
+        precio: Long = 18000L,
+        verificado: Boolean = true,
     ): Profesional = Profesional(
         usuario = Usuario(
             id = id,
@@ -62,9 +65,9 @@ class SearchViewModelTest {
                 id = "serv-1",
                 nombre = "Sesion",
                 descripcion = "desc",
-                modalidad = ModalidadServicio.CONSULTA,
+                modalidad = modalidad,
                 duracionMinutos = 60,
-                precio = 18000L,
+                precio = precio,
             ),
         ),
         insignias = emptyList(),
@@ -72,7 +75,7 @@ class SearchViewModelTest {
         calificacionPromedio = 4.5,
         totalResenas = 10,
         descripcion = descripcion,
-        estadoVerificacionGeneral = EstadoVerificacion.APROBADO,
+        estadoVerificacionGeneral = if (verificado) EstadoVerificacion.APROBADO else EstadoVerificacion.NO_SOLICITADO,
         tiposAtencion = listOf(TipoAtencion.KINESIOLOGIA),
     )
 
@@ -154,6 +157,101 @@ class SearchViewModelTest {
             assertEquals("Kinesiología respiratoria", destacados[0].especialidad)
             assertEquals("Bio libre", destacados[1].especialidad)
         }
+    }
+
+    private fun cargar(vararg profesionales: Profesional): SearchViewModel {
+        coEvery { profesionalRepository.buscarPorTipoAtencion(TipoAtencion.KINESIOLOGIA) } returns
+            Result.Success(profesionales.toList())
+        return crearViewModel()
+    }
+
+    @Test
+    fun `la modalidad elegida filtra por los servicios activos de cada profesional`() = runTest {
+        val viewModel = cargar(
+            profesionalDePrueba(id = "domi", modalidad = ModalidadServicio.DOMICILIO),
+            profesionalDePrueba(id = "consulta", modalidad = ModalidadServicio.CONSULTA),
+        )
+
+        assertEquals(listOf("domi"), viewModel.state.value.profesionalesDestacados.map { it.id })
+
+        viewModel.onAction(SearchAction.CambiarModalidad(ModalidadAtencion.EN_CONSULTA))
+
+        assertEquals(listOf("consulta"), viewModel.state.value.profesionalesDestacados.map { it.id })
+        assertEquals(2, viewModel.state.value.totalProfesionalesCargados)
+    }
+
+    @Test
+    fun `solo verificados oculta a los no verificados y se puede apagar`() = runTest {
+        val viewModel = cargar(
+            profesionalDePrueba(id = "ok", verificado = true),
+            profesionalDePrueba(id = "sin", verificado = false),
+        )
+        assertEquals(listOf("ok", "sin"), viewModel.state.value.profesionalesDestacados.map { it.id })
+
+        viewModel.onAction(SearchAction.CambiarSoloVerificados(true))
+        assertEquals(listOf("ok"), viewModel.state.value.profesionalesDestacados.map { it.id })
+
+        viewModel.onAction(SearchAction.CambiarSoloVerificados(false))
+        assertEquals(2, viewModel.state.value.profesionalesDestacados.size)
+    }
+
+    @Test
+    fun `los conteos y precios de las categorias salen de los profesionales cargados`() = runTest {
+        val viewModel = cargar(
+            profesionalDePrueba(id = "a", especialidades = listOf("KINESIOLOGIA", "kine-deportiva"), precio = 25000L),
+            profesionalDePrueba(id = "b", especialidades = listOf("KINESIOLOGIA", "kine-deportiva"), precio = 20000L),
+            profesionalDePrueba(id = "c", especialidades = listOf("KINESIOLOGIA", "kine-respiratoria"), precio = 30000L),
+        )
+
+        val categorias = viewModel.state.value.categorias.associateBy { it.id }
+
+        assertEquals(2, categorias.getValue("kine-deportiva").profesionalesActivos)
+        assertEquals(20000L, categorias.getValue("kine-deportiva").precioDesde)
+        assertEquals(1, categorias.getValue("kine-respiratoria").profesionalesActivos)
+        assertEquals(0, categorias.getValue("kine-neurologica").profesionalesActivos)
+        assertEquals(0L, categorias.getValue("kine-neurologica").precioDesde)
+    }
+
+    @Test
+    fun `seleccionar una categoria filtra la lista, tocarla de nuevo o Ver todos la quita`() = runTest {
+        val viewModel = cargar(
+            profesionalDePrueba(id = "a", especialidades = listOf("KINESIOLOGIA", "kine-deportiva")),
+            profesionalDePrueba(id = "b", especialidades = listOf("KINESIOLOGIA", "kine-respiratoria")),
+        )
+
+        viewModel.onAction(SearchAction.SeleccionarCategoria("kine-deportiva"))
+        assertEquals(listOf("a"), viewModel.state.value.profesionalesDestacados.map { it.id })
+        assertEquals("kine-deportiva", viewModel.state.value.categoriaSeleccionadaId)
+        // Los conteos no se achican al elegir una categoria: siguen contando las demas.
+        assertEquals(1, viewModel.state.value.categorias.first { it.id == "kine-respiratoria" }.profesionalesActivos)
+
+        viewModel.onAction(SearchAction.SeleccionarCategoria("kine-deportiva"))
+        assertEquals(2, viewModel.state.value.profesionalesDestacados.size)
+
+        viewModel.onAction(SearchAction.SeleccionarCategoria("kine-respiratoria"))
+        viewModel.onAction(SearchAction.VerTodasLasCategorias)
+        assertEquals(null, viewModel.state.value.categoriaSeleccionadaId)
+        assertEquals(2, viewModel.state.value.profesionalesDestacados.size)
+    }
+
+    @Test
+    fun `cambiar de tipo de atencion limpia la categoria elegida`() = runTest {
+        coEvery { profesionalRepository.buscarPorTipoAtencion(any()) } returns Result.Success(emptyList())
+        val viewModel = crearViewModel()
+        viewModel.onAction(SearchAction.SeleccionarCategoria("kine-deportiva"))
+
+        viewModel.onAction(SearchAction.CambiarTipoAtencion(TipoAtencion.MASOTERAPIA))
+
+        assertEquals(null, viewModel.state.value.categoriaSeleccionadaId)
+    }
+
+    @Test
+    fun `Buscar vuelve a consultar el tipo de atencion elegido`() = runTest {
+        val viewModel = cargar(profesionalDePrueba())
+
+        viewModel.onAction(SearchAction.Buscar)
+
+        coVerify(exactly = 2) { profesionalRepository.buscarPorTipoAtencion(TipoAtencion.KINESIOLOGIA) }
     }
 
     /** Espejo minimo del catalogo privado de `SearchViewModel` solo para comparar ids de categoria en el test. */

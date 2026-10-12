@@ -994,6 +994,9 @@ private fun coloresCampo() = OutlinedTextFieldDefaults.colors(
     unfocusedContainerColor = Color.White,
     focusedBorderColor = LoginPrimario,
     unfocusedBorderColor = Color.Transparent,
+    // Con el color por defecto el placeholder ("19876543-0") parecia texto ya escrito.
+    focusedPlaceholderColor = LoginGrisTexto.copy(alpha = 0.55f),
+    unfocusedPlaceholderColor = LoginGrisTexto.copy(alpha = 0.55f),
 )
 
 @Composable

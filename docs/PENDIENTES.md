@@ -84,10 +84,9 @@ casi todo esto, y varias casillas se cierran a la vez:
 
 ### Funcionalidad con huecos reales
 
-- [ ] **Completar una reserva (`CONFIRMADA` → `COMPLETADA`)**: no existe la
-      función ni la acción. Es la pieza que falta para que funcionen: dejar
-      reseña, "Por liquidar" del dashboard, liquidaciones y el reembolso. Hoy
-      nada pasa una reserva a `COMPLETADA`.
+- [ ] **Desplegar `completarReserva` en QA** (`firebase deploy --only functions:completarReserva -P qa`)
+      y probar en dispositivo "Marcar como completada" → reseña del cliente →
+      "Por liquidar". Código y tests listos (200/200 en el emulador).
 - [ ] **Cancelar una cita confirmada** (`CANCELADA_CLIENTE` /
       `CANCELADA_PROFESIONAL`) con su política de reembolso.
 - [ ] **Expirar solicitudes sin respuesta** (función programada; requiere
@@ -95,7 +94,12 @@ casi todo esto, y varias casillas se cierran a la vez:
 - [ ] **Notificaciones push (FCM)**: la dependencia está en el catálogo pero no
       hay servicio, token ni triggers. El cliente solo ve el cambio de estado
       al abrir la app.
-- [ ] **Recuperar contraseña**: el diálogo de `AuthScreen` ("¿Olvidaste tu
+- [ ] **Recuperar contraseña** (necesita decisión): el login es por RUT y el
+      correo de Firebase Auth es sintético (`<rut>@rut.kinecare.cl`), así que
+      `sendPasswordResetEmail` no sirve tal cual; hace falta una Cloud Function
+      que busque `correoContacto` y envíe el enlace con un proveedor de correo
+      (SendGrid, Trigger Email, etc.). Hoy el diálogo solo dice "contáctanos"
+      y no hay canal de soporte definido. Antes de esto se anotó: el diálogo de `AuthScreen` ("¿Olvidaste tu
       contraseña?") solo dice "contáctanos". `FirebaseAuth.sendPasswordResetEmail`
       resuelve esto en pocas líneas.
 - [ ] **Liquidaciones y finanzas** y **Documentos y validación**
@@ -107,19 +111,17 @@ casi todo esto, y varias casillas se cierran a la vez:
       un placeholder "próximamente" y la función `solicitarVerificacion` no
       existe en la rama principal. El PR #41 cubre solo `IDENTIDAD`;
       `CREDENCIALES`, `AUTENTICIDAD` y `HISTORIAL` no tienen flujo.
-- [ ] **Alta de servicios y edición de turnos** en el panel profesional: hoy
-      solo se pausa/activa un servicio y no se puede crear ni editar uno, ni
-      cambiar la hora de un turno (faltan en los mockups; requieren diseño).
 - [ ] Reservas inmediatas, traslado, radio y comunas de atención del
       profesional son solo estado local de la pantalla (sin campos en
       Firestore); "perfil público" on/off también.
+- [ ] Modo oscuro real: hoy el tema está fijo en claro (`KineCareTheme`,
+      `darkTheme = false`) porque ~1.000 usos de la paleta `Login*`/`Color.White`
+      están pensados para fondo claro. Requiere diseño oscuro y repasar cada pantalla.
 - [ ] Cliente — "Mi perfil": previsión, tratamiento, método de pago,
       facturación y avisos son mock/vacíos; las acciones `GestionarPrevision…`,
       `AgregarNuevaDireccion`, `EditarFacturacion`, `VerDerechosDelPaciente`,
       `VerPauta…` y `VerHistorialDeEvoluciones` son no-op. *Agregar nueva
       dirección* es la más útil (la reserva a domicilio ya usa direcciones).
-- [ ] Botón "Ayuda" de la pantalla de "completar perfil" (`AuthScreen.kt:413`)
-      con `onClick = {}`.
 - [ ] Búsqueda: solo filtra por Kinesiología/Masoterapia y ubicación (sin
       texto libre, ordenamiento ni mapa); la vitrina de categorías
       (`categoriasPara()`) es mock local.
