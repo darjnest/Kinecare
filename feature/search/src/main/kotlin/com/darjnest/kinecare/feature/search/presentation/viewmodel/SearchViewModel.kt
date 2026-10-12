@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.darjnest.kinecare.core.common.data.repository.ClienteRepository
 import com.darjnest.kinecare.core.common.data.repository.ProfesionalRepository
 import com.darjnest.kinecare.core.common.domain.model.EstadoVerificacion
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
@@ -23,6 +24,7 @@ import com.darjnest.kinecare.core.designsystem.theme.LoginMenta
 import com.darjnest.kinecare.core.designsystem.theme.LoginMentaSuave
 import com.darjnest.kinecare.feature.search.data.repository.UbicacionRepository
 import com.darjnest.kinecare.feature.search.domain.UbicacionError
+import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -88,6 +90,10 @@ data class SearchState(
     /** Cuantos profesionales trajo la busqueda antes de filtrar (distingue "no hay" de "los filtros no calzan"). */
     val totalProfesionalesCargados: Int = 0,
     val cargandoProfesionales: Boolean = false,
+    /** Ids de los profesionales que el cliente tiene en favoritos (corazon lleno en la tarjeta). */
+    val favoritos: Set<String> = emptySet(),
+    /** Aviso puntual para un Snackbar; se consume con [SearchAction.MensajeMostrado]. */
+    val mensaje: String? = null,
 )
 
 sealed interface SearchAction {
@@ -100,6 +106,8 @@ sealed interface SearchAction {
     data object VerTodasLasCategorias : SearchAction
     data class SeleccionarCategoria(val categoriaId: String) : SearchAction
     data class SeleccionarProfesional(val profesionalId: String) : SearchAction
+    data class AlternarFavorito(val profesionalId: String) : SearchAction
+    data object MensajeMostrado : SearchAction
 }
 
 /**
@@ -257,6 +265,8 @@ private fun UbicacionError.aMensaje(): String = when (this) {
 class SearchViewModel @Inject constructor(
     private val ubicacionRepository: UbicacionRepository,
     private val profesionalRepository: ProfesionalRepository,
+    private val clienteRepository: ClienteRepository,
+    private val firebaseAuth: FirebaseAuth,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SearchState())
@@ -267,6 +277,7 @@ class SearchViewModel @Inject constructor(
 
     init {
         cargarProfesionalesDestacados(SearchState().tipoAtencion)
+        cargarFavoritos()
     }
 
     fun onAction(action: SearchAction) {
@@ -300,6 +311,39 @@ class SearchViewModel @Inject constructor(
             }
             // La navegacion al perfil la resuelve el Root de la pantalla contra el NavGraph.
             is SearchAction.SeleccionarProfesional -> Unit
+            is SearchAction.AlternarFavorito -> alternarFavorito(action.profesionalId)
+            SearchAction.MensajeMostrado -> _state.update { it.copy(mensaje = null) }
+        }
+    }
+
+    /** Favoritos del cliente; si no se pueden leer (sin documento o sin red) el corazon parte vacio. */
+    private fun cargarFavoritos() {
+        val uid = firebaseAuth.currentUser?.uid ?: return
+        viewModelScope.launch {
+            val favoritos = (clienteRepository.obtenerPorId(uid) as? Result.Success)?.data?.favoritos.orEmpty()
+            _state.update { it.copy(favoritos = favoritos.toSet()) }
+        }
+    }
+
+    /** UI optimista: se aplica ya y se revierte (con aviso) si Firestore lo rechaza. */
+    private fun alternarFavorito(profesionalId: String) {
+        val uid = firebaseAuth.currentUser?.uid ?: return
+        val agregar = profesionalId !in _state.value.favoritos
+        _state.update { it.copy(favoritos = if (agregar) it.favoritos + profesionalId else it.favoritos - profesionalId) }
+        viewModelScope.launch {
+            val resultado = if (agregar) {
+                clienteRepository.agregarFavorito(uid, profesionalId)
+            } else {
+                clienteRepository.quitarFavorito(uid, profesionalId)
+            }
+            if (resultado is Result.Error) {
+                _state.update {
+                    it.copy(
+                        favoritos = if (agregar) it.favoritos - profesionalId else it.favoritos + profesionalId,
+                        mensaje = "No pudimos actualizar tus favoritos. Inténtalo de nuevo.",
+                    )
+                }
+            }
         }
     }
 

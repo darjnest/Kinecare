@@ -1,5 +1,10 @@
 package com.darjnest.kinecare.feature.client_panel.presentation.view
 
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.provider.CalendarContract
+import android.widget.Toast
 import com.darjnest.kinecare.core.common.domain.model.EstadoPago
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
 import com.darjnest.kinecare.core.designsystem.theme.KineCareSpacing
@@ -23,24 +28,19 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Apartment
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.DirectionsCar
-import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.EventBusy
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PinDrop
-import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.RateReview
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.SupportAgent
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -51,6 +51,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -102,6 +103,7 @@ fun MisCitasRoot(
     onPagar: (reservaId: String, titulo: String, montoClp: Long) -> Unit = { _, _, _ -> },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     // Al volver de dejar una resena el ViewModel sigue vivo con la lista
     // vieja: recargar para que el boton "Dejar reseña" desaparezca. El
@@ -120,6 +122,11 @@ fun MisCitasRoot(
                 is MisCitasAction.ReportarProblema -> onReportarProblema(accion.reservaId, accion.profesionalId)
                 // Pagar es navegacion hacia `:feature:payment`, tambien por callback desde `:app`.
                 is MisCitasAction.Pagar -> onPagar(accion.reservaId, accion.titulo, accion.montoClp)
+                // Agregar al calendario es un Intent a la app de calendario, no estado del ViewModel.
+                is MisCitasAction.AgregarAGoogleCalendar ->
+                    state.proximasCitas.firstOrNull { it.id == accion.citaId }?.let { cita ->
+                        agregarACalendario(context, cita)
+                    }
                 else -> viewModel.onAction(accion)
             }
         },
@@ -172,13 +179,19 @@ fun MisCitasScreen(
                     onAction = onAction,
                 )
 
-                when (state.tabSeleccionado) {
-                    TabMisCitas.PROXIMAS -> ContenidoProximas(state = state, onAction = onAction, onIrAExplorar = onIrAExplorar)
-                    TabMisCitas.HISTORIAL -> ContenidoHistorial(historial = state.historial, onAction = onAction, onIrAExplorar = onIrAExplorar)
-                    TabMisCitas.CANCELADAS -> ContenidoCanceladas(canceladas = state.canceladas, onAction = onAction)
+                when {
+                    // Sin datos todavia: spinner (o error con "Reintentar"), nunca el estado vacio.
+                    !state.tieneCitas && state.cargando -> CargandoListaCliente()
+                    !state.tieneCitas && state.errorCarga -> ErrorCargaCliente(
+                        mensaje = "No pudimos cargar tus citas",
+                        onReintentar = { onAction(MisCitasAction.Reintentar) },
+                    )
+                    else -> when (state.tabSeleccionado) {
+                        TabMisCitas.PROXIMAS -> ContenidoProximas(state = state, onAction = onAction, onIrAExplorar = onIrAExplorar)
+                        TabMisCitas.HISTORIAL -> ContenidoHistorial(historial = state.historial, onAction = onAction, onIrAExplorar = onIrAExplorar)
+                        TabMisCitas.CANCELADAS -> ContenidoCanceladas(canceladas = state.canceladas, onAction = onAction)
+                    }
                 }
-
-                BannerSoporte(onAction = onAction)
 
                 Spacer(modifier = Modifier.height(8.dp))
             }
@@ -465,15 +478,17 @@ private fun TarjetaCitaEnCurso(
                     ) {
                         Icon(Icons.Filled.Person, contentDescription = null, tint = LoginPrimarioOscuro, modifier = Modifier.size(28.dp))
                     }
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .size(18.dp)
-                            .clip(CircleShape)
-                            .background(LoginPrimarioOscuro),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(Icons.Filled.Verified, contentDescription = "Verificado", tint = Color.White, modifier = Modifier.size(11.dp))
+                    if (cita.verificado) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .size(18.dp)
+                                .clip(CircleShape)
+                                .background(LoginPrimarioOscuro),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(Icons.Filled.Verified, contentDescription = "Verificado", tint = Color.White, modifier = Modifier.size(11.dp))
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.width(12.dp))
@@ -498,10 +513,16 @@ private fun TarjetaCitaEnCurso(
                             modifier = Modifier.padding(top = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Icon(Icons.Filled.Shield, contentDescription = null, tint = LoginPrimarioOscuro, modifier = Modifier.size(11.dp))
-                            Spacer(modifier = Modifier.width(3.dp))
+                            if (cita.rnpiVerificado) {
+                                Icon(Icons.Filled.Shield, contentDescription = null, tint = LoginPrimarioOscuro, modifier = Modifier.size(11.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                            }
                             Text(
-                                text = "SIS N° ${cita.numeroRegistroSis} Verificado",
+                                text = if (cita.rnpiVerificado) {
+                                    "RNPI N° ${cita.numeroRegistroSis} Verificado"
+                                } else {
+                                    "RNPI N° ${cita.numeroRegistroSis}"
+                                },
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = LoginGrisTexto,
@@ -580,54 +601,8 @@ private fun TarjetaCitaEnCurso(
                 )
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(50))
-                    .background(LoginPrimarioOscuro)
-                    .clickable { onAction(MisCitasAction.SeguirEnVivo) }
-                    .padding(vertical = 14.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(text = "Seguir en vivo / Chat", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color.White)
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(50))
-                        .background(LoginGrisClaro)
-                        .clickable { onAction(MisCitasAction.Reprogramar) }
-                        .padding(vertical = 12.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Filled.CalendarMonth, contentDescription = null, tint = TextoPrincipal, modifier = Modifier.size(14.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(text = "Reprogramar", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = TextoPrincipal)
-                }
-                Row(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(50))
-                        .background(LoginGrisClaro)
-                        .clickable { onAction(MisCitasAction.VerPautaDigital) }
-                        .padding(vertical = 12.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Filled.Description, contentDescription = null, tint = TextoPrincipal, modifier = Modifier.size(14.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(text = "Pauta Digital", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = TextoPrincipal)
-                }
-            }
-
+            // "Seguir en vivo / Chat", "Reprogramar" y "Pauta Digital" se ocultan
+            // hasta que existan (no hay seguimiento, reprogramacion ni pautas).
             Spacer(modifier = Modifier.height(12.dp))
             Row(
                 modifier = Modifier
@@ -640,13 +615,13 @@ private fun TarjetaCitaEnCurso(
                 Spacer(modifier = Modifier.width(8.dp))
                 Column {
                     Text(
-                        text = "KineCare Protect Activo",
+                        text = "Pago seguro con Mercado Pago",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
                         color = LoginPrimarioOscuro,
                     )
                     Text(
-                        text = "Tu pago está protegido en custodia hasta completar la sesión. Recibirás la boleta electrónica automáticamente.",
+                        text = "Pagas de forma segura a través de Mercado Pago.",
                         style = MaterialTheme.typography.labelSmall,
                         color = LoginGrisTexto,
                         modifier = Modifier.padding(top = 2.dp),
@@ -787,20 +762,6 @@ private fun TarjetaCitaProxima(
                     Icon(Icons.Filled.CalendarMonth, contentDescription = null, tint = TextoPrincipal, modifier = Modifier.size(14.dp))
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(text = "Google Calendar", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = TextoPrincipal)
-                }
-                Row(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(50))
-                        .background(LoginGrisClaro)
-                        .clickable { onAction(MisCitasAction.VerPreparacion(cita.id)) }
-                        .padding(vertical = 10.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Filled.Info, contentDescription = null, tint = TextoPrincipal, modifier = Modifier.size(14.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(text = "Preparación", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = TextoPrincipal)
                 }
             }
             AccionReportarProblema(
@@ -960,26 +921,7 @@ private fun TarjetaCitaHistorial(
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(10.dp))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(50))
-                    .background(LoginGrisClaro)
-                    .clickable { onAction(MisCitasAction.DescargarBoleta(cita.id)) }
-                    .padding(vertical = 12.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.Filled.ReceiptLong, contentDescription = null, tint = TextoPrincipal, modifier = Modifier.size(14.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "Descargar Boleta Electrónica SII (PDF)",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = TextoPrincipal,
-                )
-            }
+            // "Descargar Boleta Electrónica SII (PDF)" se oculta hasta que exista la emisión de boletas.
             IndicadorEstadoPago(cita.estadoPago, Modifier.padding(top = 8.dp))
             AccionReportarProblema(
                 estadoReporte = cita.estadoReporte,
@@ -1073,51 +1015,30 @@ private fun AccionReportarProblema(
     }
 }
 
-@Composable
-private fun BannerSoporte(onAction: (MisCitasAction) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(LoginGrisClaro)
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(Color.White),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(Icons.Filled.SupportAgent, contentDescription = null, tint = LoginPrimarioOscuro, modifier = Modifier.size(20.dp))
-        }
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "¿Dudas con tu cobertura?",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
-                color = TextoPrincipal,
-            )
-            Text(
-                text = "Nuestro equipo te ayuda con reembolsos Isapre y Fonasa.",
-                style = MaterialTheme.typography.labelSmall,
-                color = LoginGrisTexto,
-            )
-        }
-        Spacer(modifier = Modifier.width(8.dp))
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(50))
-                .background(LoginPrimarioOscuro)
-                .clickable { onAction(MisCitasAction.ChatearConSoporte) }
-                .padding(horizontal = 14.dp, vertical = 8.dp),
-        ) {
-            Text(text = "Chatear", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.White)
+/**
+ * Abre la app de calendario con el evento de la cita precargado (el usuario lo
+ * confirma ahi). No pide permisos: `ACTION_INSERT` delega en la app externa.
+ * Los extras sin dato (fecha, duracion, lugar) se omiten.
+ */
+private fun agregarACalendario(context: Context, cita: CitaProxima) {
+    val intent = Intent(Intent.ACTION_INSERT)
+        .setData(CalendarContract.Events.CONTENT_URI)
+        .putExtra(CalendarContract.Events.TITLE, "${cita.tipoSesion} con ${cita.profesionalNombre}")
+    if (cita.inicioEpochMillis > 0L) {
+        intent.putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, cita.inicioEpochMillis)
+        cita.duracionMinutos?.takeIf { it > 0 }?.let { minutos ->
+            intent.putExtra(CalendarContract.EXTRA_EVENT_END_TIME, cita.inicioEpochMillis + minutos * MILIS_POR_MINUTO)
         }
     }
+    cita.direccionTexto?.let { intent.putExtra(CalendarContract.Events.EVENT_LOCATION, it) }
+    try {
+        context.startActivity(intent)
+    } catch (_: ActivityNotFoundException) {
+        Toast.makeText(context, "No hay una app de calendario instalada", Toast.LENGTH_SHORT).show()
+    }
 }
+
+private const val MILIS_POR_MINUTO = 60_000L
 
 private fun formatearClp(monto: Long): String {
     val agrupado = monto.toString()

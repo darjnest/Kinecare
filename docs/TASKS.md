@@ -743,6 +743,21 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       Sin texto libre, orden ni mapa.
 - [x] Backend: Cloud Function `completarReserva` (`CONFIRMADA`/`EN_CURSO` →
       `COMPLETADA`) + "Marcar como completada" en Solicitudes. **Sin desplegar.**
+- [x] Lote de revisión de pantallas (2026-10-12): corazón de favoritos en el
+      perfil público y en las tarjetas de búsqueda (antes nada agregaba
+      favoritos y la pestaña quedaba siempre vacía); "Agendar" de Favoritos
+      abre la reserva; aviso (solo en la app) cuando el profesional no activó
+      Mercado Pago, en el perfil y en la revisión de la reserva; el resultado
+      de pago con "atrás" va a Mis Citas; Mis Citas, Favoritos, el dashboard y
+      Mi Perfil profesional muestran error con "Reintentar" en vez de "vacío";
+      textos de "custodia"/"liquidación semanal" reemplazados por el modelo real
+      (Mercado Pago directo al profesional); se ocultó lo que no existe
+      (Google Calendar sí funciona; boleta SII, chat, preparación, reprogramar,
+      switches de perfil público y disponibilidad, notificaciones, tarjeta de
+      insumos y de "KineCare Protect" inventadas); "Verificado" solo con insignia
+      aprobada; barras inferiores del panel profesional navegan.
+- [ ] Sigue sin aviso en el backend a profesionales sin Mercado Pago: `crearReserva`
+      y `responderReserva` los aceptan (decisión: solo aviso en la app).
 - [ ] **Reglas de `servicios` y `completarReserva` sin desplegar en QA**
       (`firebase deploy --only firestore:rules,functions:completarReserva -P qa`).
 - [ ] No verificado en pantalla después del login (requiere una sesión real).

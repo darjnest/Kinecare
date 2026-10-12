@@ -13,6 +13,7 @@ import com.darjnest.kinecare.core.common.domain.model.TipoInsignia
 import com.darjnest.kinecare.core.common.result.Result
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -76,7 +77,8 @@ data class MiPerfilProfesionalState(
      * con el que el `Root` abre el listado de resenas (`onVerResenas`).
      */
     val profesionalId: String? = null,
-    val perfilPublicoActivo: Boolean = false,
+    /** La lectura del perfil fallo: sin perfil previo, la vista ofrece reintentar. */
+    val errorCarga: Boolean = false,
     val identidad: IdentidadProfesional? = null,
     val metricas: MetricasReputacion? = null,
     val biografia: String = "",
@@ -100,7 +102,7 @@ data class MiPerfilProfesionalState(
 
 sealed interface MiPerfilProfesionalAction {
     data object VolverAtras : MiPerfilProfesionalAction
-    data class CambiarPerfilPublico(val activo: Boolean) : MiPerfilProfesionalAction
+    data object Reintentar : MiPerfilProfesionalAction
     data object EditarBiografia : MiPerfilProfesionalAction
     data class CambiarBorradorBiografia(val texto: String) : MiPerfilProfesionalAction
     data object GuardarBiografia : MiPerfilProfesionalAction
@@ -146,8 +148,7 @@ class MiPerfilProfesionalViewModel @Inject constructor(
 
     fun onAction(action: MiPerfilProfesionalAction) {
         when (action) {
-            is MiPerfilProfesionalAction.CambiarPerfilPublico ->
-                _state.update { it.copy(perfilPublicoActivo = action.activo) }
+            MiPerfilProfesionalAction.Reintentar -> cargarPerfil()
             MiPerfilProfesionalAction.EditarBiografia ->
                 _state.update {
                     it.copy(editandoBiografia = true, borradorBiografia = it.biografia, errorGuardarBiografia = false)
@@ -179,10 +180,9 @@ class MiPerfilProfesionalViewModel @Inject constructor(
             MiPerfilProfesionalAction.CancelarEdicionTiposAtencion ->
                 _state.update { it.copy(editandoTiposAtencion = false, errorGuardarTiposAtencion = false) }
             MiPerfilProfesionalAction.GuardarTiposAtencion -> guardarTiposAtencion()
-            // Volver atras y ver todas las resenas (usa `state.profesionalId`)
-            // los resuelve el Root contra el NavGraph. Editar credenciales y
-            // previsualizar el perfil publico dependen de pantallas que no
-            // existen todavia (Fase 6, docs/TASKS.md).
+            // Volver atras, ver todas las resenas (usa `state.profesionalId`),
+            // editar credenciales y previsualizar el perfil publico son
+            // navegacion: los resuelve el Root contra el NavGraph.
             MiPerfilProfesionalAction.VolverAtras,
             MiPerfilProfesionalAction.EditarPerfilYCredenciales,
             MiPerfilProfesionalAction.PrevisualizarPerfilPublico,
@@ -191,16 +191,20 @@ class MiPerfilProfesionalViewModel @Inject constructor(
         }
     }
 
+    private var cargaJob: Job? = null
+
     private fun cargarPerfil() {
+        if (cargaJob?.isActive == true) return
         val uid = firebaseAuth.currentUser?.uid ?: return
-        viewModelScope.launch {
-            _state.update { it.copy(cargando = true) }
+        cargaJob = viewModelScope.launch {
+            _state.update { it.copy(cargando = true, errorCarga = false) }
             when (val resultado = profesionalRepository.obtenerPorId(uid)) {
                 is Result.Success -> {
                     val profesional = resultado.data
                     _state.update {
                         it.copy(
                             cargando = false,
+                            errorCarga = false,
                             profesionalId = uid,
                             identidad = profesional.aIdentidad(),
                             // Atenciones completadas y puntualidad no existen
@@ -218,7 +222,7 @@ class MiPerfilProfesionalViewModel @Inject constructor(
                         )
                     }
                 }
-                is Result.Error -> _state.update { it.copy(cargando = false) }
+                is Result.Error -> _state.update { it.copy(cargando = false, errorCarga = true) }
             }
         }
     }

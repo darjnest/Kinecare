@@ -72,11 +72,11 @@ data class ResumenHoy(
     /** Citas confirmadas o en curso cuya fecha (hora de Chile) es hoy. */
     val citasHoyEnAgenda: Int,
     /**
-     * Honorario neto de las atenciones `COMPLETADA` con pago autorizado. Aun no
-     * existe un registro de liquidaciones, asi que todo lo cobrado cuenta como
-     * pendiente de liquidar (ver Fase 7, "Liquidaciones y finanzas").
+     * Honorario neto de las atenciones `COMPLETADA` con pago autorizado. El
+     * dinero llega directo a la cuenta de Mercado Pago del profesional: no hay
+     * custodia ni liquidacion de KineCare, es solo lo ya cobrado.
      */
-    val porLiquidar: Long,
+    val cobrado: Long,
     val calificacion: Double,
     val totalResenas: Int,
     /** Hora (Chile) de la ultima lectura; no se actualiza sola. */
@@ -125,7 +125,6 @@ data class AccesoGestion(
 data class ProfessionalPanelState(
     val cargando: Boolean = false,
     val nombreProfesional: String = "",
-    val disponible: Boolean = true,
     val verificacion: VerificacionPanel? = null,
     val resumenHoy: ResumenHoy? = null,
     val proximaCita: ProximaCita? = null,
@@ -136,15 +135,17 @@ data class ProfessionalPanelState(
      * `null` mientras no se pudo comprobar: la tarjeta "Cobros" no afirma nada.
      */
     val mercadoPagoConectado: Boolean? = null,
+    /**
+     * La ultima lectura de perfil o reservas fallo. Se conserva lo ultimo
+     * conocido y la vista ofrece reintentar en vez de quedar en silencio.
+     */
+    val errorCarga: Boolean = false,
 )
 
 sealed interface ProfessionalPanelAction {
-    data class CambiarDisponibilidad(val disponible: Boolean) : ProfessionalPanelAction
-
     /** Abrir la direccion de la proxima cita en Maps: necesita un `Context`, la resuelve el `Root`. */
     data object AbrirRuta : ProfessionalPanelAction
     data class SeleccionarAccesoGestion(val accesoId: String) : ProfessionalPanelAction
-    data object AbrirConfiguracionCuenta : ProfessionalPanelAction
 
     /**
      * Vuelve a leer perfil y reservas (p. ej. al volver a la pantalla tras
@@ -287,15 +288,11 @@ class ProfessionalPanelViewModel @Inject constructor(
 
     fun onAction(action: ProfessionalPanelAction) {
         when (action) {
-            is ProfessionalPanelAction.CambiarDisponibilidad ->
-                _state.update { it.copy(disponible = action.disponible) }
             ProfessionalPanelAction.Actualizar -> cargar()
             // Navegacion y apertura de Maps: el Root las resuelve (necesitan NavGraph/Context).
             ProfessionalPanelAction.ConectarMercadoPago,
             ProfessionalPanelAction.AbrirRuta,
             is ProfessionalPanelAction.SeleccionarAccesoGestion,
-            // Sin pantalla de configuracion de cuenta todavia.
-            ProfessionalPanelAction.AbrirConfiguracionCuenta,
             -> Unit
         }
     }
@@ -305,10 +302,13 @@ class ProfessionalPanelViewModel @Inject constructor(
         val uid = firebaseAuth.currentUser?.uid ?: return
         cargaJob = viewModelScope.launch {
             _state.update { it.copy(cargando = true) }
-            (profesionalRepository.obtenerPorId(uid) as? Result.Success)?.let { perfil = it.data }
-            (reservaRepository.obtenerPorProfesional(uid) as? Result.Success)?.let { reservas = it.data }
+            val resultadoPerfil = profesionalRepository.obtenerPorId(uid)
+            val resultadoReservas = reservaRepository.obtenerPorProfesional(uid)
+            (resultadoPerfil as? Result.Success)?.let { perfil = it.data }
+            (resultadoReservas as? Result.Success)?.let { reservas = it.data }
+            val huboError = resultadoPerfil !is Result.Success || resultadoReservas !is Result.Success
             resolverNombresProximaCita(uid)
-            _state.update { derivar(it).copy(cargando = false) }
+            _state.update { derivar(it).copy(cargando = false, errorCarga = huboError) }
         }
     }
 
@@ -346,7 +346,7 @@ class ProfessionalPanelViewModel @Inject constructor(
                     (it.estado == EstadoReserva.CONFIRMADA || it.estado == EstadoReserva.EN_CURSO) &&
                         it.fechaHora.toLocalDateTime(ZonaHorariaChile).date == hoy
                 },
-                porLiquidar = reservas
+                cobrado = reservas
                     .filter { it.estado == EstadoReserva.COMPLETADA && it.pago.estado == EstadoPago.AUTORIZADO }
                     .sumOf { it.honorarioNeto() },
                 calificacion = perfil.calificacionPromedio,

@@ -26,6 +26,7 @@ fun NavGraphBuilder.professional_panelGraph(
             },
             onAbrirSolicitudes = { navController.navigate(SolicitudesDeAtencionRoute) },
             onAbrirMiPerfil = { navController.navigate(MiPerfilProfesionalRoute) },
+            onAbrirAgenda = { navController.navigate(DisponibilidadYHorariosRoute) },
             onConectarMercadoPago = onConectarMercadoPago,
         )
     }
@@ -34,7 +35,11 @@ fun NavGraphBuilder.professional_panelGraph(
             onVolver = navController::popBackStack,
             onVerResenas = onVerResenas,
             onPrevisualizarPerfil = onPrevisualizarPerfil,
+            onEditarCredenciales = { navController.navigate(DocumentosYValidacionRoute) },
             onCerrarSesion = onCerrarSesion,
+            onIrAInicio = navController::irAInicioPanel,
+            onIrASolicitudes = { navController.irADestinoDeBarra(SolicitudesDeAtencionRoute) },
+            onIrAAgenda = { navController.irADestinoDeBarra(DisponibilidadYHorariosRoute) },
         )
     }
     composable<ServiciosYTarifasRoute> {
@@ -44,13 +49,40 @@ fun NavGraphBuilder.professional_panelGraph(
         DisponibilidadYHorariosRoot(onVolver = navController::popBackStack)
     }
     composable<SolicitudesDeAtencionRoute> {
-        SolicitudesDeAtencionRoot(onVolver = navController::popBackStack)
+        SolicitudesDeAtencionRoot(
+            onVolver = navController::popBackStack,
+            onIrAInicio = navController::irAInicioPanel,
+            onIrAAgenda = { navController.irADestinoDeBarra(DisponibilidadYHorariosRoute) },
+            onIrAPerfil = { navController.irADestinoDeBarra(MiPerfilProfesionalRoute) },
+        )
     }
     composable<DocumentosYValidacionRoute> {
         DocumentosYValidacionRoot(onVolver = navController::popBackStack)
     }
     composable<LiquidacionesYFinanzasRoute> {
         LiquidacionesYFinanzasRoot(onVolver = navController::popBackStack)
+    }
+}
+
+/**
+ * Inicio de la barra inferior: vuelve al panel que ya esta en la pila en vez
+ * de apilar otro; si no estuviera (p. ej. tras un deep link), lo abre.
+ */
+private fun NavController.irAInicioPanel() {
+    if (!popBackStack(ProfessionalPanelRoute, inclusive = false)) {
+        navigate(ProfessionalPanelRoute) { launchSingleTop = true }
+    }
+}
+
+/**
+ * Destino de la barra inferior: se apila sobre el panel (no sobre la pantalla
+ * anterior) para que la pila no crezca al saltar entre pestanas y "atras"
+ * vuelva siempre al panel.
+ */
+private fun NavController.irADestinoDeBarra(ruta: Any) {
+    navigate(ruta) {
+        popUpTo(ProfessionalPanelRoute) { inclusive = false }
+        launchSingleTop = true
     }
 }
 

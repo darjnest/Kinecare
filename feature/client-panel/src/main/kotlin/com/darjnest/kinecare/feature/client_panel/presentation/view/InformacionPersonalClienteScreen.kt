@@ -40,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -118,19 +119,45 @@ fun InformacionPersonalClienteScreen(
                 TarjetaFotoPerfil(nombre = state.nombre, onAction = onAction)
                 TarjetaDatosPersonales(state = state, onAction = onAction)
 
+                state.error?.let { mensaje ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = mensaje,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        if (state.cargaFallida) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Reintentar",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = LoginPrimario,
+                                modifier = Modifier.clickable(role = Role.Button) {
+                                    onAction(InformacionPersonalClienteAction.Reintentar)
+                                },
+                            )
+                        }
+                    }
+                }
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(50))
-                        .background(LoginPrimarioOscuro)
-                        .clickable { onAction(InformacionPersonalClienteAction.GuardarCambios) }
+                        // Deshabilitado (cargando, guardando, carga fallida o sin nombre): atenuado.
+                        .background(if (state.puedeGuardar) LoginPrimarioOscuro else LoginPrimarioOscuro.copy(alpha = 0.4f))
+                        .clickable(enabled = state.puedeGuardar, role = Role.Button) {
+                            onAction(InformacionPersonalClienteAction.GuardarCambios)
+                        }
                         .padding(vertical = 14.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = "Guardar Cambios", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(text = if (state.guardando) "Guardando..." else "Guardar Cambios", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color.White)
                 }
                 Spacer(modifier = Modifier.height(8.dp))
             }

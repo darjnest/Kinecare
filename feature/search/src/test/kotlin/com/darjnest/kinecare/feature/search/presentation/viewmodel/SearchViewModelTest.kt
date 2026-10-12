@@ -4,7 +4,10 @@ package com.darjnest.kinecare.feature.search.presentation.viewmodel
 
 import app.cash.turbine.test
 import com.darjnest.kinecare.core.common.data.error.ProfesionalError
+import com.darjnest.kinecare.core.common.data.error.ClienteError
+import com.darjnest.kinecare.core.common.data.repository.ClienteRepository
 import com.darjnest.kinecare.core.common.data.repository.ProfesionalRepository
+import com.darjnest.kinecare.core.common.domain.model.Cliente
 import com.darjnest.kinecare.core.common.domain.model.EstadoVerificacion
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
 import com.darjnest.kinecare.core.common.domain.model.Profesional
@@ -16,7 +19,10 @@ import com.darjnest.kinecare.core.common.result.Result
 import com.darjnest.kinecare.feature.search.data.repository.UbicacionRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -34,9 +40,29 @@ class SearchViewModelTest {
 
     private val ubicacionRepository = mockk<UbicacionRepository>()
     private val profesionalRepository = mockk<ProfesionalRepository>()
+    private val clienteRepository = mockk<ClienteRepository>()
+    private val firebaseAuth = mockk<FirebaseAuth>()
+
+    init {
+        every { firebaseAuth.currentUser } returns null
+    }
+
+    private fun conSesion(uid: String = "cli-1", favoritos: List<String> = emptyList()) {
+        val usuario = mockk<FirebaseUser>()
+        every { usuario.uid } returns uid
+        every { firebaseAuth.currentUser } returns usuario
+        coEvery { clienteRepository.obtenerPorId(uid) } returns Result.Success(
+            Cliente(
+                usuario = Usuario(uid, "Cata", "11111111-1", "c@k.cl", null, null, RolUsuario.CLIENTE, null, Instant.fromEpochMilliseconds(0)),
+                direcciones = emptyList(),
+                metodosPago = emptyList(),
+                favoritos = favoritos,
+            ),
+        )
+    }
 
     private fun crearViewModel(): SearchViewModel =
-        SearchViewModel(ubicacionRepository, profesionalRepository)
+        SearchViewModel(ubicacionRepository, profesionalRepository, clienteRepository, firebaseAuth)
 
     private fun profesionalDePrueba(
         id: String = "prof-1",
@@ -252,6 +278,45 @@ class SearchViewModelTest {
         viewModel.onAction(SearchAction.Buscar)
 
         coVerify(exactly = 2) { profesionalRepository.buscarPorTipoAtencion(TipoAtencion.KINESIOLOGIA) }
+    }
+
+    @Test
+    fun `los favoritos del cliente se cargan al iniciar`() = runTest {
+        conSesion(favoritos = listOf("a", "b"))
+
+        val viewModel = cargar(profesionalDePrueba(id = "a"))
+
+        assertEquals(setOf("a", "b"), viewModel.state.value.favoritos)
+    }
+
+    @Test
+    fun `alternar agrega y quita un favorito`() = runTest {
+        conSesion()
+        coEvery { clienteRepository.agregarFavorito("cli-1", "a") } returns Result.Success(Unit)
+        coEvery { clienteRepository.quitarFavorito("cli-1", "a") } returns Result.Success(Unit)
+        val viewModel = cargar(profesionalDePrueba(id = "a"))
+
+        viewModel.onAction(SearchAction.AlternarFavorito("a"))
+        assertEquals(setOf("a"), viewModel.state.value.favoritos)
+
+        viewModel.onAction(SearchAction.AlternarFavorito("a"))
+        assertEquals(emptySet<String>(), viewModel.state.value.favoritos)
+        coVerify { clienteRepository.agregarFavorito("cli-1", "a") }
+        coVerify { clienteRepository.quitarFavorito("cli-1", "a") }
+    }
+
+    @Test
+    fun `si guardar el favorito falla se revierte y se avisa`() = runTest {
+        conSesion()
+        coEvery { clienteRepository.agregarFavorito("cli-1", "a") } returns Result.Error(ClienteError.SIN_INTERNET)
+        val viewModel = cargar(profesionalDePrueba(id = "a"))
+
+        viewModel.onAction(SearchAction.AlternarFavorito("a"))
+
+        assertEquals(emptySet<String>(), viewModel.state.value.favoritos)
+        assertTrue(viewModel.state.value.mensaje != null)
+        viewModel.onAction(SearchAction.MensajeMostrado)
+        assertEquals(null, viewModel.state.value.mensaje)
     }
 
     /** Espejo minimo del catalogo privado de `SearchViewModel` solo para comparar ids de categoria en el test. */

@@ -36,7 +36,15 @@ data class InformacionPersonalClienteState(
     val rut: String = "",
     val telefono: String = "",
     val correoContacto: String = "",
-)
+    /** Mensaje de la ultima carga o guardado fallido; `null` si no hay error que mostrar. */
+    val error: String? = null,
+    /** `true` si no se pudieron cargar los datos: no se debe guardar (se pisarian con campos vacios). */
+    val cargaFallida: Boolean = false,
+) {
+    /** "Guardar Cambios" solo con los datos cargados, sin operacion en curso y con nombre. */
+    val puedeGuardar: Boolean
+        get() = !cargando && !guardando && !cargaFallida && nombre.isNotBlank()
+}
 
 sealed interface InformacionPersonalClienteAction {
     data object VolverAtras : InformacionPersonalClienteAction
@@ -45,6 +53,9 @@ sealed interface InformacionPersonalClienteAction {
     data class CambiarTelefono(val valor: String) : InformacionPersonalClienteAction
     data class CambiarCorreoContacto(val valor: String) : InformacionPersonalClienteAction
     data object GuardarCambios : InformacionPersonalClienteAction
+
+    /** "Reintentar" cuando fallo la carga de los datos. */
+    data object Reintentar : InformacionPersonalClienteAction
 }
 
 @HiltViewModel
@@ -69,6 +80,8 @@ class InformacionPersonalClienteViewModel @Inject constructor(
             is InformacionPersonalClienteAction.CambiarCorreoContacto ->
                 _state.update { it.copy(correoContacto = action.valor) }
             InformacionPersonalClienteAction.GuardarCambios -> guardarCambios()
+            InformacionPersonalClienteAction.Reintentar ->
+                if (!_state.value.cargando && _state.value.cargaFallida) cargarUsuario()
             // Volver atras y cambiar la foto de perfil: volver atras es
             // navegacion pura que el Root resuelve directo contra el
             // NavGraph (ver ClientPanelNavGraph); cambiar la foto sigue
@@ -84,7 +97,7 @@ class InformacionPersonalClienteViewModel @Inject constructor(
     private fun cargarUsuario() {
         val uid = firebaseAuth.currentUser?.uid ?: return
         viewModelScope.launch {
-            _state.update { it.copy(cargando = true) }
+            _state.update { it.copy(cargando = true, error = null, cargaFallida = false) }
             when (val resultado = usuarioRepository.obtenerPorId(uid)) {
                 is Result.Success -> _state.update {
                     val usuario = resultado.data
@@ -97,7 +110,9 @@ class InformacionPersonalClienteViewModel @Inject constructor(
                         correoContacto = usuario.correoContacto.orEmpty(),
                     )
                 }
-                is Result.Error -> _state.update { it.copy(cargando = false) }
+                is Result.Error -> _state.update {
+                    it.copy(cargando = false, cargaFallida = true, error = "No pudimos cargar tus datos")
+                }
             }
         }
     }
@@ -105,10 +120,10 @@ class InformacionPersonalClienteViewModel @Inject constructor(
     private fun guardarCambios() {
         val uid = firebaseAuth.currentUser?.uid ?: return
         val actual = _state.value
-        if (actual.guardando) return
+        if (!actual.puedeGuardar) return
 
         viewModelScope.launch {
-            _state.update { it.copy(guardando = true) }
+            _state.update { it.copy(guardando = true, error = null) }
             val resultado = usuarioRepository.actualizarDatosPersonales(
                 id = uid,
                 nombre = actual.nombre,
@@ -117,7 +132,9 @@ class InformacionPersonalClienteViewModel @Inject constructor(
             )
             when (resultado) {
                 is Result.Success -> _state.update { it.copy(guardando = false, guardadoExitoso = true) }
-                is Result.Error -> _state.update { it.copy(guardando = false) }
+                is Result.Error -> _state.update {
+                    it.copy(guardando = false, error = "No pudimos guardar los cambios")
+                }
             }
         }
     }

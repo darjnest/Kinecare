@@ -98,6 +98,8 @@ fun KineCareNavHost(modifier: Modifier = Modifier) {
             onPagar = { reservaId, titulo, montoClp ->
                 navController.navigate(PaymentRoute(reservaId, titulo, montoClp))
             },
+            // "Agendar" desde Favoritos entra directo al flujo de reserva, sin servicio preseleccionado.
+            onReservar = { profesionalId -> navController.navigate(BookingRoute(profesionalId, null)) },
         )
         val onCerrarSesionProfesional: () -> Unit = {
             authViewModel.onAction(AuthAction.CerrarSesion)

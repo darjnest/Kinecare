@@ -275,7 +275,7 @@ class ProfessionalPanelViewModelTest {
     }
 
     @Test
-    fun `por liquidar suma el honorario neto de lo completado y cobrado`() = runTest {
+    fun `cobrado suma el honorario neto de lo completado y pagado`() = runTest {
         iniciarSesion()
         coEvery { profesionalRepository.obtenerPorId(uid) } returns Result.Success(profesional(conectado = false))
         conReservas(
@@ -286,7 +286,7 @@ class ProfessionalPanelViewModelTest {
         )
 
         // 27.000 + 18.000 (10 % de comision).
-        assertEquals(45_000L, crearViewModel().state.value.resumenHoy?.porLiquidar)
+        assertEquals(45_000L, crearViewModel().state.value.resumenHoy?.cobrado)
     }
 
     @Test
@@ -404,6 +404,40 @@ class ProfessionalPanelViewModelTest {
         assertEquals("Ana", state.nombreProfesional)
         assertEquals(true, state.mercadoPagoConectado)
         assertFalse(state.cargando)
+        assertTrue(state.errorCarga)
+    }
+
+    @Test
+    fun `una carga completa no marca error`() = runTest {
+        iniciarSesion()
+        coEvery { profesionalRepository.obtenerPorId(uid) } returns Result.Success(profesional(conectado = false))
+
+        assertFalse(crearViewModel().state.value.errorCarga)
+    }
+
+    @Test
+    fun `si falla el perfil se marca el error de carga`() = runTest {
+        iniciarSesion()
+        coEvery { profesionalRepository.obtenerPorId(uid) } returns Result.Error(ProfesionalError.SIN_INTERNET)
+
+        val state = crearViewModel().state.value
+
+        assertTrue(state.errorCarga)
+        assertNull(state.resumenHoy)
+    }
+
+    @Test
+    fun `Actualizar tras un error reintenta y limpia el aviso`() = runTest {
+        iniciarSesion()
+        coEvery { profesionalRepository.obtenerPorId(uid) } returns Result.Error(ProfesionalError.SIN_INTERNET)
+        val viewModel = crearViewModel()
+        assertTrue(viewModel.state.value.errorCarga)
+
+        coEvery { profesionalRepository.obtenerPorId(uid) } returns Result.Success(profesional(conectado = true))
+        viewModel.onAction(ProfessionalPanelAction.Actualizar)
+
+        assertFalse(viewModel.state.value.errorCarga)
+        assertEquals(true, viewModel.state.value.mercadoPagoConectado)
     }
 
     @Test
@@ -418,6 +452,7 @@ class ProfessionalPanelViewModelTest {
 
         assertEquals(1, viewModel.state.value.resumenHoy?.proximasCitas)
         assertEquals("En 3 h", viewModel.state.value.proximaCita?.tiempoRestanteTexto)
+        assertTrue(viewModel.state.value.errorCarga)
     }
 
     @Test

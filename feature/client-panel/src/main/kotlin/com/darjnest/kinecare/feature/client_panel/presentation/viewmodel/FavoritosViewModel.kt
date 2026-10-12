@@ -40,6 +40,10 @@ data class ProfesionalFavorito(
     val ultimaAtencionTexto: String? = null,
     val proximoCupoTexto: String? = null,
     val insigniaSecundariaTexto: String? = null,
+    /** `true` si la verificacion general del profesional esta aprobada: habilita el icono "Verificado" del avatar. */
+    val verificado: Boolean = false,
+    /** `true` solo con la insignia `CREDENCIALES` aprobada: sin ella el RNPI se muestra sin "Verificado"/"Validadas". */
+    val credencialesVerificadas: Boolean = false,
 )
 
 /** Filtro de la lista de favoritos segun modalidad o especialidad. */
@@ -47,6 +51,8 @@ enum class FiltroFavoritos { TODOS, DOMICILIO, CONSULTA, KINESIOLOGIA, MASOTERAP
 
 data class FavoritosState(
     val cargando: Boolean = false,
+    /** `true` si la ultima carga fallo; la vista ofrece "Reintentar" en vez del estado vacio. */
+    val errorCarga: Boolean = false,
     val favoritos: List<ProfesionalFavorito> = emptyList(),
     val filtroSeleccionado: FiltroFavoritos = FiltroFavoritos.TODOS,
 )
@@ -54,10 +60,15 @@ data class FavoritosState(
 sealed interface FavoritosAction {
     data class SeleccionarFiltro(val filtro: FiltroFavoritos) : FavoritosAction
     data class QuitarDeFavoritos(val profesionalId: String) : FavoritosAction
+
+    /** Navegacion a la reserva (`:feature:booking`): la resuelve el `Root` via callback `onReservar`. */
     data class AgendarConProfesional(val profesionalId: String) : FavoritosAction
 
     /** Navegacion al perfil publico: la resuelve el `Root` contra el NavGraph, no el ViewModel. */
     data class VerPerfil(val profesionalId: String) : FavoritosAction
+
+    /** "Reintentar" tras un error de carga; se ignora si ya hay una carga en curso. */
+    data object Reintentar : FavoritosAction
 }
 
 /**
@@ -65,7 +76,8 @@ sealed interface FavoritosAction {
  * favoritos. `universidad` y `lugarAtencion` quedan vacios: el dominio de
  * `Profesional` (docs/DOMAIN.md) todavia no trae casa de estudios ni una
  * direccion/ubicacion legible (solo un geopoint en Firestore, sin mapear) —
- * no se inventan campos nuevos para llenarlos. `esTerapeutaPrincipal` marca
+ * no se inventan campos nuevos para llenarlos y la vista oculta esas filas
+ * cuando estan en blanco. `esTerapeutaPrincipal` marca
  * el primer favorito de la lista, misma convencion usada para la direccion
  * predeterminada en `MiPerfilClienteViewModel` (el dominio tampoco trae un
  * flag de "terapeuta principal").
@@ -73,6 +85,9 @@ sealed interface FavoritosAction {
 private fun Profesional.aProfesionalFavorito(esPrincipal: Boolean): ProfesionalFavorito {
     val identidadVerificada = insignias.any {
         it.tipo == TipoInsignia.IDENTIDAD && it.estado == EstadoVerificacion.APROBADO
+    }
+    val credencialesVerificadas = insignias.any {
+        it.tipo == TipoInsignia.CREDENCIALES && it.estado == EstadoVerificacion.APROBADO
     }
     return ProfesionalFavorito(
         id = usuario.id,
@@ -92,6 +107,8 @@ private fun Profesional.aProfesionalFavorito(esPrincipal: Boolean): ProfesionalF
         ultimaAtencionTexto = null,
         proximoCupoTexto = null,
         insigniaSecundariaTexto = null,
+        verificado = estadoVerificacionGeneral == EstadoVerificacion.APROBADO,
+        credencialesVerificadas = credencialesVerificadas,
     )
 }
 
@@ -114,9 +131,8 @@ class FavoritosViewModel @Inject constructor(
             is FavoritosAction.SeleccionarFiltro ->
                 _state.update { it.copy(filtroSeleccionado = action.filtro) }
             is FavoritosAction.QuitarDeFavoritos -> quitarDeFavoritos(action.profesionalId)
-            // Agendar con un profesional: requiere navegacion hacia la
-            // feature de Reserva, que no existe todavia (docs/TASKS.md,
-            // Fase 4) — se conecta cuando la feature salga de esta fase.
+            FavoritosAction.Reintentar -> if (!_state.value.cargando) cargarFavoritos()
+            // Agendar y ver perfil son navegacion: el Root las resuelve contra el NavGraph.
             is FavoritosAction.AgendarConProfesional -> Unit
             is FavoritosAction.VerPerfil -> Unit
         }
@@ -125,12 +141,13 @@ class FavoritosViewModel @Inject constructor(
     private fun cargarFavoritos() {
         val uid = firebaseAuth.currentUser?.uid ?: return
         viewModelScope.launch {
-            _state.update { it.copy(cargando = true) }
+            _state.update { it.copy(cargando = true, errorCarga = false) }
             when (val resultado = clienteRepository.obtenerPorId(uid)) {
-                is Result.Success -> _state.update {
-                    it.copy(cargando = false, favoritos = resolverFavoritos(resultado.data.favoritos))
+                is Result.Success -> {
+                    val favoritos = resolverFavoritos(resultado.data.favoritos)
+                    _state.update { it.copy(cargando = false, errorCarga = false, favoritos = favoritos) }
                 }
-                is Result.Error -> _state.update { it.copy(cargando = false, favoritos = emptyList()) }
+                is Result.Error -> _state.update { it.copy(cargando = false, errorCarga = true) }
             }
         }
     }

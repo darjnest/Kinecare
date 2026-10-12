@@ -19,6 +19,8 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
 
@@ -97,7 +99,65 @@ class InformacionPersonalClienteViewModelTest {
             // Sin datos: el estado se queda en los valores por defecto, no crashea.
             assertEquals("", estado.nombre)
             assertEquals("", estado.rut)
+            assertEquals("No pudimos cargar tus datos", estado.error)
+            assertTrue(estado.cargaFallida)
+            assertFalse(estado.puedeGuardar)
         }
+    }
+
+    @Test
+    fun `si la carga fallo guardar cambios no escribe en el repositorio`() = runTest {
+        coEvery { usuarioRepository.obtenerPorId(uid) } returns Result.Error(UsuarioError.SIN_INTERNET)
+        val viewModel = crearViewModel()
+        viewModel.onAction(InformacionPersonalClienteAction.CambiarNombre("Ana"))
+
+        viewModel.onAction(InformacionPersonalClienteAction.GuardarCambios)
+
+        coVerify(exactly = 0) {
+            usuarioRepository.actualizarDatosPersonales(any(), any(), any(), any())
+        }
+    }
+
+    @Test
+    fun `Reintentar tras un error de carga vuelve a cargar y limpia el error`() = runTest {
+        coEvery { usuarioRepository.obtenerPorId(uid) } returns Result.Error(UsuarioError.SIN_INTERNET)
+        val viewModel = crearViewModel()
+
+        coEvery { usuarioRepository.obtenerPorId(uid) } returns Result.Success(usuarioDePrueba())
+        viewModel.onAction(InformacionPersonalClienteAction.Reintentar)
+
+        val estado = viewModel.state.value
+        assertNull(estado.error)
+        assertFalse(estado.cargaFallida)
+        assertEquals("Ana Soto", estado.nombre)
+        assertTrue(estado.puedeGuardar)
+    }
+
+    @Test
+    fun `con el nombre en blanco no se puede guardar ni se llama al repositorio`() = runTest {
+        coEvery { usuarioRepository.obtenerPorId(uid) } returns Result.Success(usuarioDePrueba())
+        val viewModel = crearViewModel()
+
+        viewModel.onAction(InformacionPersonalClienteAction.CambiarNombre("   "))
+        assertFalse(viewModel.state.value.puedeGuardar)
+        viewModel.onAction(InformacionPersonalClienteAction.GuardarCambios)
+
+        coVerify(exactly = 0) {
+            usuarioRepository.actualizarDatosPersonales(any(), any(), any(), any())
+        }
+    }
+
+    @Test
+    fun `mientras carga no se puede guardar`() = runTest {
+        val gate = CompletableDeferred<Result<Usuario, UsuarioError>>()
+        coEvery { usuarioRepository.obtenerPorId(uid) } coAnswers { gate.await() }
+
+        val viewModel = crearViewModel()
+
+        assertTrue(viewModel.state.value.cargando)
+        assertFalse(viewModel.state.value.puedeGuardar)
+        gate.complete(Result.Success(usuarioDePrueba()))
+        assertTrue(viewModel.state.value.puedeGuardar)
     }
 
     @Test
@@ -154,6 +214,26 @@ class InformacionPersonalClienteViewModelTest {
             val trasFalla = awaitItem()
             assertFalse(trasFalla.guardando)
             assertFalse(trasFalla.guardadoExitoso)
+            assertEquals("No pudimos guardar los cambios", trasFalla.error)
         }
+    }
+
+    @Test
+    fun `un nuevo intento de guardar limpia el error anterior`() = runTest {
+        coEvery { usuarioRepository.obtenerPorId(uid) } returns Result.Success(usuarioDePrueba())
+        coEvery {
+            usuarioRepository.actualizarDatosPersonales(any(), any(), any(), any())
+        } returns Result.Error(UsuarioError.DESCONOCIDO)
+        val viewModel = crearViewModel()
+        viewModel.onAction(InformacionPersonalClienteAction.GuardarCambios)
+        assertEquals("No pudimos guardar los cambios", viewModel.state.value.error)
+
+        coEvery {
+            usuarioRepository.actualizarDatosPersonales(any(), any(), any(), any())
+        } returns Result.Success(Unit)
+        viewModel.onAction(InformacionPersonalClienteAction.GuardarCambios)
+
+        assertNull(viewModel.state.value.error)
+        assertTrue(viewModel.state.value.guardadoExitoso)
     }
 }

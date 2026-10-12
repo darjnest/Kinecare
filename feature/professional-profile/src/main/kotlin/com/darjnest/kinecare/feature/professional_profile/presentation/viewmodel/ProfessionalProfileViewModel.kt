@@ -6,13 +6,17 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.darjnest.kinecare.core.common.data.error.ProfesionalError
+import com.darjnest.kinecare.core.common.data.repository.ClienteRepository
 import com.darjnest.kinecare.core.common.data.repository.ProfesionalRepository
+import com.darjnest.kinecare.core.common.data.repository.UsuarioRepository
 import com.darjnest.kinecare.core.common.domain.model.EstadoVerificacion
 import com.darjnest.kinecare.core.common.domain.model.Profesional
+import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.domain.model.Servicio
 import com.darjnest.kinecare.core.common.domain.model.TipoInsignia
 import com.darjnest.kinecare.core.common.result.Result
 import com.darjnest.kinecare.feature.professional_profile.presentation.navigation.ARG_PROFESIONAL_ID
+import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -51,6 +55,8 @@ data class PerfilProfesional(
     val servicios: List<Servicio>,
     /** Solo dias con al menos un turno activo, ordenados lunes a domingo. */
     val horario: List<HorarioDia>,
+    /** `false` = no vinculo Mercado Pago: puede aceptar la reserva pero el cliente no podra pagarla todavia. */
+    val mercadoPagoConectado: Boolean = true,
 ) {
     /** Hasta dos iniciales del nombre, para el avatar (no hay fotos: Storage esta bloqueado). */
     val iniciales: String
@@ -65,10 +71,17 @@ data class ProfessionalProfileState(
     val error: ProfesionalError? = null,
     val perfil: PerfilProfesional? = null,
     val insigniasExpandidas: Set<TipoInsignia> = emptySet(),
+    /** Solo un Cliente que no mira su propio perfil puede guardar favoritos; si no, el corazon no se muestra. */
+    val puedeGuardarFavorito: Boolean = false,
+    val esFavorito: Boolean = false,
+    /** Aviso puntual para un Snackbar; se consume con [ProfessionalProfileAction.MensajeMostrado]. */
+    val mensaje: String? = null,
 )
 
 sealed interface ProfessionalProfileAction {
     data object Reintentar : ProfessionalProfileAction
+    data object AlternarFavorito : ProfessionalProfileAction
+    data object MensajeMostrado : ProfessionalProfileAction
     data class AlternarInsignia(val tipo: TipoInsignia) : ProfessionalProfileAction
 
     /** Navegacion: la resuelve el `Root` contra el NavGraph, no el ViewModel. */
@@ -89,6 +102,9 @@ sealed interface ProfessionalProfileAction {
 class ProfessionalProfileViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val profesionalRepository: ProfesionalRepository,
+    private val clienteRepository: ClienteRepository,
+    private val usuarioRepository: UsuarioRepository,
+    private val firebaseAuth: FirebaseAuth,
 ) : ViewModel() {
 
     private val profesionalId: String? = savedStateHandle[ARG_PROFESIONAL_ID]
@@ -103,6 +119,8 @@ class ProfessionalProfileViewModel @Inject constructor(
     fun onAction(action: ProfessionalProfileAction) {
         when (action) {
             ProfessionalProfileAction.Reintentar -> cargar()
+            ProfessionalProfileAction.AlternarFavorito -> alternarFavorito()
+            ProfessionalProfileAction.MensajeMostrado -> _state.update { it.copy(mensaje = null) }
             is ProfessionalProfileAction.AlternarInsignia -> _state.update {
                 val expandidas = if (action.tipo in it.insigniasExpandidas) {
                     it.insigniasExpandidas - action.tipo
@@ -127,11 +145,54 @@ class ProfessionalProfileViewModel @Inject constructor(
         _state.update { it.copy(cargando = true, error = null) }
         viewModelScope.launch {
             when (val resultado = profesionalRepository.obtenerPorId(id)) {
-                is Result.Success -> _state.update {
-                    it.copy(cargando = false, error = null, perfil = resultado.data.aPerfil())
+                is Result.Success -> {
+                    _state.update { it.copy(cargando = false, error = null, perfil = resultado.data.aPerfil()) }
+                    cargarFavorito(id)
                 }
                 is Result.Error -> _state.update {
                     it.copy(cargando = false, error = resultado.error, perfil = null)
+                }
+            }
+        }
+    }
+
+    /**
+     * Averigua si el corazon aplica y si ya es favorito. Solo para un Cliente con sesion que no
+     * mira su propio perfil: un Profesional no tiene `clientes/{uid}` y no debe crearse uno.
+     * Cualquier fallo deja el corazon oculto (no se bloquea el perfil por esto).
+     */
+    private fun cargarFavorito(profesionalId: String) {
+        val uid = firebaseAuth.currentUser?.uid ?: return
+        if (uid == profesionalId) return
+        viewModelScope.launch {
+            val usuario = (usuarioRepository.obtenerPorId(uid) as? Result.Success)?.data ?: return@launch
+            if (usuario.rol != RolUsuario.CLIENTE) return@launch
+            // Un cliente antiguo sin `clientes/{uid}` responde NO_ENCONTRADO: sin favoritos, pero puede guardar.
+            val favoritos = (clienteRepository.obtenerPorId(uid) as? Result.Success)?.data?.favoritos.orEmpty()
+            _state.update { it.copy(puedeGuardarFavorito = true, esFavorito = profesionalId in favoritos) }
+        }
+    }
+
+    /** UI optimista: se aplica ya y se revierte (con aviso) si Firestore lo rechaza. */
+    private fun alternarFavorito() {
+        val uid = firebaseAuth.currentUser?.uid ?: return
+        val id = profesionalId ?: return
+        val estado = _state.value
+        if (!estado.puedeGuardarFavorito) return
+        val ahora = !estado.esFavorito
+        _state.update { it.copy(esFavorito = ahora) }
+        viewModelScope.launch {
+            val resultado = if (ahora) {
+                clienteRepository.agregarFavorito(uid, id)
+            } else {
+                clienteRepository.quitarFavorito(uid, id)
+            }
+            if (resultado is Result.Error) {
+                _state.update {
+                    it.copy(
+                        esFavorito = !ahora,
+                        mensaje = "No pudimos actualizar tus favoritos. Inténtalo de nuevo.",
+                    )
                 }
             }
         }
@@ -166,6 +227,7 @@ internal fun Profesional.aPerfil(): PerfilProfesional {
             )
         },
         servicios = servicios.filter { it.activo },
+        mercadoPagoConectado = mercadoPagoConectado,
         horario = disponibilidad
             .filter { it.activo }
             .groupBy { it.diaSemana }

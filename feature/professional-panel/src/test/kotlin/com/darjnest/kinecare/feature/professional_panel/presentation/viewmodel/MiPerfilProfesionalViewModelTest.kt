@@ -135,6 +135,46 @@ class MiPerfilProfesionalViewModelTest {
     }
 
     @Test
+    fun `si el perfil no carga se marca errorCarga y no queda cargando`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId(uid) } returns Result.Error(ProfesionalError.SIN_INTERNET)
+
+        val estado = crearViewModel().state.value
+
+        assertTrue(estado.errorCarga)
+        assertFalse(estado.cargando)
+        assertNull(estado.identidad)
+    }
+
+    @Test
+    fun `Reintentar tras un fallo carga el perfil y limpia el error`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId(uid) } returns Result.Error(ProfesionalError.SIN_INTERNET)
+        val viewModel = crearViewModel()
+        assertTrue(viewModel.state.value.errorCarga)
+
+        coEvery { profesionalRepository.obtenerPorId(uid) } returns Result.Success(profesional())
+        viewModel.onAction(MiPerfilProfesionalAction.Reintentar)
+
+        val estado = viewModel.state.value
+        assertFalse(estado.errorCarga)
+        assertFalse(estado.cargando)
+        assertEquals("Ana Soto", estado.identidad?.nombre)
+    }
+
+    @Test
+    fun `una carga en curso no se duplica con Reintentar`() = runTest {
+        val respuesta = CompletableDeferred<Result<Profesional, ProfesionalError>>()
+        coEvery { profesionalRepository.obtenerPorId(uid) } coAnswers { respuesta.await() }
+        val viewModel = crearViewModel()
+        assertTrue(viewModel.state.value.cargando)
+
+        viewModel.onAction(MiPerfilProfesionalAction.Reintentar)
+
+        coVerify(exactly = 1) { profesionalRepository.obtenerPorId(uid) }
+        respuesta.complete(Result.Success(profesional()))
+        assertFalse(viewModel.state.value.cargando)
+    }
+
+    @Test
     fun `credenciales no aprobadas no se marcan al dia`() = runTest {
         coEvery { profesionalRepository.obtenerPorId(uid) } returns
             Result.Success(profesional(credencialesAprobadas = false))
