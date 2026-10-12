@@ -19,4 +19,11 @@ interface ServicioRepository {
         servicioId: String,
         activo: Boolean,
     ): Result<Unit, ServicioError>
+
+    /**
+     * Crea el servicio (si [servicio] trae `id` vacio, con `activo = true` y id
+     * generado) o actualiza nombre, descripcion, modalidad, duracion y precio de
+     * uno existente sin tocar su `activo`. Devuelve el servicio ya guardado.
+     */
+    suspend fun guardar(profesionalId: String, servicio: Servicio): Result<Servicio, ServicioError>
 }

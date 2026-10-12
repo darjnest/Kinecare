@@ -105,6 +105,7 @@ fun MiPerfilProfesionalRoot(
     viewModel: MiPerfilProfesionalViewModel = hiltViewModel(),
     onVolver: () -> Unit = {},
     onVerResenas: (String) -> Unit = {},
+    onPrevisualizarPerfil: (String) -> Unit = {},
     onCerrarSesion: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -117,6 +118,7 @@ fun MiPerfilProfesionalRoot(
             when (accion) {
                 MiPerfilProfesionalAction.VolverAtras -> onVolver()
                 MiPerfilProfesionalAction.VerTodasLasResenas -> state.profesionalId?.let(onVerResenas)
+                MiPerfilProfesionalAction.PrevisualizarPerfilPublico -> state.profesionalId?.let(onPrevisualizarPerfil)
                 else -> viewModel.onAction(accion)
             }
         },

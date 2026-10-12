@@ -201,4 +201,73 @@ class DisponibilidadYHorariosViewModelTest {
         assertEquals("No pudimos guardar tus horarios", viewModel.state.value.mensaje)
         assertFalse(viewModel.state.value.guardando)
     }
+
+    private fun cargadoLunes(): DisponibilidadYHorariosViewModel {
+        coEvery { profesionalRepository.obtenerPorId(uid) } returns Result.Success(profesional(semana))
+        return crearViewModel()
+    }
+
+    @Test
+    fun `editar un turno abre el dialogo con ese turno`() = runTest {
+        val viewModel = cargadoLunes()
+
+        viewModel.onAction(DisponibilidadYHorariosAction.EditarTurno("MONDAY-1"))
+
+        assertEquals("15:00", viewModel.state.value.turnoEnEdicion?.horaInicio)
+    }
+
+    @Test
+    fun `confirmar una hora valida actualiza el turno y cierra el dialogo`() = runTest {
+        val viewModel = cargadoLunes()
+        viewModel.onAction(DisponibilidadYHorariosAction.EditarTurno("MONDAY-0"))
+
+        viewModel.onAction(
+            DisponibilidadYHorariosAction.ConfirmarEdicionTurno("MONDAY-0", LocalTime(8, 30), LocalTime(12, 0)),
+        )
+
+        val estado = viewModel.state.value
+        assertNull(estado.turnoEnEdicion)
+        assertNull(estado.errorEdicionTurno)
+        assertEquals(listOf("08:30" to "12:00", "15:00" to "19:00"), estado.turnos.map { it.horaInicio to it.horaFin })
+    }
+
+    @Test
+    fun `un turno que termina antes de 30 minutos o antes de empezar se rechaza y el dialogo sigue abierto`() = runTest {
+        val viewModel = cargadoLunes()
+        viewModel.onAction(DisponibilidadYHorariosAction.EditarTurno("MONDAY-0"))
+
+        viewModel.onAction(
+            DisponibilidadYHorariosAction.ConfirmarEdicionTurno("MONDAY-0", LocalTime(10, 0), LocalTime(10, 15)),
+        )
+        assertEquals("El turno debe durar al menos 30 minutos.", viewModel.state.value.errorEdicionTurno)
+
+        viewModel.onAction(
+            DisponibilidadYHorariosAction.ConfirmarEdicionTurno("MONDAY-0", LocalTime(12, 0), LocalTime(9, 0)),
+        )
+        assertTrue(viewModel.state.value.turnoEnEdicion != null)
+        assertEquals("09:00", viewModel.state.value.turnos.first().horaInicio)
+    }
+
+    @Test
+    fun `un turno que se superpone con otro del mismo dia se rechaza`() = runTest {
+        val viewModel = cargadoLunes()
+        viewModel.onAction(DisponibilidadYHorariosAction.EditarTurno("MONDAY-0"))
+
+        viewModel.onAction(
+            DisponibilidadYHorariosAction.ConfirmarEdicionTurno("MONDAY-0", LocalTime(9, 0), LocalTime(16, 0)),
+        )
+
+        assertEquals("Se superpone con otro turno de ese día.", viewModel.state.value.errorEdicionTurno)
+    }
+
+    @Test
+    fun `cancelar la edicion cierra el dialogo sin cambiar el horario`() = runTest {
+        val viewModel = cargadoLunes()
+        viewModel.onAction(DisponibilidadYHorariosAction.EditarTurno("MONDAY-0"))
+
+        viewModel.onAction(DisponibilidadYHorariosAction.CancelarEdicionTurno)
+
+        assertNull(viewModel.state.value.turnoEnEdicion)
+        assertEquals("09:00", viewModel.state.value.turnos.first().horaInicio)
+    }
 }

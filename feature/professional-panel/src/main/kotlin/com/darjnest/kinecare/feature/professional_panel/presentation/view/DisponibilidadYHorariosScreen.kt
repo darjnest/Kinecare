@@ -113,6 +113,10 @@ fun DisponibilidadYHorariosScreen(
         }
     }
 
+    state.turnoEnEdicion?.let { turno ->
+        DialogoEdicionTurno(turno = turno, error = state.errorEdicionTurno, onAction = onAction)
+    }
+
     Scaffold(
         modifier = modifier,
         containerColor = LoginFondo,

@@ -161,6 +161,8 @@ fun KineCareNavHost(modifier: Modifier = Modifier) {
             navController,
             onCerrarSesion = onCerrarSesionProfesional,
             onVerResenas = onVerResenas,
+            // "Previsualizar": abre el perfil publico tal como lo ve un cliente.
+            onPrevisualizarPerfil = onProfesionalClick,
             onConectarMercadoPago = { navController.navigate(ConectarMercadoPagoRoute) },
         )
         reviewsGraph(onVolver = { navController.popBackStack() })

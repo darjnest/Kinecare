@@ -2,6 +2,7 @@ package com.darjnest.kinecare.core.network.firebase.repository
 
 import com.darjnest.kinecare.core.common.data.error.ServicioError
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
+import com.darjnest.kinecare.core.common.domain.model.Servicio
 import com.darjnest.kinecare.core.common.result.Result
 import com.google.android.gms.tasks.Task
 import com.google.firebase.FirebaseNetworkException
@@ -14,6 +15,7 @@ import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
+import io.mockk.slot
 import io.mockk.unmockkStatic
 import io.mockk.verify
 import kotlinx.coroutines.tasks.await
@@ -107,6 +109,60 @@ class ServicioRepositoryImplTest {
 
         assertFalse(resultado is Result.Success)
         assertEquals(ServicioError.DESCONOCIDO, (resultado as Result.Error).error)
+    }
+
+    private fun servicioNuevo(id: String = "") = Servicio(
+        id = id,
+        nombre = "Kinesiologia motora",
+        descripcion = "Sesion",
+        modalidad = ModalidadServicio.DOMICILIO,
+        duracionMinutos = 60,
+        precio = 35_000L,
+        activo = false,
+    )
+
+    @Test
+    fun `guardar sin id crea el servicio activo y devuelve el id generado`() = runTest {
+        val creado = slot<Map<String, Any>>()
+        val referencia = mockk<DocumentReference> { every { id } returns "nuevo-1" }
+        val task = mockk<Task<DocumentReference>>()
+        coEvery { task.await() } returns referencia
+        every { serviciosCollection.add(capture(creado)) } returns task
+
+        val resultado = repository.guardar("prof-1", servicioNuevo())
+
+        val guardado = (resultado as Result.Success).data
+        assertEquals("nuevo-1", guardado.id)
+        assertTrue(guardado.activo)
+        assertEquals("DOMICILIO", creado.captured["modalidad"])
+        assertEquals(35_000L, creado.captured["precio"])
+        assertEquals(true, creado.captured["activo"])
+    }
+
+    @Test
+    fun `guardar con id actualiza solo los datos editables y no toca activo`() = runTest {
+        val docRef = mockk<DocumentReference>()
+        every { serviciosCollection.document("s1") } returns docRef
+        val actualizado = slot<Map<String, Any>>()
+        val task = mockk<Task<Void>>()
+        coEvery { task.await() } returns mockk()
+        every { docRef.update(capture(actualizado)) } returns task
+
+        val resultado = repository.guardar("prof-1", servicioNuevo(id = "s1"))
+
+        assertTrue(resultado is Result.Success)
+        assertEquals(setOf("nombre", "descripcion", "modalidad", "duracionMinutos", "precio"), actualizado.captured.keys)
+    }
+
+    @Test
+    fun `guardar retorna SIN_INTERNET sin red`() = runTest {
+        val task = mockk<Task<DocumentReference>>()
+        coEvery { task.await() } throws FirebaseNetworkException("sin red")
+        every { serviciosCollection.add(any<Map<String, Any>>()) } returns task
+
+        val resultado = repository.guardar("prof-1", servicioNuevo())
+
+        assertEquals(ServicioError.SIN_INTERNET, (resultado as Result.Error).error)
     }
 
     private fun servicioDoc(id: String, activo: Boolean?): DocumentSnapshot {
