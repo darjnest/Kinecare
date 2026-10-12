@@ -26,11 +26,10 @@ Comprobado con el MCP de Firebase (solo lectura):
 - **Índices:** los 8 de `firestore.indexes.json` están en `READY`
   (incluido `reservas(estado, fechaHora)`). Sigue el índice viejo de
   `especialidades` sin usar.
-- **No se pudo comprobar** si el *código* de cada función desplegada es el
-  más reciente (el MCP no muestra la versión). En particular, el arreglo del
-  pago tardío tras cancelar (PR #51, `webhookMercadoPago`/`estadoPago`) puede no
-  estar desplegado: redesplegar esas dos para estar seguros
-  (`firebase deploy --only functions:webhookMercadoPago,functions:estadoPago -P qa`).
+- **Pago tardío tras cancelar (PR #51):** `webhookMercadoPago` y `estadoPago`
+  redesplegadas en QA el 2026-10-12 desde `QA` (76cb497); sin firma/sesión
+  responden 401. Para las demás funciones el MCP no muestra la versión del código
+  desplegado: si hay dudas, redesplegar.
 - **Producción (`kinecare-cl`)** no se tocó: sigue en Spark, sin funciones.
 
 ## 0. Primero mañana

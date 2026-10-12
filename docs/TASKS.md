@@ -796,10 +796,10 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       "TOTAL"` y `reembolsoMotivo: "PAGO_TARDIO"` (`aplicarPago`, `functions/src/pagos.ts`).
       La reserva no se reactiva y cancelar vs. webhook se serializan en transacción.
       8 tests de integración nuevos (incluida una carrera cancelar/webhook) que
-      fallan sin el arreglo; 295 en total con `npm run test:emulator`. **Sin
-      confirmar si está desplegado** (las funciones existen en QA, pero no se puede
-      ver su versión): redesplegar con
-      `firebase deploy --only functions:webhookMercadoPago,functions:estadoPago -P qa`.
+      fallan sin el arreglo; 295 en total con `npm run test:emulator`. **Desplegado
+      en QA el 2026-10-12** desde `QA` en 76cb497 (`firebase deploy --only
+      functions:webhookMercadoPago,functions:estadoPago -P qa`); sin firma el
+      webhook responde 401 y `estadoPago` sin sesión también.
       Limitación: la preferencia sigue abierta en Mercado Pago (cerrarla exigiría
       llamar a su API con el token del vendedor) y la app mostrará "pago exitoso"
       al cliente aunque la cita esté cancelada: el reembolso sigue siendo manual.
