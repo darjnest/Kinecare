@@ -52,6 +52,7 @@ import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
 import com.darjnest.kinecare.core.common.domain.model.Servicio
 import com.darjnest.kinecare.core.common.domain.model.TipoInsignia
 import com.darjnest.kinecare.core.common.util.formatComoClp
+import com.darjnest.kinecare.core.designsystem.components.avatar.KineCareAvatar
 import com.darjnest.kinecare.core.designsystem.components.button.KineCarePrimaryButton
 import com.darjnest.kinecare.core.designsystem.components.card.KineCareCard
 import com.darjnest.kinecare.core.designsystem.components.label.KineCareBadge
@@ -275,18 +276,11 @@ private fun ContenidoPerfil(
 private fun EncabezadoPerfil(perfil: PerfilProfesional) {
     KineCareCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(KineCareSpacing.avatarGrande)
-                    .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = perfil.iniciales,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-            }
+            KineCareAvatar(
+                iniciales = perfil.iniciales,
+                fotoUrl = perfil.fotoUrl,
+                contentDescription = "Foto de ${perfil.nombre}",
+            )
             Column(
                 modifier = Modifier
                     .weight(1f)

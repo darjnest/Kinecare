@@ -1,23 +1,29 @@
 package com.darjnest.kinecare.navigation
 
-import android.content.Context
-import android.content.ContextWrapper
 import android.content.Intent
-import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.util.Consumer
 import androidx.navigation.NavController
 import androidx.navigation.navOptions
+import androidx.navigation.NavDestination.Companion.hasRoute
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
+import com.darjnest.kinecare.core.common.domain.model.AperturaNotificacion
+import com.darjnest.kinecare.core.common.domain.model.DestinoNotificacion
 import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.feature.auth.presentation.navigation.AuthRoute
 import com.darjnest.kinecare.feature.auth.presentation.navigation.authGraph
-import com.darjnest.kinecare.feature.auth.presentation.viewmodel.AuthAction
 import com.darjnest.kinecare.feature.auth.presentation.viewmodel.AuthViewModel
 import com.darjnest.kinecare.feature.booking.presentation.navigation.BookingRoute
 import com.darjnest.kinecare.feature.booking.presentation.navigation.bookingGraph
@@ -29,6 +35,7 @@ import com.darjnest.kinecare.feature.payment.presentation.navigation.ConectarMer
 import com.darjnest.kinecare.feature.payment.presentation.navigation.PaymentRoute
 import com.darjnest.kinecare.feature.payment.presentation.navigation.paymentGraph
 import com.darjnest.kinecare.feature.professional_panel.presentation.navigation.ProfessionalPanelRoute
+import com.darjnest.kinecare.feature.professional_panel.presentation.navigation.SolicitudesDeAtencionRoute
 import com.darjnest.kinecare.feature.professional_panel.presentation.navigation.professional_panelGraph
 import com.darjnest.kinecare.feature.professional_profile.presentation.navigation.ProfessionalProfileRoute
 import com.darjnest.kinecare.feature.professional_profile.presentation.navigation.professional_profileGraph
@@ -38,6 +45,9 @@ import com.darjnest.kinecare.feature.reviews.presentation.navigation.reviewsGrap
 import com.darjnest.kinecare.feature.search.presentation.navigation.SearchRoute
 import com.darjnest.kinecare.feature.search.presentation.navigation.searchGraph
 import com.darjnest.kinecare.feature.verification.presentation.navigation.verificationGraph
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 /**
  * Grafo raiz. Hoy es plano (todas las features cuelgan directo de Auth)
@@ -51,6 +61,31 @@ fun KineCareNavHost(modifier: Modifier = Modifier) {
     val navController = rememberNavController()
     val authViewModel: AuthViewModel = hiltViewModel()
     EntregarDeepLinksNuevos(navController)
+    val scope = rememberCoroutineScope()
+
+    // Notificaciones push: tocar una abre Mis Citas (Cliente) o Solicitudes (Profesional).
+    var aperturaPendiente by remember { mutableStateOf<AperturaNotificacion?>(null) }
+    EntregarAperturasDeNotificacion { aperturaPendiente = it }
+    // Solo lo que importa de la sesion: AuthState cambia con cada tecla del formulario de acceso.
+    val sesion by remember(authViewModel) {
+        authViewModel.state.map { it.usuarioAutenticado?.rol to it.verificandoSesion }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = null to true)
+    val entradaActual by navController.currentBackStackEntryAsState()
+    AbrirNotificacionPendiente(
+        pendiente = aperturaPendiente,
+        rolUsuario = sesion.first,
+        verificandoSesion = sesion.second,
+        enPantallaDeAcceso = entradaActual?.destination?.hasRoute<AuthRoute>() ?: true,
+        alResolver = { aperturaPendiente = null },
+        alNavegar = { destino ->
+            when (destino) {
+                DestinoNotificacion.MIS_CITAS -> navController.navigate(MisCitasRoute) { launchSingleTop = true }
+                DestinoNotificacion.SOLICITUDES ->
+                    navController.navigate(SolicitudesDeAtencionRoute) { launchSingleTop = true }
+            }
+        },
+    )
+    SolicitarPermisoNotificaciones(haySesion = sesion.first != null)
 
     NavHost(
         navController = navController,
@@ -68,10 +103,14 @@ fun KineCareNavHost(modifier: Modifier = Modifier) {
                 }
             },
         )
+        // Se navega a la pantalla de acceso solo cuando la sesion ya esta cerrada (borrar el token push
+        // va antes y tarda un instante): con la sesion abierta esa pantalla reenviaria al inicio.
         val onCerrarSesionCliente: () -> Unit = {
-            authViewModel.onAction(AuthAction.CerrarSesion)
-            navController.navigate(AuthRoute) {
-                popUpTo(SearchRoute) { inclusive = true }
+            scope.launch {
+                authViewModel.cerrarSesion()
+                navController.navigate(AuthRoute) {
+                    popUpTo(SearchRoute) { inclusive = true }
+                }
             }
         }
         val onProfesionalClick: (String) -> Unit = { profesionalId ->
@@ -102,9 +141,11 @@ fun KineCareNavHost(modifier: Modifier = Modifier) {
             onReservar = { profesionalId -> navController.navigate(BookingRoute(profesionalId, null)) },
         )
         val onCerrarSesionProfesional: () -> Unit = {
-            authViewModel.onAction(AuthAction.CerrarSesion)
-            navController.navigate(AuthRoute) {
-                popUpTo(ProfessionalPanelRoute) { inclusive = true }
+            scope.launch {
+                authViewModel.cerrarSesion()
+                navController.navigate(AuthRoute) {
+                    popUpTo(ProfessionalPanelRoute) { inclusive = true }
+                }
             }
         }
         val onVerResenas: (String) -> Unit = { profesionalId ->
@@ -200,12 +241,3 @@ private fun EntregarDeepLinksNuevos(navController: NavController) {
 }
 
 private const val ESQUEMA_DEEP_LINK = "kinecare"
-
-private fun Context.buscarActivity(): ComponentActivity? {
-    var contexto: Context? = this
-    while (contexto is ContextWrapper) {
-        if (contexto is ComponentActivity) return contexto
-        contexto = contexto.baseContext
-    }
-    return null
-}

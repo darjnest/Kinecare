@@ -13,14 +13,18 @@ import com.darjnest.kinecare.core.common.result.Result
 import com.darjnest.kinecare.feature.reviews.presentation.navigation.ARG_PROFESIONAL_ID
 import com.darjnest.kinecare.feature.reviews.presentation.util.AUTOR_ANONIMO
 import com.darjnest.kinecare.feature.reviews.presentation.util.nombreCorto
+import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -35,7 +39,25 @@ data class ResenaItem(
     val comentario: String?,
     val fechaMillis: Long,
     val respuestaProfesional: String?,
+    /** `true` si quien mira es el profesional dueño y la resena aun no tiene respuesta: se ofrece "Responder". */
+    val puedeResponder: Boolean = false,
 )
+
+/** Largo maximo de la respuesta del profesional (firestore.rules / docs/DATA_MODEL.md). */
+const val MAX_RESPUESTA_PROFESIONAL = 500
+
+/** Respuesta en redaccion (dialogo abierto) a la resena [resenaId] de [autor]. */
+data class RespuestaEnCurso(
+    val resenaId: String,
+    val autor: String,
+    val texto: String = "",
+    val enviando: Boolean = false,
+    /** Error mostrado dentro del dialogo (sin conexion, sin permiso...). */
+    val error: String? = null,
+) {
+    val puedeEnviar: Boolean
+        get() = texto.isNotBlank() && texto.trim().length <= MAX_RESPUESTA_PROFESIONAL && !enviando
+}
 
 /**
  * Resumen calculado sobre las resenas **cargadas** (maximo 100, las mas
@@ -53,10 +75,23 @@ data class ReviewsState(
     val error: ResenaError? = null,
     val resumen: ResumenResenas? = null,
     val resenas: List<ResenaItem> = emptyList(),
+    /** No nulo mientras el dialogo "Responder" esta abierto. */
+    val respuesta: RespuestaEnCurso? = null,
 )
+
+/** Eventos de una sola vez (no son estado): el `Root` los muestra en un Snackbar. */
+sealed interface ReviewsEvent {
+    data class MostrarMensaje(val texto: String) : ReviewsEvent
+}
 
 sealed interface ReviewsAction {
     data object Reintentar : ReviewsAction
+
+    /** Abre el dialogo para responder una resena (solo el profesional dueño, resenas sin respuesta). */
+    data class Responder(val resenaId: String) : ReviewsAction
+    data class CambiarRespuesta(val texto: String) : ReviewsAction
+    data object EnviarRespuesta : ReviewsAction
+    data object DescartarRespuesta : ReviewsAction
 
     /** Navegacion: la resuelve el `Root` contra el NavGraph, no el ViewModel. */
     data object VolverAtras : ReviewsAction
@@ -88,9 +123,17 @@ class ReviewsViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val resenaRepository: ResenaRepository,
     private val usuarioRepository: UsuarioRepository,
+    private val firebaseAuth: FirebaseAuth,
 ) : ViewModel() {
 
     private val profesionalId: String? = savedStateHandle[ARG_PROFESIONAL_ID]
+
+    private val _eventos = Channel<ReviewsEvent>(Channel.BUFFERED)
+    val eventos: Flow<ReviewsEvent> = _eventos.receiveAsFlow()
+
+    /** Solo el profesional dueño del perfil puede responder; el backend (firestore.rules) lo vuelve a exigir. */
+    private val esProfesionalDueno: Boolean
+        get() = !profesionalId.isNullOrBlank() && firebaseAuth.currentUser?.uid == profesionalId
 
     private val _state = MutableStateFlow(ReviewsState())
     val state: StateFlow<ReviewsState> = _state.asStateFlow()
@@ -106,7 +149,53 @@ class ReviewsViewModel @Inject constructor(
     fun onAction(action: ReviewsAction) {
         when (action) {
             ReviewsAction.Reintentar -> cargar()
+            is ReviewsAction.Responder -> abrirRespuesta(action.resenaId)
+            is ReviewsAction.CambiarRespuesta -> _state.update { estado ->
+                estado.respuesta?.takeIf { !it.enviando }?.let {
+                    estado.copy(
+                        respuesta = it.copy(texto = action.texto.take(MAX_RESPUESTA_PROFESIONAL), error = null),
+                    )
+                } ?: estado
+            }
+            ReviewsAction.EnviarRespuesta -> enviarRespuesta()
+            ReviewsAction.DescartarRespuesta -> _state.update { estado ->
+                if (estado.respuesta?.enviando == true) estado else estado.copy(respuesta = null)
+            }
             ReviewsAction.VolverAtras -> Unit
+        }
+    }
+
+    private fun abrirRespuesta(resenaId: String) {
+        val resena = _state.value.resenas.firstOrNull { it.id == resenaId && it.puedeResponder } ?: return
+        _state.update { it.copy(respuesta = RespuestaEnCurso(resenaId = resena.id, autor = resena.autor)) }
+    }
+
+    private fun enviarRespuesta() {
+        val respuesta = _state.value.respuesta?.takeIf { it.puedeEnviar } ?: return
+        if (!esProfesionalDueno) return
+        val texto = respuesta.texto.trim()
+        _state.update { it.copy(respuesta = respuesta.copy(enviando = true, error = null)) }
+        viewModelScope.launch {
+            when (val resultado = resenaRepository.responder(respuesta.resenaId, texto)) {
+                is Result.Success -> {
+                    _state.update { estado ->
+                        estado.copy(
+                            respuesta = null,
+                            resenas = estado.resenas.map {
+                                if (it.id == respuesta.resenaId) {
+                                    it.copy(respuestaProfesional = texto, puedeResponder = false)
+                                } else {
+                                    it
+                                }
+                            },
+                        )
+                    }
+                    _eventos.send(ReviewsEvent.MostrarMensaje("Respuesta publicada."))
+                }
+                is Result.Error -> _state.update {
+                    it.copy(respuesta = respuesta.copy(enviando = false, error = mensajeDeErrorAlResponder(resultado.error)))
+                }
+            }
         }
     }
 
@@ -160,5 +249,12 @@ class ReviewsViewModel @Inject constructor(
         comentario = comentario?.trim()?.takeIf { it.isNotEmpty() },
         fechaMillis = fecha.toEpochMilliseconds(),
         respuestaProfesional = respuestaProfesional?.trim()?.takeIf { it.isNotEmpty() },
+        puedeResponder = esProfesionalDueno && respuestaProfesional?.isNotBlank() != true,
     )
+}
+
+private fun mensajeDeErrorAlResponder(error: ResenaError): String = when (error) {
+    ResenaError.SIN_INTERNET -> "Sin conexión. Revisa tu internet e inténtalo de nuevo."
+    ResenaError.SIN_PERMISO -> "No pudimos publicar tu respuesta: esta reseña ya no admite respuestas o no es de tu perfil."
+    ResenaError.DESCONOCIDO -> "No pudimos publicar tu respuesta. Inténtalo de nuevo."
 }

@@ -93,6 +93,7 @@ class ProfessionalProfileViewModelTest {
         disponibilidad: List<Disponibilidad> = emptyList(),
         totalResenas: Int = 12,
         descripcion: String = "  Kinesiologa deportiva  ",
+        fotoUrl: String? = null,
     ) = Profesional(
         usuario = Usuario(
             id = id,
@@ -102,7 +103,7 @@ class ProfessionalProfileViewModelTest {
             correoContacto = null,
             telefono = null,
             rol = RolUsuario.PROFESIONAL,
-            fotoUrl = null,
+            fotoUrl = fotoUrl,
             fechaRegistro = Instant.fromEpochMilliseconds(0),
         ),
         especialidades = listOf("Kinesiología"),
@@ -129,6 +130,26 @@ class ProfessionalProfileViewModelTest {
     private fun <T : Any> requerir(valor: T?): T {
         assertNotNull(valor)
         return valor!!
+    }
+
+    @Test
+    fun `el perfil publico expone la foto del profesional si existe`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId(id) } returns
+            Result.Success(profesional(fotoUrl = "https://dl/ana.jpg?v=1"))
+
+        val perfil = requerir(crearViewModel().state.value.perfil)
+
+        assertEquals("https://dl/ana.jpg?v=1", perfil.fotoUrl)
+    }
+
+    @Test
+    fun `sin foto o con la URL en blanco el perfil cae a las iniciales`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId(id) } returns Result.Success(profesional(fotoUrl = "  "))
+
+        val perfil = requerir(crearViewModel().state.value.perfil)
+
+        assertNull(perfil.fotoUrl)
+        assertEquals("AS", perfil.iniciales)
     }
 
     @Test

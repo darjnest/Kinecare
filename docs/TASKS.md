@@ -89,8 +89,8 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       < 5 MB; credenciales cerradas a la app; resto denegado) y el bloque
       `storage` de `firebase.json`; reglas validadas. **Bucket de QA creado y reglas desplegadas el
       2026-10-09** (verificadas leyendo las reglas activas); producción sigue
-      sin bucket (Spark). **Falta:** conectar "Cambiar foto" (Cliente y
-      Profesional) y decidir la ruta de la foto del Cliente.
+      sin bucket (Spark). **"Cambiar foto" conectado** (ver ítem de fotos de
+      perfil, abajo); ruta del Cliente decidida: `clientes/{uid}/foto-perfil.jpg`.
 - [x] Cliente: al iniciar sesión o registrarse (rol `CLIENTE`), el `NavHost`
       de `:app` navega automáticamente a `SearchRoute` y saca `AuthRoute`
       del back stack (`KineCareNavHost.kt`, callback
@@ -137,8 +137,8 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       y solo navega hacia atrás cuando el `ViewModel` confirma éxito
       (`state.guardadoExitoso` + `LaunchedEffect` en el `Root`, mismo patrón
       que `AuthViewModel.usuarioAutenticado`/`AuthScreen` — no hay
-      `Flow<Event>` separado en el proyecto todavía); `CambiarFoto` sigue
-      no-op (Storage bloqueado, plan Spark). `FavoritosViewModel` resuelve
+      `Flow<Event>` separado en el proyecto todavía); `CambiarFoto` ya sube
+      la foto (ver "Fotos de perfil" en Fase 7). `FavoritosViewModel` resuelve
       `Cliente.favoritos` a `Profesional` real vía
       `ProfesionalRepository.obtenerPorId` por cada id, y `QuitarDeFavoritos`
       actualiza `ClienteRepository.quitarFavorito` con UI optimista
@@ -761,6 +761,98 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
 - [ ] **Reglas de `servicios` y `completarReserva` sin desplegar en QA**
       (`firebase deploy --only firestore:rules,functions:completarReserva -P qa`).
 - [ ] No verificado en pantalla después del login (requiere una sesión real).
+
+### Backend: cancelación, expiración, push y cupos (2026-10-12) — **sin desplegar**
+- [x] `cancelarReserva` (callable): cliente/profesional dueño cancelan una
+      `SOLICITADA`/`CONFIRMADA` con la cita futura; marca `reembolsoPendiente`
+      en el pago `AUTORIZADO` según la política. Tests unitarios + 21 de
+      integración (emulador).
+- [x] `expirarSolicitudes` (programada, cada 15 min): cierra las `SOLICITADA`
+      cuya hora pasó. **`EstadoReserva` no tiene `EXPIRADA`**: hoy pasan a
+      `RECHAZADA` con `expirada: true`; cuando el enum de dominio lo incorpore
+      basta cambiar `ESTADO_AL_EXPIRAR`. Índice nuevo `reservas(estado, fechaHora)`.
+- [x] Push FCM: `usuarios/{uid}/dispositivos/{token}` (reglas) y trigger
+      `notificarReserva` sobre `reservas/{id}`. Mensajería real sin probar:
+      los tests usan un doble de FCM.
+- [x] `obtenerCuposOcupados` (callable, cliente): tramos ocupados de un
+      profesional sin datos personales.
+- [x] Reglas de `resenas`: el profesional dueño responde una sola vez
+      (`respuestaProfesional`, 1..500 caracteres, solo esa clave). Probadas
+      por REST contra el emulador (`reglas.integration.test.ts`).
+- [ ] **Desplegar en QA**: `firebase deploy --only firestore:rules,firestore:indexes,functions:cancelarReserva,functions:expirarSolicitudes,functions:notificarReserva,functions:obtenerCuposOcupados -P qa`
+      (el índice nuevo tarda minutos en `READY`; `expirarSolicitudes` crea un
+      job de Cloud Scheduler, requiere Blaze). Sin desplegar no existe nada de
+      esto en QA.
+- [ ] **Reembolso real de Mercado Pago**: no hay cliente de reembolso; hoy solo
+      queda `pagos/{id}.reembolsoPendiente` para procesarlo a mano.
+- [ ] Un pago `PENDIENTE` con preferencia abierta puede pagarse después de
+      cancelar la reserva (el webhook lo marcaría `AUTORIZADO` sobre una reserva
+      cancelada). Falta que el webhook marque `reembolsoPendiente` en ese caso.
+- [x] Cliente Android — **push FCM**: `firebase-messaging` (catálogo, BoM
+      existente); `DispositivoPushRepository` (`:core:common` + `:core:network`)
+      registra `usuarios/{uid}/dispositivos/{token}` al haber sesión
+      (`AuthViewModel`) y en `onNewToken`, y lo borra **antes** de cerrar sesión
+      (3 s máx.; el `NavHost` espera). `KineCareMessagingService` (`:app`) muestra la
+      notificación en primer plano en el canal "Citas" (creado al arrancar, también
+      canal por defecto de FCM); tocarla abre Mis Citas (Cliente) o Solicitudes
+      (Profesional) según `data.tipo` y el rol (`AperturaNotificacion`,
+      `RESERVA_CANCELADA` va a ambos); `POST_NOTIFICATIONS` se pide tras iniciar
+      sesión, sin bloquear. Tests: registro/borrado de token, mapeo tipo→destino,
+      resolución según sesión y `AuthViewModel` (cierre ordenado). **No verificado en
+      dispositivo** (ver pendientes abajo).
+- [ ] Push: verificar en dispositivo con QA y un push real (el emulador fue
+      demasiado lento para la prueba): token en `dispositivos` tras login y borrado
+      al salir, notificación en primer plano, en segundo plano y con la app cerrada,
+      toque → Mis Citas / Solicitudes, permiso en Android 13+.
+- [x] **Fotos de perfil** (Cliente en Información Personal, Profesional en Mi Perfil):
+      `FotoPerfilRepository` (`:core:common` + `:core:network`, Firebase Storage),
+      `UsuarioRepository.actualizarFotoUrl`, selector `PickVisualMedia` (sin permisos),
+      reducción a JPEG ≤ 1280 px en memoria, `KineCareAvatar` (Coil → iniciales) en
+      Mi Perfil / Información Personal del cliente, Mi Perfil del profesional y
+      perfil público. Estados de progreso y error propios; sin bucket
+      (producción) degrada con mensaje. `storage.rules` + ruta del cliente validadas
+      con `scripts/probar-storage-rules.sh` (emuladores). Coil bajado a 3.4.0 en el
+      catálogo (3.5+ exige Kotlin 2.4). **Pendiente:** desplegar `storage.rules` a QA
+      (`firebase deploy --only storage -P qa`) y probar en dispositivo con QA (subida
+      real, foto en perfil público, reemplazo sin foto cacheada: la URL lleva `&v=`).
+- [x] Cliente Android — **cancelar cita**: `ReservaRepository.cancelar`
+      (`:core:common` + `ReservaRepositoryImpl`, Retrofit `cancelarReserva`,
+      `CancelarReservaError`, `ResultadoCancelacion` con el `reembolso` que
+      informa el backend). Botón "Cancelar cita" en Mis Citas (cliente, citas
+      `SOLICITADA`/`CONFIRMADA` que aún no comienzan) y en Solicitudes de atención
+      (profesional, citas `CONFIRMADA` futuras), con diálogo de confirmación
+      (`KineCareTextInputDialog` de `:core:designsystem`), motivo opcional (300),
+      y aviso de reembolso antes de cancelar: total con ≥ 24 h y pago autorizado,
+      sin reembolso automático con < 24 h, "no hay nada que reembolsar" sin pago
+      cobrado; el profesional siempre reembolsa el total. Errores reintentables
+      (sin conexión, desconocido) quedan dentro del diálogo; los que indican que la
+      cita cambió (`ESTADO_INVALIDO`, `CITA_YA_INICIADA`, ...) cierran el diálogo,
+      avisan y recargan. Tras cancelar se recarga la lista y se avisa (Snackbar).
+      Mis Citas usa `Flow<MisCitasEvent>` para el aviso; Solicitudes mantiene su
+      `mensaje` en el estado (patrón previo de esa pantalla).
+- [x] Cliente Android — **cupos ocupados en la reserva**: al abrir el paso
+      fecha/hora `BookingViewModel` llama `obtenerCuposOcupados` (desde ahora
+      hasta la medianoche de Chile del día 14, < 15 días) y descuenta los cupos
+      solapados (`descontarCuposOcupados`). Mientras consulta no se ofrecen
+      horarios; si falla no bloquea (se detecta al confirmar). Un horario que
+      `crearReserva` rechaza no se vuelve a ofrecer y se refrescan los cupos.
+- [x] Cliente Android — **responder reseñas** (`:feature:reviews`): el profesional
+      dueño ve "Responder" en reseñas sin respuesta; diálogo de hasta 500
+      caracteres → `ResenaRepository.responder` (`update` de
+      `respuestaProfesional`). Se oculta si ya hay respuesta (no se edita).
+- [x] Cliente Android — **búsqueda** (`:feature:search`): texto libre (sin tildes
+      ni mayúsculas; todas las palabras deben calzar) sobre nombre, especialidad y
+      descripción de los profesionales cargados, y orden por mejor calificados /
+      menor precio "desde" / más reseñas. **Comuna:** los profesionales no tienen
+      comuna en Firestore, así que solo calza si la descripción la menciona.
+- [x] Cliente Android — **solicitudes expiradas**: `Reserva.expirada` (campo
+      opcional de Firestore) se muestra como "Solicitud vencida sin respuesta" en
+      Mis Citas y "Vencida sin respuesta" en el historial del profesional.
+- [x] Cliente Android — **Mi perfil**: "Derechos del Paciente" abre un diálogo
+      informativo (Ley 20.584); se quitaron los interruptores "Avisos por WhatsApp"
+      e "Ingreso biométrico" (no tenían backend ni persistencia). Las tarjetas de
+      previsión, tratamiento, método de pago y facturación siguen ocultas mientras
+      no haya datos reales.
 
 ## Fase 8 — QA, pulido y publicación
 - [ ] Cobertura de tests (JUnit5, MockK, Turbine, Compose UI Testing)

@@ -257,7 +257,63 @@ class ResenaRepositoryImplTest {
         assertEquals(ResenaError.DESCONOCIDO, (resultado as Result.Error).error)
     }
 
+    // --- responder ---
+
+    @Test
+    fun `responder actualiza solo respuestaProfesional del documento de la resena`() = runTest {
+        val docRef = setUpActualizacion("reserva-1")
+
+        val resultado = repository.responder("reserva-1", "Gracias por confiar en mi")
+
+        assertTrue(resultado is Result.Success)
+        verify { resenasCollection.document("reserva-1") }
+        verify { docRef.update("respuestaProfesional", "Gracias por confiar en mi") }
+    }
+
+    @Test
+    fun `responder retorna SIN_PERMISO ante PERMISSION_DENIED`() = runTest {
+        setUpActualizacion(
+            "reserva-1",
+            excepcion = firestoreException(FirebaseFirestoreException.Code.PERMISSION_DENIED),
+        )
+
+        val resultado = repository.responder("reserva-1", "Gracias")
+
+        assertEquals(ResenaError.SIN_PERMISO, (resultado as Result.Error).error)
+    }
+
+    @Test
+    fun `responder retorna SIN_INTERNET ante FirebaseNetworkException`() = runTest {
+        setUpActualizacion("reserva-1", excepcion = FirebaseNetworkException("sin red"))
+
+        val resultado = repository.responder("reserva-1", "Gracias")
+
+        assertEquals(ResenaError.SIN_INTERNET, (resultado as Result.Error).error)
+    }
+
+    @Test
+    fun `responder retorna DESCONOCIDO ante otra excepcion`() = runTest {
+        setUpActualizacion("reserva-1", excepcion = IllegalStateException("boom"))
+
+        val resultado = repository.responder("reserva-1", "Gracias")
+
+        assertEquals(ResenaError.DESCONOCIDO, (resultado as Result.Error).error)
+    }
+
     // --- helpers ---
+
+    private fun setUpActualizacion(resenaId: String, excepcion: Exception? = null): DocumentReference {
+        val docRef = mockk<DocumentReference>()
+        every { resenasCollection.document(resenaId) } returns docRef
+        val task = mockk<Task<Void>>()
+        if (excepcion != null) {
+            coEvery { task.await() } throws excepcion
+        } else {
+            coEvery { task.await() } returns mockk<Void>()
+        }
+        every { docRef.update(any<String>(), any()) } returns task
+        return docRef
+    }
 
     private fun resenaParaCrear(comentario: String? = "Bien") = Resena(
         id = "reserva-1",

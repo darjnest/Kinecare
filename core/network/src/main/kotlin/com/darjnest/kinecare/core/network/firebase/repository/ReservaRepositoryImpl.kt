@@ -2,18 +2,23 @@
 
 package com.darjnest.kinecare.core.network.firebase.repository
 
+import com.darjnest.kinecare.core.common.data.error.CancelarReservaError
 import com.darjnest.kinecare.core.common.data.error.CrearReservaError
+import com.darjnest.kinecare.core.common.data.error.CuposOcupadosError
 import com.darjnest.kinecare.core.common.data.error.ReservaError
 import com.darjnest.kinecare.core.common.data.error.CompletarReservaError
 import com.darjnest.kinecare.core.common.data.error.ResponderReservaError
 import com.darjnest.kinecare.core.common.data.repository.ReservaRepository
+import com.darjnest.kinecare.core.common.domain.model.CupoOcupado
 import com.darjnest.kinecare.core.common.domain.model.Direccion
 import com.darjnest.kinecare.core.common.domain.model.EstadoPago
 import com.darjnest.kinecare.core.common.domain.model.EstadoReserva
 import com.darjnest.kinecare.core.common.domain.model.MetodoPago
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
 import com.darjnest.kinecare.core.common.domain.model.Pago
+import com.darjnest.kinecare.core.common.domain.model.ReembolsoCancelacion
 import com.darjnest.kinecare.core.common.domain.model.Reserva
+import com.darjnest.kinecare.core.common.domain.model.ResultadoCancelacion
 import com.darjnest.kinecare.core.common.domain.model.RespuestaReserva
 import com.darjnest.kinecare.core.common.domain.model.SolicitudReserva
 import com.darjnest.kinecare.core.common.domain.model.TipoMetodoPago
@@ -22,8 +27,11 @@ import com.darjnest.kinecare.core.network.functions.CloudFunctionsApi
 import com.darjnest.kinecare.core.network.functions.llamarCallable
 import com.darjnest.kinecare.core.network.functions.dto.CallableErrorDto
 import com.darjnest.kinecare.core.network.functions.dto.CallableRequest
+import com.darjnest.kinecare.core.network.functions.dto.CancelarReservaRequestDto
 import com.darjnest.kinecare.core.network.functions.dto.CompletarReservaRequestDto
 import com.darjnest.kinecare.core.network.functions.dto.CrearReservaRequestDto
+import com.darjnest.kinecare.core.network.functions.dto.CupoOcupadoDto
+import com.darjnest.kinecare.core.network.functions.dto.CuposOcupadosRequestDto
 import com.darjnest.kinecare.core.network.functions.dto.DireccionDto
 import com.darjnest.kinecare.core.network.functions.dto.ResponderReservaRequestDto
 import com.google.firebase.FirebaseNetworkException
@@ -35,6 +43,9 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
 import javax.inject.Inject
 
 private const val COLECCION_RESERVAS = "reservas"
@@ -160,6 +171,94 @@ class ReservaRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun cancelar(reservaId: String, motivo: String?): Result<ResultadoCancelacion, CancelarReservaError> {
+        val resultado = llamarCallable(
+            firebaseAuth = firebaseAuth,
+            json = json,
+            sinSesion = CancelarReservaError.SIN_SESION,
+            sinInternet = CancelarReservaError.SIN_INTERNET,
+            desconocido = CancelarReservaError.DESCONOCIDO,
+            aError = ::errorDeCancelar,
+            llamada = { autorizacion ->
+                cloudFunctionsApi.cancelarReserva(
+                    autorizacion,
+                    CallableRequest(CancelarReservaRequestDto(reservaId, motivo?.takeIf { it.isNotBlank() })),
+                )
+            },
+        )
+        return when (resultado) {
+            is Result.Success -> EstadoReserva.entries.firstOrNull { it.name == resultado.data.estado }
+                ?.let { estado ->
+                    Result.Success(
+                        ResultadoCancelacion(
+                            estado = estado,
+                            reembolso = ReembolsoCancelacion.entries.firstOrNull { it.name == resultado.data.reembolso },
+                        ),
+                    )
+                }
+                ?: Result.Error(CancelarReservaError.DESCONOCIDO)
+            is Result.Error -> resultado
+        }
+    }
+
+    override suspend fun obtenerCuposOcupados(
+        profesionalId: String,
+        desde: Instant,
+        hasta: Instant,
+    ): Result<List<CupoOcupado>, CuposOcupadosError> {
+        val resultado = llamarCallable(
+            firebaseAuth = firebaseAuth,
+            json = json,
+            sinSesion = CuposOcupadosError.SIN_SESION,
+            sinInternet = CuposOcupadosError.SIN_INTERNET,
+            desconocido = CuposOcupadosError.DESCONOCIDO,
+            aError = { error ->
+                if (error?.status == "UNAUTHENTICATED") CuposOcupadosError.SIN_SESION else CuposOcupadosError.DESCONOCIDO
+            },
+            llamada = { autorizacion ->
+                cloudFunctionsApi.obtenerCuposOcupados(
+                    autorizacion,
+                    CallableRequest(CuposOcupadosRequestDto(profesionalId, desde.toString(), hasta.toString())),
+                )
+            },
+        )
+        return when (resultado) {
+            is Result.Success -> {
+                // Acepta `[{...}]` y `{"cupos": [{...}]}`; un tramo con fechas
+                // ilegibles se omite en vez de fallar toda la consulta.
+                val tramos = runCatching {
+                    val elemento = resultado.data
+                    val lista = if (elemento is JsonObject) elemento["cupos"] ?: JsonArray(emptyList()) else elemento
+                    json.decodeFromJsonElement<List<CupoOcupadoDto>>(lista)
+                }.getOrNull() ?: return Result.Error(CuposOcupadosError.DESCONOCIDO)
+                Result.Success(
+                    tramos.mapNotNull { dto ->
+                        val inicio = runCatching { Instant.parse(dto.inicio) }.getOrNull() ?: return@mapNotNull null
+                        val fin = runCatching { Instant.parse(dto.fin) }.getOrNull() ?: return@mapNotNull null
+                        CupoOcupado(inicio, fin)
+                    },
+                )
+            }
+            is Result.Error -> resultado
+        }
+    }
+
+    /** Igual que [errorDeCrear], con los motivos de `cancelarReserva`. */
+    private fun errorDeCancelar(error: CallableErrorDto?): CancelarReservaError {
+        if (error == null) return CancelarReservaError.DESCONOCIDO
+        val porMotivo = error.details?.motivo?.let { motivo ->
+            CancelarReservaError.entries.firstOrNull { it.name == motivo }
+        }
+        return porMotivo ?: when (error.status) {
+            "UNAUTHENTICATED" -> CancelarReservaError.SIN_SESION
+            "PERMISSION_DENIED" -> CancelarReservaError.NO_AUTORIZADO
+            "NOT_FOUND" -> CancelarReservaError.RESERVA_NO_ENCONTRADA
+            "FAILED_PRECONDITION" -> CancelarReservaError.ESTADO_INVALIDO
+            "INVALID_ARGUMENT" -> CancelarReservaError.DATOS_INVALIDOS
+            else -> CancelarReservaError.DESCONOCIDO
+        }
+    }
+
     /** Igual que [errorDeCrear], con los motivos de `completarReserva`. */
     private fun errorDeCompletar(error: CallableErrorDto?): CompletarReservaError {
         if (error == null) return CompletarReservaError.DESCONOCIDO
@@ -239,6 +338,7 @@ class ReservaRepositoryImpl @Inject constructor(
             }.getOrDefault(EstadoReserva.SOLICITADA),
             pago = pago,
             comisionPorcentaje = getDouble("comisionPorcentaje") ?: 0.0,
+            expirada = getBoolean("expirada") == true,
         )
     }
 

@@ -48,8 +48,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
@@ -68,6 +72,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.darjnest.kinecare.core.designsystem.components.bar.KineCareBottomNavBar
 import com.darjnest.kinecare.core.designsystem.components.bar.PestanaClienteInferior
 import com.darjnest.kinecare.core.designsystem.components.button.KineCarePrimaryButton
+import com.darjnest.kinecare.core.designsystem.components.dialog.KineCareTextInputDialog
 import com.darjnest.kinecare.core.designsystem.components.label.BadgeTono
 import com.darjnest.kinecare.core.designsystem.components.label.KineCareBadge
 import com.darjnest.kinecare.core.designsystem.theme.InicioDorado
@@ -80,14 +85,19 @@ import com.darjnest.kinecare.core.designsystem.theme.LoginMenta
 import com.darjnest.kinecare.core.designsystem.theme.LoginMentaSuave
 import com.darjnest.kinecare.core.designsystem.theme.LoginPrimario
 import com.darjnest.kinecare.core.designsystem.theme.LoginPrimarioOscuro
+import com.darjnest.kinecare.core.designsystem.theme.RojoError40
 import com.darjnest.kinecare.core.designsystem.theme.TextoPrincipal
 import com.darjnest.kinecare.feature.client_panel.domain.EstadoReporte
+import com.darjnest.kinecare.feature.client_panel.presentation.viewmodel.CancelacionCita
 import com.darjnest.kinecare.feature.client_panel.presentation.viewmodel.CitaCancelada
 import com.darjnest.kinecare.feature.client_panel.presentation.viewmodel.CitaEnCurso
 import com.darjnest.kinecare.feature.client_panel.presentation.viewmodel.CitaHistorial
 import com.darjnest.kinecare.feature.client_panel.presentation.viewmodel.CitaProxima
 import com.darjnest.kinecare.feature.client_panel.presentation.viewmodel.MisCitasAction
+import com.darjnest.kinecare.feature.client_panel.presentation.viewmodel.MAX_MOTIVO_CANCELACION
+import com.darjnest.kinecare.feature.client_panel.presentation.viewmodel.MisCitasEvent
 import com.darjnest.kinecare.feature.client_panel.presentation.viewmodel.MisCitasState
+import com.darjnest.kinecare.feature.client_panel.presentation.viewmodel.PoliticaReembolso
 import com.darjnest.kinecare.feature.client_panel.presentation.viewmodel.MisCitasViewModel
 import com.darjnest.kinecare.feature.client_panel.presentation.viewmodel.TabMisCitas
 
@@ -104,6 +114,15 @@ fun MisCitasRoot(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(viewModel) {
+        viewModel.eventos.collect { evento ->
+            when (evento) {
+                is MisCitasEvent.MostrarMensaje -> snackbarHostState.showSnackbar(evento.texto)
+            }
+        }
+    }
 
     // Al volver de dejar una resena el ViewModel sigue vivo con la lista
     // vieja: recargar para que el boton "Dejar reseña" desaparezca. El
@@ -133,6 +152,7 @@ fun MisCitasRoot(
         onIrAExplorar = onIrAExplorar,
         onIrAFavoritos = onIrAFavoritos,
         onIrAMiPerfil = onIrAMiPerfil,
+        snackbarHostState = snackbarHostState,
         modifier = modifier,
     )
 }
@@ -144,11 +164,15 @@ fun MisCitasScreen(
     onIrAExplorar: () -> Unit = {},
     onIrAFavoritos: () -> Unit = {},
     onIrAMiPerfil: () -> Unit = {},
+    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
     modifier: Modifier = Modifier,
 ) {
+    state.cancelacion?.let { DialogoCancelarCita(cancelacion = it, onAction = onAction) }
+
     Scaffold(
         modifier = modifier,
         containerColor = LoginFondo,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             KineCareBottomNavBar(
                 pestanaActiva = PestanaClienteInferior.MIS_CITAS,
@@ -764,6 +788,12 @@ private fun TarjetaCitaProxima(
                     Text(text = "Google Calendar", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = TextoPrincipal)
                 }
             }
+            if (cita.puedeCancelar) {
+                AccionCancelarCita(
+                    onClick = { onAction(MisCitasAction.CancelarCita(cita.id)) },
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
             AccionReportarProblema(
                 estadoReporte = cita.estadoReporte,
                 onClick = { onAction(MisCitasAction.ReportarProblema(cita.id, cita.profesionalId)) },
@@ -771,6 +801,58 @@ private fun TarjetaCitaProxima(
             )
         }
     }
+}
+
+/** "Cancelar cita" de una cita proxima: abre el dialogo de confirmacion (con la politica de reembolso). */
+@Composable
+private fun AccionCancelarCita(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = KineCareSpacing.iconoTactil)
+            .clip(RoundedCornerShape(50))
+            .clickable(role = Role.Button, onClick = onClick),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Filled.EventBusy, contentDescription = null, tint = RojoError40, modifier = Modifier.size(14.dp))
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = "Cancelar cita",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = RojoError40,
+        )
+    }
+}
+
+/** Confirmacion de cancelacion: dice que pasara con el pago antes de cancelar y pide el motivo (opcional). */
+@Composable
+private fun DialogoCancelarCita(cancelacion: CancelacionCita, onAction: (MisCitasAction) -> Unit) {
+    KineCareTextInputDialog(
+        titulo = "Cancelar cita",
+        mensaje = cancelacion.resumen,
+        aviso = cancelacion.politica.aTexto(),
+        etiquetaCampo = "Motivo (opcional)",
+        valor = cancelacion.motivo,
+        onValorChange = { onAction(MisCitasAction.CambiarMotivoCancelacion(it)) },
+        maxCaracteres = MAX_MOTIVO_CANCELACION,
+        textoConfirmar = "Cancelar cita",
+        textoCancelar = "Volver",
+        error = cancelacion.error,
+        enProgreso = cancelacion.cancelando,
+        onConfirmar = { onAction(MisCitasAction.ConfirmarCancelacion) },
+        onCancelar = { onAction(MisCitasAction.DescartarCancelacion) },
+    )
+}
+
+private fun PoliticaReembolso.aTexto(): String = when (this) {
+    PoliticaReembolso.TOTAL ->
+        "Cancelas con 24 horas o más de anticipación: se te reembolsará el total del pago."
+    PoliticaReembolso.SIN_REEMBOLSO_AUTOMATICO ->
+        "Cancelas con menos de 24 horas de anticipación: no hay reembolso automático del pago."
+    PoliticaReembolso.SIN_COBRO ->
+        "Esta cita aún no tiene un pago cobrado, así que no hay nada que reembolsar."
 }
 
 /**
@@ -1054,6 +1136,35 @@ private fun formatearClp(monto: Long): String {
 private fun MisCitasScreenPreview() {
     KineCareTheme {
         MisCitasScreen(state = MisCitasState())
+    }
+}
+
+@Preview(showBackground = true, heightDp = 1400)
+@Composable
+private fun MisCitasScreenCancelacionPreview() {
+    KineCareTheme {
+        MisCitasScreen(
+            state = MisCitasState(
+                proximasCitas = listOf(
+                    CitaProxima(
+                        id = "res-1",
+                        profesionalId = "prof-1",
+                        modalidad = ModalidadServicio.CONSULTA,
+                        lugar = "Providencia, Santiago",
+                        fechaHoraTexto = "14/10/2026 10:00",
+                        profesionalNombre = "Ana Soto",
+                        tipoSesion = "Kinesiología deportiva",
+                        precioTotal = 25_000,
+                        estadoPago = EstadoPago.AUTORIZADO,
+                    ),
+                ),
+                cancelacion = CancelacionCita(
+                    citaId = "res-1",
+                    resumen = "Ana Soto • 14/10/2026 10:00",
+                    politica = PoliticaReembolso.SIN_REEMBOLSO_AUTOMATICO,
+                ),
+            ),
+        )
     }
 }
 

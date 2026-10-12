@@ -56,3 +56,14 @@ export const REFRESCO_ANTICIPADO_MINUTOS = 5;
 
 /** Esquema de deep link con el que Android recupera el control tras salir a Mercado Pago. */
 export const ESQUEMA_APP = "kinecare";
+
+/** Cancelacion (ver cancelarReserva.ts). */
+export const MAX_LARGO_MOTIVO_CANCELACION = 300;
+/** Anticipacion minima con que un cliente cancela para tener reembolso total. */
+export const HORAS_REEMBOLSO_TOTAL = 24;
+
+/** Subcoleccion `usuarios/{uid}/dispositivos/{token}` con los tokens FCM del usuario. */
+export const SUBCOLECCION_DISPOSITIVOS = "dispositivos";
+
+/** Ventana maxima que puede pedir obtenerCuposOcupados. */
+export const VENTANA_MAXIMA_CUPOS_DIAS = 15;

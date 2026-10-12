@@ -2,6 +2,7 @@ package com.darjnest.kinecare.feature.auth.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.darjnest.kinecare.core.common.data.repository.DispositivoPushRepository
 import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.domain.model.TipoAtencion
 import com.darjnest.kinecare.core.common.domain.model.Usuario
@@ -15,8 +16,14 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
+
+/** Tiempo maximo que cerrar sesion espera a borrar el token push antes de cerrarla igual. */
+internal const val TIEMPO_MAXIMO_BORRAR_TOKEN_MS = 3_000L
 
 enum class ModoAuth { LOGIN, REGISTRO }
 
@@ -114,6 +121,7 @@ private fun AuthState.tiposAtencionDelRol(): Set<TipoAtencion> =
 class AuthViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val loginPreferences: LoginPreferences,
+    private val dispositivoPushRepository: DispositivoPushRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(AuthState())
@@ -137,6 +145,29 @@ class AuthViewModel @Inject constructor(
         }
     }
 
+    init {
+        // Cada vez que hay una sesion (login, registro con Google, sesion restaurada al abrir la app)
+        // el dispositivo se registra para las notificaciones push. Un fallo no afecta al login: el
+        // token se reintenta en el proximo inicio de sesion o cuando FCM lo rote (`onNewToken`).
+        viewModelScope.launch {
+            _state.map { it.usuarioAutenticado?.id }.distinctUntilChanged().collect { uid ->
+                if (uid != null) launch { dispositivoPushRepository.registrarDispositivoActual() }
+            }
+        }
+    }
+
+    /**
+     * Cierra la sesion. Antes borra el token push de este dispositivo: las reglas de Firestore
+     * exigen estar autenticado, asi que no se puede hacer despues. Acotado en el tiempo para que una
+     * mala conexion no impida salir (el backend tambien descarta tokens que FCM da por invalidos).
+     * Quien navega a la pantalla de acceso debe esperar a que termine: con la sesion aun abierta,
+     * esa pantalla reenviaria al usuario a su inicio.
+     */
+    suspend fun cerrarSesion() {
+        withTimeoutOrNull(TIEMPO_MAXIMO_BORRAR_TOKEN_MS) { dispositivoPushRepository.eliminarDispositivoActual() }
+        authRepository.cerrarSesion()
+    }
+
     fun onAction(action: AuthAction) {
         when (action) {
             is AuthAction.CambiarModo -> _state.value = _state.value.copy(modo = action.modo, mensajeError = null)
@@ -153,7 +184,7 @@ class AuthViewModel @Inject constructor(
             }
             is AuthAction.CambiarRecordarCuenta -> _state.value = _state.value.copy(recordarCuenta = action.valor)
             AuthAction.Enviar -> enviar()
-            AuthAction.CerrarSesion -> viewModelScope.launch { authRepository.cerrarSesion() }
+            AuthAction.CerrarSesion -> viewModelScope.launch { cerrarSesion() }
             AuthAction.IniciandoGoogle -> _state.value = _state.value.copy(cargando = true, mensajeError = null)
             is AuthAction.IniciarSesionConGoogle -> iniciarSesionConGoogle(action.idToken)
             AuthAction.ConfirmarPerfilGoogle -> confirmarPerfilGoogle()

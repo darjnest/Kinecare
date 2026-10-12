@@ -90,6 +90,28 @@ class ReservaRepositoryImplTest {
     }
 
     @Test
+    fun `una solicitud expirada por el backend se marca expirada y una normal no`() = runTest {
+        fun doc(id: String, extra: Map<String, Any?>) = mockDocumentSnapshot(
+            id = id,
+            data = mapOf(
+                "clienteId" to "cliente-1",
+                "profesionalId" to "prof-1",
+                "servicioId" to "serv-1",
+                "modalidad" to "CONSULTA",
+                "fechaHora" to Timestamp(1_700_000_000L, 0),
+                "estado" to "RECHAZADA",
+                "comisionPorcentaje" to 0.15,
+            ) + extra,
+        )
+        setUpQuery(reservaDocumentos = listOf(doc("r-exp", mapOf("expirada" to true)), doc("r-rech", emptyMap())))
+
+        val reservas = (repository.obtenerPorCliente("cliente-1") as Result.Success).data
+
+        assertEquals(listOf(true, false), reservas.map { it.expirada })
+        assertEquals(listOf(EstadoReserva.RECHAZADA, EstadoReserva.RECHAZADA), reservas.map { it.estado })
+    }
+
+    @Test
     fun `retorna lista vacia cuando el cliente no tiene reservas`() = runTest {
         setUpQuery(reservaDocumentos = emptyList())
 
@@ -184,6 +206,7 @@ class ReservaRepositoryImplTest {
         every { doc.getString(any()) } answers { data[firstArg()] as? String }
         every { doc.getDouble(any()) } answers { data[firstArg()] as? Double }
         every { doc.getLong(any()) } answers { data[firstArg()] as? Long }
+        every { doc.getBoolean(any()) } answers { data[firstArg()] as? Boolean }
         every { doc.getTimestamp(any()) } answers { data[firstArg()] as? Timestamp }
         return doc
     }

@@ -5,9 +5,13 @@ import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.darjnest.kinecare.core.common.data.error.FotoPerfilError
+import com.darjnest.kinecare.core.common.data.repository.FotoPerfilRepository
 import com.darjnest.kinecare.core.common.data.repository.ProfesionalRepository
+import com.darjnest.kinecare.core.common.data.repository.UsuarioRepository
 import com.darjnest.kinecare.core.common.domain.model.EstadoVerificacion
 import com.darjnest.kinecare.core.common.domain.model.Profesional
+import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.domain.model.TipoAtencion
 import com.darjnest.kinecare.core.common.domain.model.TipoInsignia
 import com.darjnest.kinecare.core.common.result.Result
@@ -98,6 +102,12 @@ data class MiPerfilProfesionalState(
     val borradorTiposAtencion: Set<TipoAtencion> = emptySet(),
     val guardandoTiposAtencion: Boolean = false,
     val errorGuardarTiposAtencion: Boolean = false,
+    /** URL de la foto de perfil (`usuarios/{uid}.fotoUrl`); `null` = se muestran las iniciales. */
+    val fotoUrl: String? = null,
+    /** Subiendo la foto elegida (se muestra progreso sobre el avatar). */
+    val subiendoFoto: Boolean = false,
+    /** Mensaje del ultimo intento fallido de cambiar la foto; `null` si no hay. */
+    val errorFoto: String? = null,
 )
 
 sealed interface MiPerfilProfesionalAction {
@@ -111,6 +121,12 @@ sealed interface MiPerfilProfesionalAction {
     data class AlternarTipoAtencion(val tipo: TipoAtencion) : MiPerfilProfesionalAction
     data object GuardarTiposAtencion : MiPerfilProfesionalAction
     data object CancelarEdicionTiposAtencion : MiPerfilProfesionalAction
+
+    /** Abrir el selector de fotos: lo resuelve el `Root` (necesita el contexto de la Activity). */
+    data object CambiarFoto : MiPerfilProfesionalAction
+
+    /** El profesional eligio una imagen en el selector ([uri] es un `content://`). */
+    data class FotoElegida(val uri: String) : MiPerfilProfesionalAction
     data object EditarPerfilYCredenciales : MiPerfilProfesionalAction
     data object PrevisualizarPerfilPublico : MiPerfilProfesionalAction
     data object VerTodasLasResenas : MiPerfilProfesionalAction
@@ -136,6 +152,8 @@ private fun Profesional.aIdentidad(): IdentidadProfesional = IdentidadProfesiona
 @HiltViewModel
 class MiPerfilProfesionalViewModel @Inject constructor(
     private val profesionalRepository: ProfesionalRepository,
+    private val usuarioRepository: UsuarioRepository,
+    private val fotoPerfilRepository: FotoPerfilRepository,
     private val firebaseAuth: FirebaseAuth,
 ) : ViewModel() {
 
@@ -180,9 +198,12 @@ class MiPerfilProfesionalViewModel @Inject constructor(
             MiPerfilProfesionalAction.CancelarEdicionTiposAtencion ->
                 _state.update { it.copy(editandoTiposAtencion = false, errorGuardarTiposAtencion = false) }
             MiPerfilProfesionalAction.GuardarTiposAtencion -> guardarTiposAtencion()
+            is MiPerfilProfesionalAction.FotoElegida -> subirFoto(action.uri)
             // Volver atras, ver todas las resenas (usa `state.profesionalId`),
             // editar credenciales y previsualizar el perfil publico son
-            // navegacion: los resuelve el Root contra el NavGraph.
+            // navegacion: los resuelve el Root contra el NavGraph; abrir el
+            // selector de fotos tambien es del Root (necesita la Activity).
+            MiPerfilProfesionalAction.CambiarFoto,
             MiPerfilProfesionalAction.VolverAtras,
             MiPerfilProfesionalAction.EditarPerfilYCredenciales,
             MiPerfilProfesionalAction.PrevisualizarPerfilPublico,
@@ -206,6 +227,7 @@ class MiPerfilProfesionalViewModel @Inject constructor(
                             cargando = false,
                             errorCarga = false,
                             profesionalId = uid,
+                            fotoUrl = profesional.usuario.fotoUrl,
                             identidad = profesional.aIdentidad(),
                             // Atenciones completadas y puntualidad no existen
                             // en Firestore todavia (Fase 4): quedan nulas y la
@@ -223,6 +245,25 @@ class MiPerfilProfesionalViewModel @Inject constructor(
                     }
                 }
                 is Result.Error -> _state.update { it.copy(cargando = false, errorCarga = true) }
+            }
+        }
+    }
+
+    private fun subirFoto(uri: String) {
+        val uid = firebaseAuth.currentUser?.uid ?: return
+        if (_state.value.subiendoFoto) return
+        viewModelScope.launch {
+            _state.update { it.copy(subiendoFoto = true, errorFoto = null) }
+            when (val subida = fotoPerfilRepository.subir(uid, RolUsuario.PROFESIONAL, uri)) {
+                is Result.Error -> _state.update {
+                    it.copy(subiendoFoto = false, errorFoto = subida.error.aMensaje())
+                }
+                is Result.Success -> when (usuarioRepository.actualizarFotoUrl(uid, subida.data)) {
+                    is Result.Success -> _state.update { it.copy(subiendoFoto = false, fotoUrl = subida.data) }
+                    is Result.Error -> _state.update {
+                        it.copy(subiendoFoto = false, errorFoto = "No pudimos guardar la foto en tu perfil. Intenta de nuevo.")
+                    }
+                }
             }
         }
     }
@@ -264,4 +305,13 @@ class MiPerfilProfesionalViewModel @Inject constructor(
             }
         }
     }
+}
+
+private fun FotoPerfilError.aMensaje(): String = when (this) {
+    FotoPerfilError.SIN_INTERNET -> "Sin conexión. Revisa tu internet e intenta de nuevo."
+    FotoPerfilError.SIN_PERMISO -> "No pudimos autorizar el cambio de foto. Cierra sesión, vuelve a entrar e intenta de nuevo."
+    FotoPerfilError.IMAGEN_INVALIDA -> "No pudimos leer esa imagen. Elige otra foto."
+    FotoPerfilError.IMAGEN_MUY_GRANDE -> "La foto es demasiado pesada. Elige otra más liviana."
+    FotoPerfilError.ALMACENAMIENTO_NO_DISPONIBLE -> "Cambiar la foto de perfil aún no está disponible. Estamos trabajando en ello."
+    FotoPerfilError.DESCONOCIDO -> "No pudimos subir la foto. Intenta de nuevo."
 }

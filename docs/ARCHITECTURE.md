@@ -141,13 +141,17 @@ de Firebase (`firebase use qa` / `firebase use prod`) al proyecto correcto.
   así QA nunca llama a las funciones de producción. El `motivo` de cada
   `HttpsError` se mapea 1:1 a un enum de error de `:core:common`
   (`CrearReservaError`, `ResponderReservaError`).
-- **Cloud Messaging**: notificaciones, tópicos separados por reserva y por rol.
-  Sin configurar todavía.
-- **Storage**: fotos de perfil y credenciales de profesionales. **Bloqueado
-  en plan Spark** — Google ya no permite inicializar Storage en proyectos
-  nuevos sin plan Blaze. QA (Blaze) ya tiene `storage.rules` en el repo; falta
-  crear el bucket desde la consola. Producción debe subir a Blaze antes de la
-  Fase 6.
+- **Cloud Messaging**: push de reservas (ver
+  [Notificaciones push](#notificaciones-push-fcm)). El backend envía por token
+  (`usuarios/{uid}/dispositivos`), no por tópicos.
+- **Storage**: fotos de perfil (Cliente y Profesional) y credenciales de
+  profesionales. **Bloqueado en plan Spark** — Google ya no permite inicializar
+  Storage en proyectos nuevos sin plan Blaze. QA (Blaze) ya tiene bucket y
+  `storage.rules`; producción debe subir a Blaze antes de la Fase 6 y mientras
+  tanto "Cambiar foto" degrada con un mensaje (`FotoPerfilError.ALMACENAMIENTO_NO_DISPONIBLE`).
+  La foto se sube con `FotoPerfilRepository` (interfaz en `:core:common`, impl en
+  `:core:network`; ver [DATA_MODEL.md](DATA_MODEL.md#firebase-storage)) y se
+  muestra con `KineCareAvatar` (`:core:designsystem`, Coil) que cae a iniciales.
 - Acceso a Firestore/Storage/Auth vía SDK directo; acceso a Cloud Functions
   HTTP vía Retrofit (`:core:network`).
 - **Llamadas a Cloud Functions `onCall`**: el helper público
@@ -175,6 +179,33 @@ de Firebase (`firebase use qa` / `firebase use prod`) al proyecto correcto.
   esa feature — no todo repositorio sube a `:core:*`,
   solo el que 2+ features necesitan de verdad (sin abstracciones para
   casos hipotéticos que no existen hoy).
+  Otros precedentes: `FotoPerfilRepository` (Storage) y `DispositivoPushRepository`
+  (token FCM), ambos en `FirestoreRepositoryModule` aunque no usen Firestore.
+
+## Notificaciones push (FCM)
+- **Token.** `DispositivoPushRepository` (`:core:common` + impl en `:core:network`,
+  `firebase-messaging`) registra el token en `usuarios/{uid}/dispositivos/{token}`:
+  `AuthViewModel` lo hace en cuanto hay sesión (login, Google o sesión restaurada)
+  y `KineCareMessagingService.onNewToken` cuando FCM lo rota. Al cerrar sesión
+  `AuthViewModel.cerrarSesion()` lo borra **antes** de cerrar (acotado a 3 s) y el
+  `NavHost` espera a que termine antes de ir al acceso: con la sesión aún abierta
+  esa pantalla reenviaría al inicio del rol.
+- **Mostrar.** `KineCareMessagingService` (`:app`, `@AndroidEntryPoint`) solo recibe
+  `onMessageReceived` con la app en primer plano y muestra la notificación en el
+  canal "Citas" (creado en `KineCareApplication`). Con la app en segundo plano la
+  muestra el sistema en el mismo canal (meta-data `default_notification_channel_id`)
+  y el `data` llega como extras del intent de `MainActivity`.
+- **Tocar.** `MainActivity` (`singleTask`) recibe el intent de arranque o
+  `onNewIntent`; `KineCareNavHost` lo traduce con `AperturaNotificacion`
+  (`:core:common`: `data {tipo, reservaId}` o el enlace interno
+  `kinecare://notificacion?tipo=..&reservaId=..`, que la app usa solo en `PendingIntent`
+  explícitos, por eso **no** hay `intent-filter` nuevo y otras apps o un navegador no
+  pueden dispararlo). Espera a que haya sesión y a salir del acceso, y abre Mis Citas
+  (Cliente) o Solicitudes (Profesional) según el rol; sin sesión o de otro rol se
+  descarta. Un `tipo` que la app no conoce solo abre la app.
+- **Permiso.** `POST_NOTIFICATIONS` (Android 13+) se pide desde `:app` una vez que
+  hay sesión, una sola vez por apertura y sin bloquear nada: sin el permiso la app
+  funciona igual y solo no avisa.
 
 ## Seguridad
 - Pagos y cambios de estado de verificación se resuelven **siempre** en una
@@ -265,6 +296,9 @@ de Firebase (`firebase use qa` / `firebase use prod`) al proyecto correcto.
   + `Geocoder` de Android — no se agregó el SDK de Google Maps (ver
   [TASKS.md](TASKS.md#fase-1--arquitectura-base) sobre Maps Compose, que
   sigue diferido hasta que se necesite mostrar un mapa real).
+- Excepción: `POST_NOTIFICATIONS` no pertenece a ninguna feature, así que se
+  declara y solicita desde `:app` (ver [Notificaciones push](#notificaciones-push-fcm)).
+  El selector de fotos de perfil (`PickVisualMedia`) no necesita permiso alguno.
 
 ## Persistencia local
 - **Room** (`:core:database`) solo para: caché offline de resultados de

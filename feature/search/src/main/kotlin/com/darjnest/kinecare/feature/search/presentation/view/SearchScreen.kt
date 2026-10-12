@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Home
@@ -64,6 +66,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -90,8 +93,10 @@ import com.darjnest.kinecare.core.designsystem.theme.LoginMenta
 import com.darjnest.kinecare.core.designsystem.theme.LoginMentaSuave
 import com.darjnest.kinecare.core.designsystem.theme.LoginPrimario
 import com.darjnest.kinecare.core.designsystem.theme.LoginPrimarioOscuro
+import com.darjnest.kinecare.core.designsystem.theme.TextoPrincipal
 import com.darjnest.kinecare.feature.search.presentation.viewmodel.CategoriaServicio
 import com.darjnest.kinecare.feature.search.presentation.viewmodel.ModalidadAtencion
+import com.darjnest.kinecare.feature.search.presentation.viewmodel.OrdenBusqueda
 import com.darjnest.kinecare.feature.search.presentation.viewmodel.ProfesionalDestacado
 import com.darjnest.kinecare.feature.search.presentation.viewmodel.SearchAction
 import com.darjnest.kinecare.feature.search.presentation.viewmodel.SearchState
@@ -200,6 +205,9 @@ fun SearchScreen(
 
                 Spacer(modifier = Modifier.height(28.dp))
                 FilaDestacadosTitulo()
+
+                Spacer(modifier = Modifier.height(12.dp))
+                FilaOrden(orden = state.orden, onAction = onAction)
 
                 Spacer(modifier = Modifier.height(12.dp))
                 if (state.cargandoProfesionales) {
@@ -415,6 +423,19 @@ private fun TarjetaFiltros(
 
             Spacer(modifier = Modifier.height(18.dp))
             Text(
+                text = "NOMBRE O ESPECIALIDAD",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = LoginGrisTexto,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            CampoBusquedaTexto(
+                texto = state.textoBusqueda,
+                onTextoChange = { onAction(SearchAction.CambiarTextoBusqueda(it)) },
+            )
+
+            Spacer(modifier = Modifier.height(18.dp))
+            Text(
                 text = "UBICACIÓN",
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
@@ -518,6 +539,86 @@ private fun TarjetaFiltros(
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
+                )
+            }
+        }
+    }
+}
+
+/** Cuadro de busqueda libre (nombre, especialidad); filtra en vivo la lista de profesionales. */
+@Composable
+private fun CampoBusquedaTexto(texto: String, onTextoChange: (String) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(LoginGrisClaro)
+            .padding(horizontal = 14.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Filled.Search, contentDescription = null, tint = LoginGrisTexto, modifier = Modifier.size(18.dp))
+        Spacer(modifier = Modifier.width(8.dp))
+        Box(modifier = Modifier.weight(1f)) {
+            if (texto.isEmpty()) {
+                Text(
+                    text = "Ej. Ana Soto, deportiva, masaje",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = LoginGrisTexto,
+                )
+            }
+            BasicTextField(
+                value = texto,
+                onValueChange = onTextoChange,
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = TextoPrincipal),
+                cursorBrush = SolidColor(LoginPrimarioOscuro),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        if (texto.isNotEmpty()) {
+            Icon(
+                Icons.Filled.Close,
+                contentDescription = "Borrar búsqueda",
+                tint = LoginGrisTexto,
+                modifier = Modifier
+                    .size(18.dp)
+                    .clickable { onTextoChange("") },
+            )
+        }
+    }
+}
+
+/** "Ordenar por": mejor calificados, menor precio "desde" o mas resenas. */
+@Composable
+private fun FilaOrden(orden: OrdenBusqueda, onAction: (SearchAction) -> Unit) {
+    Column {
+        Text(
+            text = "ORDENAR POR",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = LoginGrisTexto,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            listOf(
+                OrdenBusqueda.MEJOR_CALIFICADOS to "Mejor calificados",
+                OrdenBusqueda.MENOR_PRECIO to "Menor precio",
+                OrdenBusqueda.MAS_RESENAS to "Más reseñas",
+            ).forEach { (opcion, etiqueta) ->
+                val seleccionado = opcion == orden
+                Text(
+                    text = etiqueta,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = if (seleccionado) FontWeight.Bold else FontWeight.Normal,
+                    color = if (seleccionado) Color.White else TextoPrincipal,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(if (seleccionado) LoginPrimarioOscuro else Color.White)
+                        .clickable(role = Role.RadioButton) { onAction(SearchAction.CambiarOrden(opcion)) }
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
                 )
             }
         }
@@ -757,7 +858,7 @@ private fun TarjetaCategoria(
 private fun MensajeSinProfesionales(hayCargados: Boolean) {
     Text(
         text = if (hayCargados) {
-            "Ningún profesional calza con tus filtros. Prueba otra modalidad, otra categoría o quita \"Solo verificados\"."
+            "Ningún profesional calza con tu búsqueda. Prueba otro texto, otra modalidad, otra categoría o quita \"Solo verificados\"."
         } else {
             "Todavía no hay profesionales disponibles en esta especialidad."
         },

@@ -57,8 +57,10 @@ data class PerfilProfesional(
     val horario: List<HorarioDia>,
     /** `false` = no vinculo Mercado Pago: puede aceptar la reserva pero el cliente no podra pagarla todavia. */
     val mercadoPagoConectado: Boolean = true,
+    /** Foto de perfil (`usuarios/{uid}.fotoUrl`); nula o en blanco = el avatar muestra las iniciales. */
+    val fotoUrl: String? = null,
 ) {
-    /** Hasta dos iniciales del nombre, para el avatar (no hay fotos: Storage esta bloqueado). */
+    /** Hasta dos iniciales del nombre, para el avatar cuando no hay foto o no carga. */
     val iniciales: String
         get() = nombre.split(" ")
             .filter { it.isNotBlank() }
@@ -212,6 +214,7 @@ internal fun Profesional.aPerfil(): PerfilProfesional {
     return PerfilProfesional(
         id = usuario.id,
         nombre = usuario.nombre,
+        fotoUrl = usuario.fotoUrl?.takeIf { it.isNotBlank() },
         especialidades = especialidades,
         rnpi = rnpi,
         calificacionPromedio = calificacionPromedio.takeIf { totalResenas > 0 },

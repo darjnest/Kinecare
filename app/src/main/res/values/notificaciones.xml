@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Canal de las notificaciones de reservas (nueva solicitud, aceptada, rechazada, pago...). El id
+         tambien lo usa FCM por defecto (meta-data del manifest) para las notificaciones que el
+         sistema muestra con la app en segundo plano. -->
+    <string name="canal_citas_id" translatable="false">citas</string>
+    <string name="canal_citas_nombre">Citas</string>
+    <string name="canal_citas_descripcion">Avisos sobre tus reservas: solicitudes, confirmaciones y pagos.</string>
+    <string name="notificacion_titulo_por_defecto">KineCare</string>
+</resources>
