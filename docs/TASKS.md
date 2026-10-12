@@ -742,7 +742,8 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       "Solo verificados" parte apagado porque nadie puede verificarse aún.
       Sin texto libre, orden ni mapa.
 - [x] Backend: Cloud Function `completarReserva` (`CONFIRMADA`/`EN_CURSO` →
-      `COMPLETADA`) + "Marcar como completada" en Solicitudes. **Sin desplegar.**
+      `COMPLETADA`) + "Marcar como completada" en Solicitudes. **Desplegada en QA**
+      (verificado el 2026-10-12 con el listado de funciones).
 - [x] Lote de revisión de pantallas (2026-10-12): corazón de favoritos en el
       perfil público y en las tarjetas de búsqueda (antes nada agregaba
       favoritos y la pestaña quedaba siempre vacía); "Agendar" de Favoritos
@@ -758,11 +759,12 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       aprobada; barras inferiores del panel profesional navegan.
 - [ ] Sigue sin aviso en el backend a profesionales sin Mercado Pago: `crearReserva`
       y `responderReserva` los aceptan (decisión: solo aviso en la app).
-- [ ] **Reglas de `servicios` y `completarReserva` sin desplegar en QA**
-      (`firebase deploy --only firestore:rules,functions:completarReserva -P qa`).
+- [x] Reglas de `servicios` y `completarReserva` **desplegadas en QA**
+      (verificado el 2026-10-12: las reglas activas incluyen `servicioValido` y la
+      función figura en el listado).
 - [ ] No verificado en pantalla después del login (requiere una sesión real).
 
-### Backend: cancelación, expiración, push y cupos (2026-10-12) — **sin desplegar**
+### Backend: cancelación, expiración, push y cupos (2026-10-12) — **desplegado en QA**
 - [x] `cancelarReserva` (callable): cliente/profesional dueño cancelan una
       `SOLICITADA`/`CONFIRMADA` con la cita futura; marca `reembolsoPendiente`
       en el pago `AUTORIZADO` según la política. Tests unitarios + 21 de
@@ -779,10 +781,13 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
 - [x] Reglas de `resenas`: el profesional dueño responde una sola vez
       (`respuestaProfesional`, 1..500 caracteres, solo esa clave). Probadas
       por REST contra el emulador (`reglas.integration.test.ts`).
-- [ ] **Desplegar en QA**: `firebase deploy --only firestore:rules,firestore:indexes,functions:cancelarReserva,functions:expirarSolicitudes,functions:notificarReserva,functions:obtenerCuposOcupados -P qa`
-      (el índice nuevo tarda minutos en `READY`; `expirarSolicitudes` crea un
-      job de Cloud Scheduler, requiere Blaze). Sin desplegar no existe nada de
-      esto en QA.
+- [x] **Desplegado en QA** (verificado el 2026-10-12 con el MCP de Firebase, solo
+      lectura): `cancelarReserva`, `expirarSolicitudes` (programada),
+      `notificarReserva` y `obtenerCuposOcupados` figuran en el listado de
+      funciones; las reglas activas incluyen `dispositivos` y la respuesta en
+      `resenas`; los 8 índices de `firestore.indexes.json` están `READY`
+      (incluido `reservas(estado, fechaHora)`). El MCP no muestra la versión del
+      código desplegado, solo que la función existe.
 - [ ] **Reembolso real de Mercado Pago**: no hay cliente de reembolso; hoy solo
       queda `pagos/{id}.reembolsoPendiente` para procesarlo a mano.
 - [x] **Pago tardío tras cancelar**: un pago `PENDIENTE` con la preferencia de
@@ -792,7 +797,9 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       La reserva no se reactiva y cancelar vs. webhook se serializan en transacción.
       8 tests de integración nuevos (incluida una carrera cancelar/webhook) que
       fallan sin el arreglo; 295 en total con `npm run test:emulator`. **Sin
-      desplegar** (`firebase deploy --only functions:webhookMercadoPago,functions:estadoPago -P qa`).
+      confirmar si está desplegado** (las funciones existen en QA, pero no se puede
+      ver su versión): redesplegar con
+      `firebase deploy --only functions:webhookMercadoPago,functions:estadoPago -P qa`.
       Limitación: la preferencia sigue abierta en Mercado Pago (cerrarla exigiría
       llamar a su API con el token del vendedor) y la app mostrará "pago exitoso"
       al cliente aunque la cita esté cancelada: el reembolso sigue siendo manual.
@@ -820,9 +827,10 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       perfil público. Estados de progreso y error propios; sin bucket
       (producción) degrada con mensaje. `storage.rules` + ruta del cliente validadas
       con `scripts/probar-storage-rules.sh` (emuladores). Coil bajado a 3.4.0 en el
-      catálogo (3.5+ exige Kotlin 2.4). **Pendiente:** desplegar `storage.rules` a QA
-      (`firebase deploy --only storage -P qa`) y probar en dispositivo con QA (subida
-      real, foto en perfil público, reemplazo sin foto cacheada: la URL lleva `&v=`).
+      catálogo (3.5+ exige Kotlin 2.4). **`storage.rules` desplegadas en QA**
+      (verificado el 2026-10-12: las reglas activas incluyen la ruta del cliente).
+      **Pendiente:** probar en dispositivo con QA (subida real, foto en perfil
+      público, reemplazo sin foto cacheada: la URL lleva `&v=`).
 - [x] Cliente Android — **cancelar cita**: `ReservaRepository.cancelar`
       (`:core:common` + `ReservaRepositoryImpl`, Retrofit `cancelarReserva`,
       `CancelarReservaError`, `ResultadoCancelacion` con el `reembolso` que
