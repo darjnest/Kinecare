@@ -134,9 +134,12 @@ casi todo esto:
       verificación ya están en `QA` (PR #41, sin desplegar ni probar con Didit).
       Cubre solo `IDENTIDAD`; `CREDENCIALES`, `AUTENTICIDAD` y
       `HISTORIAL` no tienen flujo.
-- [ ] Reservas inmediatas, traslado, radio y comunas de atención del
-      profesional, y "perfil público" on/off: sin campos en Firestore (se quitaron
-      o quedan como estado local).
+- [ ] Reservas inmediatas, traslado entre sesiones, cobertura a domicilio (mapa, radio, recargo)
+      y comunas de atención del profesional, y "perfil público" on/off: sin campos en
+      Firestore. En Disponibilidad y horarios los tres primeros están **ocultos** (constante
+      `MOSTRAR_CONTROLES_SIN_PERSISTENCIA` en `DisponibilidadYHorariosScreen.kt`; solo cambiaban
+      estado local y nunca se guardaban). Reactivarlos junto con "fijar mi zona y radio" (campos
+      + reglas de `profesionales`).
 - [ ] **Modo oscuro real**: el tema está fijo en claro (`KineCareTheme`,
       `darkTheme = false`) porque ~1.000 usos de la paleta `Login*`/`Color.White`
       están pensados para fondo claro. Requiere diseño oscuro y repasar cada
