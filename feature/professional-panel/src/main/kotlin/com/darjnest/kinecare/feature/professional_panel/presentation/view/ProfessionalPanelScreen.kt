@@ -28,13 +28,10 @@ import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Dashboard
-import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Work
@@ -62,6 +59,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.darjnest.kinecare.core.designsystem.components.bar.KineCareProfessionalBottomNavBar
+import com.darjnest.kinecare.core.designsystem.components.bar.PestanaProfesionalInferior
 import com.darjnest.kinecare.core.designsystem.components.label.BadgeTono
 import com.darjnest.kinecare.core.designsystem.components.label.KineCareBadge
 import com.darjnest.kinecare.core.designsystem.theme.KineCareSpacing
@@ -153,10 +152,12 @@ fun ProfessionalPanelScreen(
         modifier = modifier,
         containerColor = LoginFondo,
         bottomBar = {
-            BarraNavegacionInferiorProfesional(
-                onAbrirSolicitudes = onAbrirSolicitudes,
-                onAbrirAgenda = onAbrirAgenda,
-                onAbrirMiPerfil = onAbrirMiPerfil,
+            KineCareProfessionalBottomNavBar(
+                pestanaActiva = PestanaProfesionalInferior.INICIO,
+                onInicio = {},
+                onSolicitudes = onAbrirSolicitudes,
+                onAgenda = onAbrirAgenda,
+                onPerfil = onAbrirMiPerfil,
             )
         },
     ) { innerPadding ->
@@ -871,44 +872,6 @@ private fun TarjetaCobrosMercadoPago(conectada: Boolean?, onClick: () -> Unit) {
                 modifier = Modifier.size(KineCareSpacing.icono),
             )
         }
-    }
-}
-
-@Composable
-private fun BarraNavegacionInferiorProfesional(
-    onAbrirSolicitudes: () -> Unit,
-    onAbrirAgenda: () -> Unit,
-    onAbrirMiPerfil: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color.White)
-            .padding(vertical = 10.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-    ) {
-        ItemNavegacionInferior(texto = "Inicio", icono = Icons.Filled.Dashboard, activo = true)
-        ItemNavegacionInferior(texto = "Reservas", icono = Icons.Filled.CalendarMonth, activo = false, onClick = onAbrirSolicitudes)
-        ItemNavegacionInferior(texto = "Agenda", icono = Icons.Filled.Schedule, activo = false, onClick = onAbrirAgenda)
-        ItemNavegacionInferior(texto = "Perfil", icono = Icons.Filled.Folder, activo = false, onClick = onAbrirMiPerfil)
-    }
-}
-
-@Composable
-private fun ItemNavegacionInferior(
-    texto: String,
-    icono: ImageVector,
-    activo: Boolean,
-    onClick: (() -> Unit)? = null,
-) {
-    val color = if (activo) LoginPrimarioOscuro else LoginGrisTexto
-    Column(
-        modifier = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Icon(icono, contentDescription = texto, tint = color, modifier = Modifier.size(22.dp))
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(text = texto, style = MaterialTheme.typography.labelSmall, color = color, fontWeight = if (activo) FontWeight.Bold else FontWeight.Normal)
     }
 }
 

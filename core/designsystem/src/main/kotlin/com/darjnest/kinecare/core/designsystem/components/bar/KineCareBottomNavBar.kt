@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -43,6 +44,8 @@ enum class PestanaClienteInferior {
  * del rol Cliente (Explorar, Mis Citas, Favoritos, Mi Perfil). Cada
  * pantalla vive en un modulo `:feature:*` distinto, asi que la navegacion
  * real entre pestanas se resuelve con callbacks hacia el NavHost de `:app`.
+ * Respeta el inset de la barra de navegacion del sistema (gestos): el fondo blanco
+ * se extiende por debajo y los items quedan por encima.
  */
 @Composable
 fun KineCareBottomNavBar(
@@ -57,6 +60,7 @@ fun KineCareBottomNavBar(
         modifier = modifier
             .fillMaxWidth()
             .background(Color.White)
+            .navigationBarsPadding()
             .padding(vertical = 10.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
     ) {
@@ -88,7 +92,7 @@ fun KineCareBottomNavBar(
 }
 
 @Composable
-private fun ItemNavegacionInferior(
+internal fun ItemNavegacionInferior(
     texto: String,
     icono: ImageVector,
     activo: Boolean,
