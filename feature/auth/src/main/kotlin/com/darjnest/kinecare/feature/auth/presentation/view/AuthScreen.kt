@@ -33,7 +33,6 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.SelfImprovement
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -93,7 +92,6 @@ import com.darjnest.kinecare.core.designsystem.theme.LoginFondo
 import com.darjnest.kinecare.core.designsystem.theme.LoginGrisClaro
 import com.darjnest.kinecare.core.designsystem.theme.LoginGrisTexto
 import com.darjnest.kinecare.core.designsystem.theme.LoginMenta
-import com.darjnest.kinecare.core.designsystem.theme.LoginMentaSuave
 import com.darjnest.kinecare.core.designsystem.theme.LoginPrimario
 import com.darjnest.kinecare.core.designsystem.theme.LoginPrimarioOscuro
 import com.darjnest.kinecare.core.designsystem.theme.LoginSecundario
@@ -219,9 +217,6 @@ private fun FormularioAuthContenido(
         )
 
         if (state.modo == ModoAuth.REGISTRO) {
-            Spacer(modifier = Modifier.height(20.dp))
-            BannerLey20584()
-
             Spacer(modifier = Modifier.height(16.dp))
             FooterRegistro(state = state, onAction = onAction)
         } else {
@@ -323,9 +318,6 @@ private fun FormularioCompletarPerfilGoogle(
             aceptado = state.aceptaTerminos,
             onCambiar = { onAction(AuthAction.CambiarAceptaTerminos(it)) },
         )
-
-        Spacer(modifier = Modifier.height(20.dp))
-        BannerLey20584()
 
         Spacer(modifier = Modifier.height(20.dp))
         if (state.cargando) {
@@ -914,26 +906,6 @@ private fun BotonGoogle(modo: ModoAuth, habilitado: Boolean, onClick: () -> Unit
         Text(
             text = if (modo == ModoAuth.LOGIN) "Continuar con Google" else "Registrarme con Google",
             fontWeight = FontWeight.Medium,
-        )
-    }
-}
-
-@Composable
-private fun BannerLey20584() {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(LoginMentaSuave)
-            .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(Icons.Filled.Shield, contentDescription = null, tint = LoginPrimarioOscuro, modifier = Modifier.size(18.dp))
-        Spacer(modifier = Modifier.width(10.dp))
-        Text(
-            text = "Datos clínicos protegidos bajo Ley 20.584 de Derechos y Deberes del Paciente.",
-            style = MaterialTheme.typography.bodySmall,
-            color = LoginPrimarioOscuro,
         )
     }
 }
