@@ -4,7 +4,7 @@ import { COLECCION_SOLICITUDES_VERIFICACION, ESQUEMA_APP } from "../constantes.j
 import type { RespuestaHttp } from "../conectarMercadoPago.js";
 import { ID_SEGURO, esObjeto } from "../validacion.js";
 import { aplicarDecision } from "./aplicar.js";
-import { firmaDiditValida } from "./firmaDidit.js";
+import { evaluarFirmaDidit } from "./firmaDidit.js";
 import type { ProveedorVerificacion } from "./proveedor.js";
 
 export interface PeticionWebhookDidit {
@@ -42,21 +42,27 @@ export async function webhookDiditHandler(
   peticion: PeticionWebhookDidit,
   ahora: Date,
 ): Promise<RespuestaHttp> {
-  const valida = firmaDiditValida({
+  const xTimestamp = cabecera(peticion.headers, "x-timestamp");
+  const resultadoFirma = evaluarFirmaDidit({
     rawBody: peticion.rawBody,
     xSignature: cabecera(peticion.headers, "x-signature"),
     xSignatureV2: cabecera(peticion.headers, "x-signature-v2"),
-    xTimestamp: cabecera(peticion.headers, "x-timestamp"),
+    xTimestamp,
     secreto,
     ahora,
   });
-  if (!valida || peticion.rawBody === undefined) {
-    // Diagnostico sin datos sensibles: que cabeceras llegaron y si hay un secreto cargado (nunca su valor ni su largo).
+  if (resultadoFirma !== "VALIDA" || peticion.rawBody === undefined) {
+    // Diagnostico sin datos sensibles: que cabeceras llegaron y si hay un secreto cargado (nunca su valor ni su largo), y el motivo del rechazo.
     logger.warn("Didit: firma de webhook invalida", {
       tieneFirma: cabecera(peticion.headers, "x-signature") !== undefined,
       tieneFirmaV2: cabecera(peticion.headers, "x-signature-v2") !== undefined,
       tieneTimestamp: cabecera(peticion.headers, "x-timestamp") !== undefined,
       secretoConfigurado: secreto !== "",
+      motivo: resultadoFirma,
+      // Desfase del reloj en segundos (solo si X-Timestamp es un entero valido): distingue un reloj o un
+      // formato distinto (ms vs s) de un secreto o una canonizacion incorrectos.
+      desfaseSegundos: xTimestamp !== undefined && /^\d{1,15}$/.test(xTimestamp.trim()) ? Math.round(ahora.getTime() / 1000 - Number(xTimestamp.trim())) : null,
+      largoCuerpo: peticion.rawBody === undefined ? null : peticion.rawBody.length,
     });
     return { status: 401 };
   }

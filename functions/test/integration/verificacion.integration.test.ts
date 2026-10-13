@@ -221,6 +221,55 @@ describe("solicitarVerificacion: exito", () => {
   });
 });
 
+describe("solicitarVerificacion: limite de intentos", () => {
+  const hace = (horas: number) => Timestamp.fromDate(new Date(AHORA.getTime() - horas * 3600_000));
+  const rechazada = (id: string, horas: number, profesionalId = PRO) =>
+    sembrarSolicitud(id, { estado: "RECHAZADO", estadoProveedor: "Declined", fechaSolicitud: hace(horas) }, profesionalId);
+
+  it("con 3 intentos ya resueltos en 24 h -> LIMITE_DE_INTENTOS, sin gastar una sesion del proveedor", async () => {
+    await rechazada("s1", 1);
+    await rechazada("s2", 5);
+    await rechazada("s3", 20);
+    await esperarError(() => solicitar(), "resource-exhausted", "LIMITE_DE_INTENTOS");
+    assert.equal((await db.collection("solicitudesVerificacion").get()).size, 3);
+    assert.equal(proveedor.sesionesCreadas.length, 0);
+  });
+
+  it("con 2 intentos resueltos todavia se puede reintentar", async () => {
+    await rechazada("s1", 1);
+    await rechazada("s2", 5);
+    const r = await solicitar();
+    assert.equal(r.estado, "PENDIENTE");
+  });
+
+  it("los intentos de hace mas de 24 h no cuentan", async () => {
+    await rechazada("s1", 25);
+    await rechazada("s2", 30);
+    await rechazada("s3", 48);
+    const r = await solicitar();
+    assert.equal(r.estado, "PENDIENTE");
+  });
+
+  it("los intentos de otro profesional no cuentan", async () => {
+    await rechazada("s1", 1, OTRO_PRO);
+    await rechazada("s2", 2, OTRO_PRO);
+    await rechazada("s3", 3, OTRO_PRO);
+    const r = await solicitar();
+    assert.equal(r.estado, "PENDIENTE");
+  });
+
+  it("con 6 solicitudes en 24 h (aunque queden pendientes) tambien se bloquea", async () => {
+    for (let i = 0; i < 6; i++) await sembrarSolicitud(`p${i}`, { fechaSolicitud: hace(i + 1) });
+    await esperarError(() => solicitar(), "resource-exhausted", "LIMITE_DE_INTENTOS");
+  });
+
+  it("5 solicitudes pendientes todavia permiten retomar la verificacion", async () => {
+    for (let i = 0; i < 5; i++) await sembrarSolicitud(`p${i}`, { fechaSolicitud: hace(i + 1) });
+    const r = await solicitar();
+    assert.equal(r.estado, "PENDIENTE");
+  });
+});
+
 describe("estadoVerificacion", () => {
   it("sin sesion -> SIN_SESION; cuerpo que no es objeto -> DATOS_INVALIDOS; id con barra -> DATOS_INVALIDOS", async () => {
     await esperarError(() => consultar({}, null), "unauthenticated", "SIN_SESION");

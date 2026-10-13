@@ -83,3 +83,13 @@ export const SUBCOLECCION_DISPOSITIVOS = "dispositivos";
 
 /** Ventana maxima que puede pedir obtenerCuposOcupados. */
 export const VENTANA_MAXIMA_CUPOS_DIAS = 15;
+
+/**
+ * Limite de frecuencia de `solicitarVerificacion` por profesional. Cada sesion nueva tras un
+ * rechazo/expiracion/abandono puede gastar creditos del proveedor, asi que en la ventana se permiten
+ * pocos intentos ya resueltos, y un tope mas alto de sesiones en total (cubre abrir sesiones nuevas
+ * mientras otra queda `In Review`, que Didit ya no devuelve como la misma).
+ */
+export const VERIFICACION_VENTANA_HORAS = 24;
+export const VERIFICACION_MAX_INTENTOS_RESUELTOS = 3;
+export const VERIFICACION_MAX_SOLICITUDES = 6;

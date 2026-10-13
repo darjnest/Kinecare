@@ -36,6 +36,7 @@ export type Motivo =
   | "YA_VERIFICADO"
   | "PROVEEDOR_NO_CONFIGURADO"
   | "PROVEEDOR_NO_DISPONIBLE"
+  | "LIMITE_DE_INTENTOS"
   | "SOLICITUD_NO_ENCONTRADA";
 
 /** Crea el HttpsError con `details: { motivo }`, el contrato con el cliente. */

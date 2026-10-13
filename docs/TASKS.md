@@ -538,28 +538,38 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       `:feature:verification` y `:core:common`. **No verificado visualmente ni
       contra el backend real** (sin emulador ni dispositivo y sin backend
       desplegado).
-- [ ] **Abrir la cuenta de Didit y configurar QA** (lo hace una persona):
-      crear la app y un workflow de documento + prueba de vida (idealmente solo
-      cédula chilena), crear el destino de webhook v3
-      (`.../webhookDidit`, evento `status.updated`), cargar los secretos
-      `DIDIT_API_KEY` y `DIDIT_WEBHOOK_SECRET`, poner `DIDIT_WORKFLOW_ID` en
-      `functions/.env.qa` y desplegar por nombre
-      (`firebase deploy --only functions:solicitarVerificacion,functions:estadoVerificacion,functions:webhookDidit,functions:retornoVerificacion -P qa`).
-- [ ] **Probar de punta a punta en QA con una cédula real**: lo crítico es ver
-      qué trae `personal_number` en una cédula chilena y qué queda en
-      `rutCoincide` (riesgo de rechazar a profesionales legítimos o de aprobar
-      sin comparar, ver DATA_MODEL.md). También: que `req.rawBody` valide la
-      firma en el runtime real, que el webhook responda en < 5 s, y que el
-      redirect HTTPS → `kinecare://verificacion/resultado` llegue a la app
-      (`onNewIntent`).
+- [x] **Cuenta de Didit y QA configurados (2026-10-13)**: aplicación y workflow
+      "Flujo de cumplimiento" (OCR + prueba de vida) creados, secretos
+      `DIDIT_API_KEY` y `DIDIT_WEBHOOK_SECRET` cargados en `kinecare-cl-qa`,
+      `DIDIT_WORKFLOW_ID` y `MP_APP_ID` en `functions/.env.qa` (ignorado por git),
+      y las 4 funciones desplegadas. Costo real: **US$0,25 por verificación**
+      (OCR 0,15 + prueba de vida 0,10) tras 500 gratis al mes.
+- [x] **Probado de punta a punta en QA con una cédula real (2026-10-13, teléfono
+      Android)**: sesión creada por `solicitarVerificacion`, flujo de Didit
+      completo, `APROBADO` con `rutCoincide: true` (el `personal_number` de la
+      cédula chilena sí trae el RUN) e insignia pública `APROBADO`. El deep link
+      de retorno funcionó. En el emulador no se puede (sin cámara). Pendiente de
+      esa prueba: comprobar `onNewIntent` con la app ya abierta y el webhook con
+      una sesión real aprobada (solo se validó la firma con "Probar Webhook").
+- [ ] **Rotar las claves de Didit expuestas durante las pruebas** y cargar la
+      definitiva en `DIDIT_API_KEY`: la clave "Principal" quedó "en rotación" y la
+      anterior dejará de servir. Después `firebase deploy --only
+      functions:solicitarVerificacion,functions:estadoVerificacion,functions:webhookDidit -P qa`.
+- [ ] Anti-replay del webhook: hoy usa la cabecera `X-Timestamp` (no firmada);
+      Didit recomienda el campo `timestamp` del cuerpo, que sí va firmado. Riesgo
+      bajo (el backend relee la decisión a Didit y deduplica por `event_id`).
 - [ ] Decidir y construir qué pasa con las demás insignias (`CREDENCIALES`,
       `AUTENTICIDAD`, `HISTORIAL`): hoy solo se soporta `IDENTIDAD`. Las
       credenciales dependen de Storage (bucket de QA sin crear) y de una
       revisión manual o contra el RNPI que no tiene herramienta.
-- [ ] Límite de frecuencia por profesional al pedir verificaciones (cada sesión
-      nueva tras un rechazo gasta créditos de Didit) y revisión manual cuando
-      Didit deja una sesión en `In Review` (hoy queda `PENDIENTE` sin que
-      nadie la resuelva desde KineCare).
+- [x] Límite de frecuencia por profesional al pedir verificaciones
+      (`solicitarVerificacion`, motivo `LIMITE_DE_INTENTOS`, `resource-exhausted`):
+      máximo 3 intentos ya resueltos o 6 solicitudes en total en 24 h, medido
+      sobre `solicitudesVerificacion` sin índice compuesto. Constantes en
+      `functions/src/constantes.ts`. Android muestra mensaje propio. Tests de
+      integración nuevos (432 con `npm run test:emulator`). Sin desplegar.
+- [ ] Revisión manual cuando Didit deja una sesión en `In Review` (hoy queda
+      `PENDIENTE` sin que nadie la resuelva desde KineCare).
 
 ## Fase 7 — Panel profesional
 - [x] `:feature:professional-panel`: dashboard/home fiel al mockup; resumen
