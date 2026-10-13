@@ -175,6 +175,13 @@ casi todo esto:
       no hay un solo test de Compose UI. Cubrir al menos reserva y pago, que son
       los flujos críticos. Los tests de ViewModel/repositorio sí están bien,
       pero `:core:common`, `:core:designsystem` y `:core:database` casi no tienen.
+- [ ] **Reglas: separar datos privados de `usuarios`** (hallazgo de la auditoría
+      del 2026-10-12): hoy cualquier usuario autenticado puede listar y leer
+      `rut`, `email`, `correoContacto` y `telefono` de todos. Pasar a un doc
+      público mínimo (`nombre`, `fotoUrl`) + privado, y mover el chequeo de RUT
+      duplicado a una Cloud Function o doc índice. Tocan además: tope de
+      `servicios` por profesional. (Inmutables `rut`/`email`/`rnpi`, `fotoUrl` y
+      lista cerrada de `profesionales`: hechos en el PR de reglas.)
 - [ ] **Revisión de seguridad**: pasar `firebase-security-rules-auditor` sobre
       `firestore.rules` / `storage.rules` (las reglas crecieron mucho) y la skill
       `security-review` sobre la app.

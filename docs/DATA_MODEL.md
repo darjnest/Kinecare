@@ -23,6 +23,12 @@ fotoUrl: string?     // URL de descarga (con token) de la foto de perfil en Stor
                      // al final para que Coil no cachee la anterior; nula = la UI muestra iniciales
 fechaRegistro: timestamp
 ```
+**Security Rules.** Lectura: cualquier usuario autenticado (pendiente de
+separar los datos privados `rut`/`email`/`telefono` de los públicos). `update`
+del dueño: `rut`, `email`, `fechaRegistro` y `rol` son inmutables, y `fotoUrl`
+solo puede ser nula, la URL de descarga de la propia foto en Storage
+(`clientes|profesionales/{uid}/foto-perfil.jpg`) o una foto de Google (el
+bucket no se fija en la regla). Misma validación de `fotoUrl` al crear.
 
 #### Subcolección `usuarios/{uid}/dispositivos/{token}`
 ```
@@ -98,10 +104,13 @@ documentos sin ese campo), por eso el perfil inicial lo escribe en 0.
 queda en `PROFESIONAL` (`getAfter`, por el batch), claves exactamente las
 del perfil inicial, `tiposAtencion` no vacío y dentro del enum, y estado
 inicial obligatorio (sin insignias, `NO_SOLICITADO`, reputación en 0).
-`update`: el dueño no puede tocar `insignias`, `estadoVerificacionGeneral`,
-`calificacionPromedio` ni `totalResenas` (estas dos ordenan la búsqueda);
-si cambia `tiposAtencion` debe quedar válido. Perfiles legados sin
-`tiposAtencion` se pueden seguir actualizando en los demás campos.
+`update`: lista cerrada — el dueño solo edita `tiposAtencion`, `especialidades`,
+`descripcion` y `disponibilidad`. Todo lo demás (`rnpi`, `insignias`,
+`estadoVerificacionGeneral`, `calificacionPromedio`, `totalResenas`,
+`mercadoPagoConectado`, claves nuevas) lo escribe solo el backend; `rnpi` no se
+autodeclara tras registrarse. Si cambia `tiposAtencion` debe quedar válido.
+Perfiles legados sin `tiposAtencion` se pueden seguir actualizando en los demás
+campos permitidos.
 
 Índices compuestos: `tiposAtencion` (array-contains) +
 `calificacionPromedio` (desc) — reemplaza al de `especialidades`, que ya
@@ -293,7 +302,7 @@ clave que cambia, string de 1 a 500 caracteres (`trim()` no vacío), y solo si
 la reseña aún no tenía respuesta (no se edita ni se borra); no toca
 `calificacion`, así que `recalcularCalificacion` no recalcula. `delete` está
 denegado. Validadas contra el Firestore Emulator local (no
-contra el proyecto Firebase real). Las reglas de respuesta y de `dispositivos`
+contra el proyecto Firebase real). Las reglas de respuesta, de `dispositivos`, de `usuarios` y de `profesionales`
 tienen pruebas automáticas (`functions/test/integration/reglas.integration.test.ts`,
 por REST contra el emulador con tokens de Auth sin firmar).
 
