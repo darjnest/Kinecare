@@ -5,6 +5,7 @@ package com.darjnest.kinecare.core.network.firebase.repository
 import com.darjnest.kinecare.core.common.data.error.ProfesionalError
 import com.darjnest.kinecare.core.common.data.repository.ProfesionalRepository
 import com.darjnest.kinecare.core.common.data.repository.UsuarioRepository
+import com.darjnest.kinecare.core.common.domain.model.Coordenada
 import com.darjnest.kinecare.core.common.domain.model.Disponibilidad
 import com.darjnest.kinecare.core.common.domain.model.EstadoVerificacion
 import com.darjnest.kinecare.core.common.domain.model.Insignia
@@ -174,6 +175,7 @@ class ProfesionalRepositoryImpl @Inject constructor(
             }.getOrDefault(EstadoVerificacion.NO_SOLICITADO),
             tiposAtencion = tiposAtencion,
             mercadoPagoConectado = getBoolean("mercadoPagoConectado") ?: false,
+            zonaAproximada = getGeoPoint("ubicacion")?.let { Coordenada(it.latitude, it.longitude).aproximada() },
         )
     }
 

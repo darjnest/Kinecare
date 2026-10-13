@@ -104,7 +104,13 @@ insignias: array<Insignia>           // subdocumento embebido (se lee junto al p
 disponibilidad: array<Disponibilidad>  // { diaSemana: "MONDAY".."SUNDAY", horaInicio: "HH:mm",
                                        //   horaFin: "HH:mm", activo: boolean } — el dueno lo
                                        //   reemplaza completo desde el panel profesional
-ubicacion: geopoint                  // para búsqueda por cercanía
+ubicacion: geopoint                  // ubicación base; alimenta el mapa de la búsqueda. La app SOLO
+                                     // muestra su aproximación (`Coordenada.aproximada()`: centro de
+                                     // una celda de ~1 km), calculada al leer en `ProfesionalRepositoryImpl`.
+                                     // OJO: el dato exacto sigue en este documento, legible por cualquiera
+                                     // (`profesionales` es público). Hoy solo lo escriben seeds/scripts
+                                     // (las reglas no dejan al dueño editarlo); al construir "fijar mi
+                                     // zona" hay que guardar solo la aproximada aquí y la exacta aparte.
 mercadoPagoConectado: boolean?       // true si vinculó su cuenta de Mercado Pago (puede cobrar);
                                      // lo escribe SOLO la Cloud Function del callback OAuth
                                      // (las Security Rules impiden que el dueño lo toque)

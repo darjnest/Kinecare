@@ -8,6 +8,7 @@ import com.darjnest.kinecare.core.common.data.error.ClienteError
 import com.darjnest.kinecare.core.common.data.repository.ClienteRepository
 import com.darjnest.kinecare.core.common.data.repository.ProfesionalRepository
 import com.darjnest.kinecare.core.common.domain.model.Cliente
+import com.darjnest.kinecare.core.common.domain.model.Coordenada
 import com.darjnest.kinecare.core.common.domain.model.EstadoVerificacion
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
 import com.darjnest.kinecare.core.common.domain.model.PerfilPublico
@@ -75,6 +76,7 @@ class SearchViewModelTest {
         verificado: Boolean = true,
         calificacion: Double = 4.5,
         totalResenas: Int = 10,
+        zona: Coordenada? = null,
     ): Profesional = Profesional(
         perfil = PerfilPublico(id = id, nombre = nombre, fotoUrl = null),
         especialidades = especialidades,
@@ -96,7 +98,70 @@ class SearchViewModelTest {
         descripcion = descripcion,
         estadoVerificacionGeneral = if (verificado) EstadoVerificacion.APROBADO else EstadoVerificacion.NO_SOLICITADO,
         tiposAtencion = listOf(TipoAtencion.KINESIOLOGIA),
+        zonaAproximada = zona,
     )
+
+    @Test
+    fun `la zona aproximada del profesional llega al modelo de la tarjeta y de los pines`() = runTest {
+        val zona = Coordenada(-33.455, -70.595)
+        coEvery { profesionalRepository.buscarPorTipoAtencion(TipoAtencion.KINESIOLOGIA) } returns Result.Success(
+            listOf(profesionalDePrueba(id = "con-zona", zona = zona), profesionalDePrueba(id = "sin-zona", nombre = "Beto")),
+        )
+
+        val viewModel = crearViewModel()
+
+        viewModel.state.test {
+            val destacados = awaitItem().profesionalesDestacados.associateBy { it.id }
+            assertEquals(zona, destacados.getValue("con-zona").zona)
+            assertEquals(null, destacados.getValue("sin-zona").zona)
+        }
+    }
+
+    @Test
+    fun `cambiar a la vista de mapa y volver limpia el pin seleccionado`() = runTest {
+        coEvery { profesionalRepository.buscarPorTipoAtencion(TipoAtencion.KINESIOLOGIA) } returns
+            Result.Success(listOf(profesionalDePrueba(id = "p1", zona = Coordenada(-33.455, -70.595))))
+        val viewModel = crearViewModel()
+
+        viewModel.onAction(SearchAction.CambiarVista(VistaBusqueda.MAPA))
+        viewModel.onAction(SearchAction.SeleccionarPin("p1"))
+        assertEquals(VistaBusqueda.MAPA, viewModel.state.value.vista)
+        assertEquals("p1", viewModel.state.value.pinSeleccionadoId)
+
+        viewModel.onAction(SearchAction.CambiarVista(VistaBusqueda.LISTA))
+        assertEquals(VistaBusqueda.LISTA, viewModel.state.value.vista)
+        assertEquals(null, viewModel.state.value.pinSeleccionadoId)
+    }
+
+    @Test
+    fun `solo se puede seleccionar el pin de un profesional que esta en la lista, y tocar el mapa lo quita`() = runTest {
+        coEvery { profesionalRepository.buscarPorTipoAtencion(TipoAtencion.KINESIOLOGIA) } returns
+            Result.Success(listOf(profesionalDePrueba(id = "p1", zona = Coordenada(-33.455, -70.595))))
+        val viewModel = crearViewModel()
+
+        viewModel.onAction(SearchAction.SeleccionarPin("no-existe"))
+        assertEquals(null, viewModel.state.value.pinSeleccionadoId)
+
+        viewModel.onAction(SearchAction.SeleccionarPin("p1"))
+        assertEquals("p1", viewModel.state.value.pinSeleccionadoId)
+        viewModel.onAction(SearchAction.SeleccionarPin(null))
+        assertEquals(null, viewModel.state.value.pinSeleccionadoId)
+    }
+
+    @Test
+    fun `un filtro que saca al profesional de la lista deselecciona su pin`() = runTest {
+        coEvery { profesionalRepository.buscarPorTipoAtencion(TipoAtencion.KINESIOLOGIA) } returns Result.Success(
+            listOf(profesionalDePrueba(id = "p1", nombre = "Ana Soto", zona = Coordenada(-33.455, -70.595))),
+        )
+        val viewModel = crearViewModel()
+        viewModel.onAction(SearchAction.SeleccionarPin("p1"))
+        assertEquals("p1", viewModel.state.value.pinSeleccionadoId)
+
+        viewModel.onAction(SearchAction.CambiarTextoBusqueda("zzz"))
+
+        assertEquals(emptyList<String>(), viewModel.state.value.profesionalesDestacados.map { it.id })
+        assertEquals(null, viewModel.state.value.pinSeleccionadoId)
+    }
 
     @Test
     fun `al inicializar carga profesionales destacados de la especialidad por defecto`() = runTest {

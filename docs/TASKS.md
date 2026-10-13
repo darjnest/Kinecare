@@ -973,6 +973,14 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       boletas del SII y "cumplimiento estricto" de la Ley 20.584, botones sin flujo en
       Documentos, enlaces de Términos/Privacidad que no abren nada, ícono de la app por
       defecto y pluralización ("1 servicios").
+- [x] Mapa en la búsqueda del cliente (2026-10-13): alternancia Lista/Mapa en
+      `:feature:search` con un pin por profesional en su **zona aproximada** (celda de ~1 km,
+      `Coordenada.aproximada()` aplicada en `ProfesionalRepositoryImpl`: la ubicación exacta no
+      llega al dominio ni a la UI), tarjeta del pin tocado y los mismos filtros que la lista.
+      `maps-compose` 8.2.1 (la 8.4+ y la 9.x están compiladas con Kotlin 2.4 y el proyecto usa
+      2.2). La clave del SDK se inyecta desde `MAPS_API_KEY` (local.properties o entorno) vía
+      manifest placeholder; **sin clave la app compila y el mapa muestra un aviso**. **Pendiente:**
+      la clave, ver los pines en un dispositivo y la mitad del profesional (fijar zona y radio).
 - [ ] R8/ProGuard, revisión de seguridad
 - [ ] Publicación en Play Store
 
