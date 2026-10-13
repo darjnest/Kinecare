@@ -182,9 +182,6 @@ Detectados en un moto g56 5G con la app QA (commit `5202886`), cuenta de profesi
       de `:feature:search`; el botón dispara `SearchAction.Buscar`). Revisar si el `ViewModel`
       lo procesa, si falla la consulta a Firestore (reglas/índices, sin resultados) o si no
       navega a la lista de resultados. Reproducir con la app QA y mirar logcat.
-- [ ] **El mapa** pedía la clave de Google Maps en el build compilado desde el worktree
-      (faltaba `MAPS_API_KEY` en `local.properties`). Recompilado con la clave el 2026-10-13;
-      falta confirmar en pantalla que carga.
 
 ### Arquitectura / deuda técnica
 
