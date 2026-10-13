@@ -117,6 +117,24 @@ function aPagoMP(p: {
   };
 }
 
+/**
+ * Codigo y mensaje de error que Mercado Pago devuelve en un 4xx/5xx de /oauth/token
+ * (`invalid_client`, `invalid_grant`, ...), para poder diagnosticar un rechazo. Solo se leen esos dos
+ * campos de texto, acotados: la respuesta de error no lleva tokens y el resto del cuerpo se descarta.
+ */
+async function detalleDeError(respuesta: Response): Promise<string> {
+  try {
+    const cuerpo = (await respuesta.json()) as { error?: unknown; message?: unknown };
+    const partes = [
+      typeof cuerpo.error === "string" ? `error=${cuerpo.error.slice(0, 100)}` : "",
+      typeof cuerpo.message === "string" ? `message=${cuerpo.message.slice(0, 200)}` : "",
+    ].filter(Boolean);
+    return partes.length > 0 ? ` (${partes.join("; ")})` : "";
+  } catch {
+    return "";
+  }
+}
+
 export function crearPasarelaMP(config: ConfigPasarela, ahora: () => Date = () => new Date()): Pasarela {
   const cliente = (accessToken: string) => new MercadoPagoConfig({ accessToken, options: { timeout: 8000 } });
 
@@ -129,7 +147,7 @@ export function crearPasarelaMP(config: ConfigPasarela, ahora: () => Date = () =
       signal: AbortSignal.timeout(8000),
     });
     if (!respuesta.ok) {
-      const mensaje = `/oauth/token respondio ${respuesta.status}`;
+      const mensaje = `/oauth/token respondio ${respuesta.status}${await detalleDeError(respuesta)}`;
       throw respuesta.status === 400 || respuesta.status === 401 ? new TokenRechazadoError(mensaje) : new Error(mensaje);
     }
     return aTokens((await respuesta.json()) as RespuestaToken, ahora());

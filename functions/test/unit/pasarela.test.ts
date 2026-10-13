@@ -100,6 +100,23 @@ describe("OAuth /oauth/token", () => {
     }
   });
 
+  it("al canjear el codigo, el error de Mercado Pago queda en el mensaje que se registra", async () => {
+    responder = () => json({ error: "invalid_client", message: "Invalid client", access_token: "no-debe-salir" }, 400);
+    await assert.rejects(crearPasarelaMP(config, () => AHORA).refrescar("r"), (e: unknown) => {
+      assert.ok(e instanceof TokenRechazadoError);
+      assert.equal(e.message, "/oauth/token respondio 400 (error=invalid_client; message=Invalid client)");
+      return true;
+    });
+  });
+
+  it("si el cuerpo del error no es JSON, el mensaje queda solo con el estado", async () => {
+    responder = () => new Response("<html>", { status: 400 });
+    await assert.rejects(crearPasarelaMP(config, () => AHORA).refrescar("r"), (e: unknown) => {
+      assert.equal((e as Error).message, "/oauth/token respondio 400");
+      return true;
+    });
+  });
+
   it("un 5xx al refrescar es un error comun: NO se confunde con un token rechazado", async () => {
     responder = () => json({}, 503);
     await assert.rejects(crearPasarelaMP(config, () => AHORA).refrescar("r"), (e: unknown) => {

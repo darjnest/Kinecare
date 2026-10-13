@@ -61,12 +61,14 @@ Ordenadas por lo que más bloquea.
       como él; se puede crear una registrándose desde la app con rol
       Profesional). Sin ella no se puede probar en dispositivo aceptar/rechazar,
       completar, cancelar, el dashboard ni "Conectar Mercado Pago".
-- [ ] **Mercado Pago de punta a punta en QA** (la app, los secretos, el webhook y
-      los usuarios de prueba ya están; las 6 funciones están desplegadas). Falta:
-      Conectar con el vendedor de prueba y pagar con el comprador de prueba.
-      `MP_CLIENT_SECRET` es el Access Token de prueba y **no se ha verificado que
-      el OAuth lo acepte**; si lo rechaza hay que activar credenciales de
-      producción de la app (piden una URL de sitio web que KineCare aún no tiene).
+- [ ] **Mercado Pago de punta a punta en QA** — *avance del 2026-10-13:* la conexión del
+      profesional **ya funciona** (`profesionales/{uid}.mercadoPagoConectado = true`). Usa la app de
+      MP `2692451395848168` (`MP_APP_ID` en `functions/.env.qa`, no versionado) con el valor
+      correcto en `MP_CLIENT_SECRET` (versión 5 en QA). La app `2861401160306524` NO sirve: su
+      pantalla de autorización responde "no está preparada para conectarse". `/oauth/token` ahora
+      registra el `error` de MP (cambio sin commitear en `pasarela.ts`). **Falta el pago:** crear
+      servicio y disponibilidad del profesional, reservar como cliente, aceptar y pagar con el
+      comprador de prueba.
 - [ ] **Respaldar la clave privada del interruptor del pinning**
       (`~/.kinecare-secrets/pinning-override-qa.pem`) en la bóveda/gestor de
       contraseñas y publicar una versión con la clave pública embebida (ya está
@@ -161,6 +163,25 @@ casi todo esto:
       panel profesional.
 - [ ] Boletas del SII, "Comprobante" y "Certificado anual" de Liquidaciones
       (avisan "Disponible próximamente").
+
+### Bugs encontrados probando en el celular (2026-10-13)
+
+Detectados en un moto g56 5G con la app QA (commit `5202886`), cuenta de profesional
+`17694550-8`. Sin diagnosticar todavía: hay que reproducirlos y buscar la causa.
+
+- [ ] **Disponibilidad y horarios no muestra las horas**, solo los días laborales. La
+      pantalla (`DisponibilidadYHorariosScreen.kt`, `:feature:professional-panel`) debería
+      mostrar y permitir editar el tramo horario de cada día. Revisar si el modelo/estado
+      trae las horas (`profesionales/{id}.disponibilidad` está vacío en el perfil de prueba)
+      o si es un problema de la UI. Sin horarios un cliente no puede reservar.
+- [ ] **La fotografía del perfil no funciona** (subir/cambiar la foto). Revisar Storage de
+      QA (`storage.rules`, ruta `profesionales/{uid}/...`), permisos de cámara/galería y
+      el guardado de `fotoUrl`. Ya estaba en la lista de pruebas pendientes de la sección 2
+      ("Foto de perfil"); ahora es un fallo confirmado.
+- [ ] **El botón "BUSCAR ATENCIÓN" no funciona** (pantalla de búsqueda, `SearchScreen.kt`
+      de `:feature:search`; el botón dispara `SearchAction.Buscar`). Revisar si el `ViewModel`
+      lo procesa, si falla la consulta a Firestore (reglas/índices, sin resultados) o si no
+      navega a la lista de resultados. Reproducir con la app QA y mirar logcat.
 
 ### Arquitectura / deuda técnica
 
