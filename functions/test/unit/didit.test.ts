@@ -104,8 +104,15 @@ describe("crearSesion (Didit)", () => {
     const fetchFn = (async (_e: unknown, init?: RequestInit) =>
       new Promise<Response>((_res, rej) => init?.signal?.addEventListener("abort", () => rej(init.signal?.reason)))) as typeof fetch;
     const proveedor = crearProveedorDidit({ apiKey: "k", fetchFn, timeoutMs: 20 });
-    assert.equal((await causaDe(proveedor.crearSesion(DATOS))).causa, "TIMEOUT");
-    assert.equal((await causaDe(proveedor.obtenerDecision("s"))).causa, "TIMEOUT");
+    // AbortSignal.timeout usa un timer unref: sin otro handle vivo, el event loop se vacia
+    // mientras la peticion espera y el runner cancela la prueba ("event loop has already resolved").
+    const mantenerVivo = setInterval(() => undefined, 1000);
+    try {
+      assert.equal((await causaDe(proveedor.crearSesion(DATOS))).causa, "TIMEOUT");
+      assert.equal((await causaDe(proveedor.obtenerDecision("s"))).causa, "TIMEOUT");
+    } finally {
+      clearInterval(mantenerVivo);
+    }
   });
 
   it("error de red -> RED", async () => {
