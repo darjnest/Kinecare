@@ -4,6 +4,9 @@ import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.domain.model.TipoAtencion
 import com.darjnest.kinecare.core.common.result.Result
 import com.darjnest.kinecare.feature.auth.domain.AuthError
+import app.cash.turbine.test
+import com.google.android.gms.tasks.OnFailureListener
+import com.google.android.gms.tasks.OnSuccessListener
 import com.google.android.gms.tasks.Task
 import com.google.firebase.auth.AuthResult
 import com.google.firebase.auth.FirebaseAuth
@@ -17,12 +20,15 @@ import com.google.firebase.firestore.WriteBatch
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.just
 import io.mockk.mockkStatic
+import io.mockk.Runs
 import io.mockk.slot
 import io.mockk.unmockkStatic
 import io.mockk.verify
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -269,5 +275,94 @@ class AuthRepositoryImplTest {
 
         assertEquals(AuthError.RUT_YA_REGISTRADO, (resultado as Result.Error).error)
         verify(exactly = 1) { user.delete() }
+    }
+
+    /** `usuarios/{UID}` existente y legible tanto con `await()` (registrar) como con callbacks (listener de sesion). */
+    private fun stubUsuarioLegible(): DocumentSnapshot {
+        val doc = mockk<DocumentSnapshot>(relaxed = true)
+        every { doc.exists() } returns true
+        every { doc.getString("rol") } returns "CLIENTE"
+        every { doc.getTimestamp(any()) } returns null
+        val tarea = mockk<Task<DocumentSnapshot>>()
+        coEvery { tarea.await() } returns doc
+        every { tarea.addOnSuccessListener(any<OnSuccessListener<DocumentSnapshot>>()) } answers {
+            firstArg<OnSuccessListener<DocumentSnapshot>>().onSuccess(doc)
+            tarea
+        }
+        every { tarea.addOnFailureListener(any<OnFailureListener>()) } returns tarea
+        every { usuarioRef.get() } returns tarea
+        return doc
+    }
+
+    @Test
+    fun `una sesion abierta de verdad se emite como usuario autenticado`() = runTest {
+        stubUsuarioLegible()
+        val listener = slot<FirebaseAuth.AuthStateListener>()
+        every { firebaseAuth.addAuthStateListener(capture(listener)) } just Runs
+        every { firebaseAuth.currentUser } returns mockk<FirebaseUser> { every { uid } returns UID }
+
+        repository.observarUsuarioActual().test {
+            listener.captured.onAuthStateChanged(firebaseAuth)
+            assertNotNull(awaitItem())
+        }
+    }
+
+    @Test
+    fun `la sesion transitoria del registro no se emite como usuario autenticado`() = runTest {
+        stubUsuarioLegible()
+        val listener = slot<FirebaseAuth.AuthStateListener>()
+        every { firebaseAuth.addAuthStateListener(capture(listener)) } just Runs
+        val usuarioFirebase = mockk<FirebaseUser> { every { uid } returns UID }
+        every { firebaseAuth.currentUser } returns usuarioFirebase
+        // createUserWithEmailAndPassword deja la sesion abierta y Firebase avisa al listener mientras
+        // `registrar` sigue en curso; la app antes navegaba a Explorar y se quedaba sin sesion.
+        val authResult = mockk<AuthResult> { every { user } returns usuarioFirebase }
+        val creacion = mockk<Task<AuthResult>>()
+        coEvery { creacion.await() } coAnswers {
+            listener.captured.onAuthStateChanged(firebaseAuth)
+            authResult
+        }
+        every { firebaseAuth.createUserWithEmailAndPassword(any(), any()) } returns creacion
+
+        repository.observarUsuarioActual().test {
+            val resultado = repository.registrar(
+                nombre = "Ana Soto",
+                rut = "12.345.678-5",
+                password = "secreta123",
+                rol = RolUsuario.CLIENTE,
+                telefono = "+56911111111",
+                correoContacto = "ana@kinecare.cl",
+                tiposAtencion = emptySet(),
+            )
+
+            assertTrue(resultado is Result.Success)
+            expectNoEvents()
+        }
+        verify(exactly = 1) { firebaseAuth.signOut() }
+    }
+
+    @Test
+    fun `la lectura del usuario que termina despues de cerrar la sesion no se emite`() = runTest {
+        val doc = mockk<DocumentSnapshot>(relaxed = true)
+        every { doc.exists() } returns true
+        every { doc.getString("rol") } returns "CLIENTE"
+        every { doc.getTimestamp(any()) } returns null
+        val exito = slot<OnSuccessListener<DocumentSnapshot>>()
+        val tarea = mockk<Task<DocumentSnapshot>>()
+        every { tarea.addOnSuccessListener(capture(exito)) } returns tarea
+        every { tarea.addOnFailureListener(any<OnFailureListener>()) } returns tarea
+        every { usuarioRef.get() } returns tarea
+        val listener = slot<FirebaseAuth.AuthStateListener>()
+        every { firebaseAuth.addAuthStateListener(capture(listener)) } just Runs
+        every { firebaseAuth.currentUser } returns mockk<FirebaseUser> { every { uid } returns UID }
+
+        repository.observarUsuarioActual().test {
+            listener.captured.onAuthStateChanged(firebaseAuth)
+            // La sesion se cierra antes de que llegue la lectura de usuarios/{uid}.
+            every { firebaseAuth.currentUser } returns null
+            exito.captured.onSuccess(doc)
+
+            expectNoEvents()
+        }
     }
 }

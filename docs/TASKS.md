@@ -985,6 +985,13 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       encuadre ignora a un profesional lejano (grupo principal por mediana, `puntosParaEncuadrar`)
       y deja visible el logo de Google bajo la tarjeta. **Pendiente:** claves de release/producción y
       del CI, y la mitad del profesional (fijar zona y radio).
+- [x] Registro sin sesión fantasma (2026-10-13, hallado al revisar el mapa en el emulador):
+      `registrar` deja la sesión abierta un instante (`createUserWithEmailAndPassword`) antes de
+      cerrarla, y el listener de `observarUsuarioActual` la tomaba por un inicio de sesión: la app
+      navegaba a Explorar y se quedaba sin sesión (Firestore rechazaba todo con
+      `PERMISSION_DENIED`, "Mi Perfil" mostraba el nombre genérico). Ahora el listener ignora la
+      sesión transitoria del registro y descarta una lectura de `usuarios/{uid}` que termina
+      después de cerrar la sesión. 2 tests de regresión (fallan sin el arreglo).
 - [ ] R8/ProGuard, revisión de seguridad
 - [ ] Publicación en Play Store
 
