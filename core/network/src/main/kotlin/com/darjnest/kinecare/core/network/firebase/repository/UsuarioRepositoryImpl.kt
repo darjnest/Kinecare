@@ -4,6 +4,7 @@ package com.darjnest.kinecare.core.network.firebase.repository
 
 import com.darjnest.kinecare.core.common.data.error.UsuarioError
 import com.darjnest.kinecare.core.common.data.repository.UsuarioRepository
+import com.darjnest.kinecare.core.common.domain.model.PerfilPublico
 import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.domain.model.Usuario
 import com.darjnest.kinecare.core.common.result.Result
@@ -16,9 +17,13 @@ import javax.inject.Inject
 import kotlin.time.Clock
 
 private const val COLECCION_USUARIOS = "usuarios"
+private const val COLECCION_PERFILES_PUBLICOS = "perfilesPublicos"
 
 /**
- * Implementacion Firestore de `usuarios/{usuarioId}` (docs/DATA_MODEL.md).
+ * Implementacion Firestore de `usuarios/{usuarioId}` (privado) y de
+ * `perfilesPublicos/{usuarioId}` (nombre y foto, legibles por todos;
+ * docs/DATA_MODEL.md). Toda escritura de nombre o foto toca ambos en un
+ * batch para que no diverjan.
  * Vive en `:core:network` (no en la feature que la consume) porque mas de
  * una feature necesita el mismo documento — ver el comentario de
  * `UsuarioRepository` en `:core:common`.
@@ -39,6 +44,18 @@ class UsuarioRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun obtenerPerfilPublico(id: String): Result<PerfilPublico, UsuarioError> {
+        return try {
+            val doc = firestore.collection(COLECCION_PERFILES_PUBLICOS).document(id).get().await()
+            if (!doc.exists()) return Result.Error(UsuarioError.NO_ENCONTRADO)
+            Result.Success(PerfilPublico(id = id, nombre = doc.getString("nombre") ?: "", fotoUrl = doc.getString("fotoUrl")))
+        } catch (e: FirebaseNetworkException) {
+            Result.Error(UsuarioError.SIN_INTERNET)
+        } catch (e: Exception) {
+            Result.Error(UsuarioError.DESCONOCIDO)
+        }
+    }
+
     override suspend fun actualizarDatosPersonales(
         id: String,
         nombre: String,
@@ -46,15 +63,17 @@ class UsuarioRepositoryImpl @Inject constructor(
         correoContacto: String?,
     ): Result<Unit, UsuarioError> {
         return try {
-            firestore.collection(COLECCION_USUARIOS).document(id)
-                .update(
-                    mapOf(
-                        "nombre" to nombre,
-                        "telefono" to telefono,
-                        "correoContacto" to correoContacto,
-                    ),
-                )
-                .await()
+            val batch = firestore.batch()
+            batch.update(
+                firestore.collection(COLECCION_USUARIOS).document(id),
+                mapOf(
+                    "nombre" to nombre,
+                    "telefono" to telefono,
+                    "correoContacto" to correoContacto,
+                ),
+            )
+            batch.update(firestore.collection(COLECCION_PERFILES_PUBLICOS).document(id), mapOf("nombre" to nombre))
+            batch.commit().await()
             Result.Success(Unit)
         } catch (e: FirebaseNetworkException) {
             Result.Error(UsuarioError.SIN_INTERNET)
@@ -65,9 +84,10 @@ class UsuarioRepositoryImpl @Inject constructor(
 
     override suspend fun actualizarFotoUrl(id: String, fotoUrl: String?): Result<Unit, UsuarioError> {
         return try {
-            firestore.collection(COLECCION_USUARIOS).document(id)
-                .update(mapOf("fotoUrl" to fotoUrl))
-                .await()
+            val batch = firestore.batch()
+            batch.update(firestore.collection(COLECCION_USUARIOS).document(id), mapOf("fotoUrl" to fotoUrl))
+            batch.update(firestore.collection(COLECCION_PERFILES_PUBLICOS).document(id), mapOf("fotoUrl" to fotoUrl))
+            batch.commit().await()
             Result.Success(Unit)
         } catch (e: FirebaseNetworkException) {
             Result.Error(UsuarioError.SIN_INTERNET)

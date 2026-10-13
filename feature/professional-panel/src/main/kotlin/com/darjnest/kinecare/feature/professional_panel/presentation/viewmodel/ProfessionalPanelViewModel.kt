@@ -324,7 +324,7 @@ class ProfessionalPanelViewModel @Inject constructor(
             if (resultado is Result.Success) servicios = resultado.data.associate { it.id to it.nombre }
         }
         if (proxima.clienteId !in pacientes) {
-            val resultado = usuarioRepository.obtenerPorId(proxima.clienteId)
+            val resultado = usuarioRepository.obtenerPerfilPublico(proxima.clienteId)
             if (resultado is Result.Success) pacientes[proxima.clienteId] = resultado.data.nombre
         }
     }
@@ -358,7 +358,7 @@ class ProfessionalPanelViewModel @Inject constructor(
         }
 
         return estado.copy(
-            nombreProfesional = perfil?.usuario?.nombre?.trim()?.substringBefore(' ').orEmpty(),
+            nombreProfesional = perfil?.perfil?.nombre?.trim()?.substringBefore(' ').orEmpty(),
             verificacion = perfil?.aVerificacionPanel(),
             mercadoPagoConectado = perfil?.mercadoPagoConectado,
             resumenHoy = resumen,

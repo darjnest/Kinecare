@@ -11,6 +11,7 @@ import com.darjnest.kinecare.core.common.domain.model.Cliente
 import com.darjnest.kinecare.core.common.domain.model.EstadoVerificacion
 import com.darjnest.kinecare.core.common.domain.model.Insignia
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
+import com.darjnest.kinecare.core.common.domain.model.PerfilPublico
 import com.darjnest.kinecare.core.common.domain.model.Profesional
 import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.domain.model.Servicio
@@ -80,17 +81,7 @@ class FavoritosViewModelTest {
         credencialesVerificadas: Boolean = false,
         verificacionGeneral: EstadoVerificacion = EstadoVerificacion.APROBADO,
     ): Profesional = Profesional(
-        usuario = Usuario(
-            id = id,
-            nombre = nombre,
-            rut = "9876543-2",
-            email = "$id@kinecare.cl",
-            correoContacto = null,
-            telefono = null,
-            rol = RolUsuario.PROFESIONAL,
-            fotoUrl = null,
-            fechaRegistro = Instant.fromEpochMilliseconds(0),
-        ),
+        perfil = PerfilPublico(id = id, nombre = nombre, fotoUrl = null),
         especialidades = listOf("KINESIOLOGIA"),
         rnpi = "RNPI-$id",
         servicios = precios.mapIndexed { index, precio ->

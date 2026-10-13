@@ -8,9 +8,8 @@ import com.darjnest.kinecare.core.common.data.error.ResenaError
 import com.darjnest.kinecare.core.common.data.error.UsuarioError
 import com.darjnest.kinecare.core.common.data.repository.ResenaRepository
 import com.darjnest.kinecare.core.common.data.repository.UsuarioRepository
+import com.darjnest.kinecare.core.common.domain.model.PerfilPublico
 import com.darjnest.kinecare.core.common.domain.model.Resena
-import com.darjnest.kinecare.core.common.domain.model.RolUsuario
-import com.darjnest.kinecare.core.common.domain.model.Usuario
 import com.darjnest.kinecare.core.common.result.Result
 import com.darjnest.kinecare.feature.reviews.presentation.navigation.ARG_PROFESIONAL_ID
 import io.mockk.coEvery
@@ -75,20 +74,8 @@ class ReviewsViewModelTest {
         respuestaProfesional = respuesta,
     )
 
-    private fun usuario(id: String, nombre: String) = Usuario(
-        id = id,
-        nombre = nombre,
-        rut = "12345678-5",
-        email = "$id@kinecare.cl",
-        correoContacto = null,
-        telefono = "+56911111111",
-        rol = RolUsuario.CLIENTE,
-        fotoUrl = null,
-        fechaRegistro = Instant.fromEpochMilliseconds(0),
-    )
-
     private fun stubUsuario(id: String, nombre: String) {
-        coEvery { usuarioRepository.obtenerPorId(id) } returns Result.Success(usuario(id, nombre))
+        coEvery { usuarioRepository.obtenerPerfilPublico(id) } returns Result.Success(PerfilPublico(id, nombre, null))
     }
 
     @Test
@@ -155,7 +142,7 @@ class ReviewsViewModelTest {
         assertNull(state.error)
         assertNull(state.resumen)
         assertTrue(state.resenas.isEmpty())
-        coVerify(exactly = 0) { usuarioRepository.obtenerPorId(any()) }
+        coVerify(exactly = 0) { usuarioRepository.obtenerPerfilPublico(any()) }
     }
 
     @Test
@@ -173,8 +160,8 @@ class ReviewsViewModelTest {
         val autores = crearViewModel().state.value.resenas.map { it.autor }
 
         assertEquals(listOf("Ana S.", "Luis V.", "Ana S."), autores)
-        coVerify(exactly = 1) { usuarioRepository.obtenerPorId("cli-1") }
-        coVerify(exactly = 1) { usuarioRepository.obtenerPorId("cli-2") }
+        coVerify(exactly = 1) { usuarioRepository.obtenerPerfilPublico("cli-1") }
+        coVerify(exactly = 1) { usuarioRepository.obtenerPerfilPublico("cli-2") }
     }
 
     @Test
@@ -182,7 +169,7 @@ class ReviewsViewModelTest {
         coEvery { resenaRepository.obtenerPorProfesional(profesionalId) } returns Result.Success(
             listOf(resena("r1", clienteId = "cli-1"), resena("r2", clienteId = "cli-2")),
         )
-        coEvery { usuarioRepository.obtenerPorId("cli-1") } returns Result.Error(UsuarioError.NO_ENCONTRADO)
+        coEvery { usuarioRepository.obtenerPerfilPublico("cli-1") } returns Result.Error(UsuarioError.NO_ENCONTRADO)
         stubUsuario("cli-2", "Luis Vera")
 
         val state = crearViewModel().state.value
@@ -273,14 +260,14 @@ class ReviewsViewModelTest {
         viewModel.onAction(ReviewsAction.Reintentar)
 
         assertEquals("Ana S.", viewModel.state.value.resenas.single().autor)
-        coVerify(exactly = 1) { usuarioRepository.obtenerPorId("cli-1") }
+        coVerify(exactly = 1) { usuarioRepository.obtenerPerfilPublico("cli-1") }
     }
 
     @Test
     fun `al reintentar se vuelven a pedir los autores que fallaron`() = runTest {
         coEvery { resenaRepository.obtenerPorProfesional(profesionalId) } returns
             Result.Success(listOf(resena("r1")))
-        coEvery { usuarioRepository.obtenerPorId("cli-1") } returns Result.Error(UsuarioError.SIN_INTERNET)
+        coEvery { usuarioRepository.obtenerPerfilPublico("cli-1") } returns Result.Error(UsuarioError.SIN_INTERNET)
         val viewModel = crearViewModel()
         assertEquals("Cliente", viewModel.state.value.resenas.single().autor)
 

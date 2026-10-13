@@ -20,6 +20,7 @@ import com.google.firebase.auth.FirebaseAuthWeakPasswordException
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -29,6 +30,8 @@ import javax.inject.Inject
 import kotlin.time.Clock
 
 private const val COLECCION_USUARIOS = "usuarios"
+private const val COLECCION_PERFILES_PUBLICOS = "perfilesPublicos"
+private const val COLECCION_RUTS_REGISTRADOS = "rutsRegistrados"
 private const val COLECCION_PROFESIONALES = "profesionales"
 private const val COLECCION_CLIENTES = "clientes"
 
@@ -77,7 +80,16 @@ class AuthRepositoryImpl @Inject constructor(
                 "fotoUrl" to null,
                 "fechaRegistro" to FieldValue.serverTimestamp(),
             )
-            crearDocumentosDeCuenta(uid, datosUsuario, rol, tiposAtencion)
+            try {
+                crearDocumentosDeCuenta(uid, rutNormalizado, datosUsuario, rol, tiposAtencion)
+            } catch (e: FirebaseFirestoreException) {
+                if (e.code != FirebaseFirestoreException.Code.PERMISSION_DENIED) throw e
+                // El RUT ya lo reclamo otra cuenta (p. ej. una de Google): se deshace la cuenta de Auth
+                // recien creada para no dejarla huerfana, sin usuario ni perfil.
+                runCatching { resultado.user?.delete()?.await() }
+                firebaseAuth.signOut()
+                return Result.Error(AuthError.RUT_YA_REGISTRADO)
+            }
 
             val usuarioCreado = obtenerUsuario(uid)
             // createUserWithEmailAndPassword deja la sesión iniciada automáticamente;
@@ -134,13 +146,6 @@ class AuthRepositoryImpl @Inject constructor(
     ): Result<Usuario, AuthError> {
         return try {
             val rutNormalizado = RutUtils.normalizar(rut)
-            val rutEnUso = firestore.collection(COLECCION_USUARIOS)
-                .whereEqualTo("rut", rutNormalizado)
-                .limit(1)
-                .get()
-                .await()
-            if (!rutEnUso.isEmpty) return Result.Error(AuthError.RUT_YA_REGISTRADO)
-
             val datosUsuario = mapOf(
                 "nombre" to nombre,
                 "rut" to rutNormalizado,
@@ -151,8 +156,16 @@ class AuthRepositoryImpl @Inject constructor(
                 "fotoUrl" to fotoUrl,
                 "fechaRegistro" to FieldValue.serverTimestamp(),
             )
-            crearDocumentosDeCuenta(uid, datosUsuario, rol, tiposAtencion)
+            // La unicidad del RUT ya no se consulta en `usuarios` (privado): reclamar
+            // `rutsRegistrados/{rut}` en el batch falla con PERMISSION_DENIED si otra cuenta lo tiene.
+            crearDocumentosDeCuenta(uid, rutNormalizado, datosUsuario, rol, tiposAtencion)
             obtenerUsuario(uid)
+        } catch (e: FirebaseFirestoreException) {
+            if (e.code == FirebaseFirestoreException.Code.PERMISSION_DENIED) {
+                Result.Error(AuthError.RUT_YA_REGISTRADO)
+            } else {
+                Result.Error(AuthError.DESCONOCIDO)
+            }
         } catch (e: FirebaseNetworkException) {
             Result.Error(AuthError.SIN_INTERNET)
         } catch (e: Exception) {
@@ -180,7 +193,9 @@ class AuthRepositoryImpl @Inject constructor(
     }
 
     /**
-     * Escribe `usuarios/{uid}` y, para un Profesional, `profesionales/{uid}`
+     * Escribe `rutsRegistrados/{rut}` (reclama el RUT: si ya existe el batch completo falla),
+     * `usuarios/{uid}` (privado), `perfilesPublicos/{uid}` (nombre y foto, lo unico que ven los
+     * demas) y, para un Profesional, `profesionales/{uid}`
      * en un solo batch: si el perfil profesional fallara por separado
      * quedaria una cuenta PROFESIONAL sin documento, invisible en la
      * busqueda y sin donde guardar disponibilidad ni biografia. Para un
@@ -189,12 +204,18 @@ class AuthRepositoryImpl @Inject constructor(
      */
     private suspend fun crearDocumentosDeCuenta(
         uid: String,
+        rutNormalizado: String,
         datosUsuario: Map<String, Any?>,
         rol: RolUsuario,
         tiposAtencion: Set<TipoAtencion>,
     ) {
         val batch = firestore.batch()
+        batch.set(firestore.collection(COLECCION_RUTS_REGISTRADOS).document(rutNormalizado), mapOf("uid" to uid))
         batch.set(firestore.collection(COLECCION_USUARIOS).document(uid), datosUsuario)
+        batch.set(
+            firestore.collection(COLECCION_PERFILES_PUBLICOS).document(uid),
+            mapOf("nombre" to datosUsuario["nombre"], "fotoUrl" to datosUsuario["fotoUrl"]),
+        )
         if (rol == RolUsuario.PROFESIONAL) {
             batch.set(
                 firestore.collection(COLECCION_PROFESIONALES).document(uid),

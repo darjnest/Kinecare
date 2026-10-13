@@ -32,8 +32,16 @@ obligatorio y único como identificador de negocio (verificación,
 facturación) aunque la cuenta se haya creado con Google: si
 `GoogleAuthProvider` autentica un `uid` que todavía no tiene documento en
 `usuarios/{uid}`, la UI pide RUT, teléfono y rol antes de crearlo
-(`AuthRepository.completarRegistroGoogle`), validando que el RUT no esté
-ya en uso por otra cuenta.
+(`AuthRepository.completarRegistroGoogle`). La unicidad del RUT la garantiza
+el índice `rutsRegistrados/{rut}`, que se reclama en el mismo batch que crea la
+cuenta: si ya está tomado, el registro falla con `RUT_YA_REGISTRADO`.
+
+### PerfilPublico
+Lo único que la app muestra de **otra** persona: `id`, `nombre`, `fotoUrl`
+(`perfilesPublicos/{id}`, ver [DATA_MODEL.md](DATA_MODEL.md)). `Usuario` es
+privado de su dueño (rut, correo, teléfono): `UsuarioRepository.obtenerPorId`
+solo se usa con el uid del usuario autenticado, y para cualquier otro id se usa
+`obtenerPerfilPublico`.
 
 ### Cliente
 Extiende `Usuario`. Datos propios del rol cliente.
@@ -42,7 +50,9 @@ Extiende `Usuario`. Datos propios del rol cliente.
 - `favoritos: List<String>` (ids de `Profesional`)
 
 ### Profesional
-Extiende `Usuario`. Es la entidad más rica del dominio.
+Es la entidad más rica del dominio. Su identidad visible es un `perfil:
+PerfilPublico` (nombre y foto), **no** el `Usuario` completo: el rut, el correo
+y el teléfono de un profesional son privados y un cliente no debe poder leerlos.
 - `tiposAtencion: List<TipoAtencion>` (`KINESIOLOGIA`, `MASOTERAPIA`):
   disciplinas que ofrece. Es lo **único** por lo que filtra la búsqueda del
   Cliente, así que se pide al registrarse (al menos una) y el perfil

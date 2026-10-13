@@ -235,7 +235,7 @@ class ReviewsViewModel @Inject constructor(
         coroutineScope {
             pendientes.map { clienteId ->
                 async {
-                    val resultado = usuarioRepository.obtenerPorId(clienteId)
+                    val resultado = usuarioRepository.obtenerPerfilPublico(clienteId)
                     if (resultado is Result.Success) clienteId to nombreCorto(resultado.data.nombre) else null
                 }
             }.awaitAll().filterNotNull().forEach { (clienteId, nombre) -> autoresResueltos[clienteId] = nombre }

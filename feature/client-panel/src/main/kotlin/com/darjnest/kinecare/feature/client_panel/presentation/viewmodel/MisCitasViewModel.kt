@@ -317,7 +317,7 @@ private fun Reserva.aCitaEnCurso(
         horaTexto = fechaHora.aHoraTexto(),
         modalidadTexto = modalidad.aTexto(),
         profesionalEnCaminoMinutos = null,
-        profesionalNombre = profesional?.usuario?.nombre ?: "Profesional",
+        profesionalNombre = profesional?.perfil?.nombre ?: "Profesional",
         especialidad = profesional?.especialidades?.firstOrNull().orEmpty(),
         numeroRegistroSis = profesional?.rnpi.orEmpty(),
         tratamientoTitulo = servicio?.nombre ?: "Sesión",
@@ -348,7 +348,7 @@ private fun Reserva.aCitaProxima(
         lugar = direccion?.let { d -> listOf(d.comuna, d.ciudad).filter { it.isNotBlank() }.joinToString(", ") }
             ?: modalidad.aTexto(),
         fechaHoraTexto = fechaHora.aFechaHoraTexto(),
-        profesionalNombre = profesional?.usuario?.nombre ?: "Profesional",
+        profesionalNombre = profesional?.perfil?.nombre ?: "Profesional",
         tipoSesion = servicio?.nombre ?: "Sesión",
         precioTotal = pago.monto,
         porConfirmar = estado == EstadoReserva.SOLICITADA,
@@ -381,7 +381,7 @@ internal fun Reserva.aCitaHistorial(
         fechaTexto = fechaHora.aFechaTexto(),
         modalidadTexto = modalidad.aTexto(),
         tituloSesion = servicio?.nombre ?: "Sesión",
-        profesionalNombre = profesional?.usuario?.nombre ?: "Profesional",
+        profesionalNombre = profesional?.perfil?.nombre ?: "Profesional",
         calificacion = resena?.calificacion ?: 0,
         puedeResenar = resena == null,
         estadoReporte = estadoReporte,
@@ -398,7 +398,7 @@ private fun Reserva.aCitaCancelada(
         id = id,
         profesionalId = profesionalId,
         fechaHoraTexto = fechaHora.aFechaHoraTexto(),
-        profesionalNombre = profesional?.usuario?.nombre ?: "Profesional",
+        profesionalNombre = profesional?.perfil?.nombre ?: "Profesional",
         motivo = when (estado) {
             EstadoReserva.CANCELADA_CLIENTE -> "Cancelada por ti"
             EstadoReserva.CANCELADA_PROFESIONAL -> "Cancelada por el profesional"

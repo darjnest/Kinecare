@@ -18,13 +18,12 @@ import com.darjnest.kinecare.core.common.domain.model.Insignia
 import com.darjnest.kinecare.core.common.domain.model.MetodoPago
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
 import com.darjnest.kinecare.core.common.domain.model.Pago
+import com.darjnest.kinecare.core.common.domain.model.PerfilPublico
 import com.darjnest.kinecare.core.common.domain.model.Profesional
 import com.darjnest.kinecare.core.common.domain.model.Reserva
-import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.domain.model.Servicio
 import com.darjnest.kinecare.core.common.domain.model.TipoInsignia
 import com.darjnest.kinecare.core.common.domain.model.TipoMetodoPago
-import com.darjnest.kinecare.core.common.domain.model.Usuario
 import com.darjnest.kinecare.core.common.result.Result
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
@@ -70,8 +69,8 @@ class ProfessionalPanelViewModelTest {
     init {
         // Por defecto, sin reservas: los tests de Mercado Pago no dependen de la agenda.
         coEvery { reservaRepository.obtenerPorProfesional(uid) } returns Result.Success(emptyList())
-        coEvery { usuarioRepository.obtenerPorId(any()) } answers {
-            Result.Success(usuarioPanel(firstArg(), "Nombre ${firstArg<String>()}"))
+        coEvery { usuarioRepository.obtenerPerfilPublico(any()) } answers {
+            Result.Success(PerfilPublico(firstArg(), "Nombre ${firstArg<String>()}", null))
         }
         coEvery { servicioRepository.obtenerPorProfesional(uid) } returns Result.Success(
             listOf(servicioPanel("srv-1", "Kinesiología deportiva")),
@@ -89,17 +88,7 @@ class ProfessionalPanelViewModelTest {
         calificacion: Double = 0.0,
         totalResenas: Int = 0,
     ) = Profesional(
-        usuario = Usuario(
-            id = uid,
-            nombre = "Ana Soto",
-            rut = "1-9",
-            email = "ana@kinecare.cl",
-            correoContacto = null,
-            telefono = null,
-            rol = RolUsuario.PROFESIONAL,
-            fotoUrl = null,
-            fechaRegistro = Instant.fromEpochMilliseconds(0),
-        ),
+        perfil = PerfilPublico(id = uid, nombre = "Ana Soto", fotoUrl = null),
         especialidades = emptyList(),
         rnpi = rnpi,
         servicios = emptyList(),
@@ -343,7 +332,7 @@ class ProfessionalPanelViewModelTest {
     fun `si fallan los nombres la proxima cita usa textos genericos`() = runTest {
         iniciarSesion()
         coEvery { profesionalRepository.obtenerPorId(uid) } returns Result.Success(profesional(conectado = false))
-        coEvery { usuarioRepository.obtenerPorId(any()) } returns Result.Error(UsuarioError.SIN_INTERNET)
+        coEvery { usuarioRepository.obtenerPerfilPublico(any()) } returns Result.Error(UsuarioError.SIN_INTERNET)
         coEvery { servicioRepository.obtenerPorProfesional(uid) } returns Result.Error(ServicioError.SIN_INTERNET)
         conReservas(reservaPanel("r1", AHORA_PANEL + 3.hours, EstadoReserva.CONFIRMADA))
 
@@ -360,7 +349,7 @@ class ProfessionalPanelViewModelTest {
         conReservas(reservaPanel("r1", AHORA_PANEL + 3.hours, EstadoReserva.SOLICITADA))
 
         assertNull(crearViewModel().state.value.proximaCita)
-        coVerify(exactly = 0) { usuarioRepository.obtenerPorId(any()) }
+        coVerify(exactly = 0) { usuarioRepository.obtenerPerfilPublico(any()) }
     }
 
     @Test
@@ -507,18 +496,6 @@ private fun reservaPanel(
         idTransaccionPasarela = null,
     ),
     comisionPorcentaje = 0.1,
-)
-
-private fun usuarioPanel(id: String, nombre: String) = Usuario(
-    id = id,
-    nombre = nombre,
-    rut = "11.111.111-1",
-    email = "$id@test.cl",
-    correoContacto = null,
-    telefono = null,
-    rol = RolUsuario.CLIENTE,
-    fotoUrl = null,
-    fechaRegistro = AHORA_PANEL,
 )
 
 private fun servicioPanel(id: String, nombre: String) = Servicio(

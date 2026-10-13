@@ -33,8 +33,8 @@ private const val SUBCOLECCION_SERVICIOS = "servicios"
  * Movida desde `:feature:search` a `:core:network` (ver docs/ARCHITECTURE.md):
  * `:feature:client-panel` tambien necesita resolver un profesional por id
  * (pantalla de Favoritos) y las features nunca se dependen entre si.
- * Reusa [UsuarioRepository] para el `Usuario` 1:1 en vez de repetir el
- * mapeo de `usuarios/{id}`.
+ * Reusa [UsuarioRepository] para el `PerfilPublico` 1:1 (nombre y foto) en
+ * vez de repetir el mapeo de `perfilesPublicos/{id}`.
  */
 class ProfesionalRepositoryImpl @Inject constructor(
     private val firestore: FirebaseFirestore,
@@ -132,11 +132,12 @@ class ProfesionalRepositoryImpl @Inject constructor(
 
     private suspend fun DocumentSnapshot.aProfesionalONull(): Profesional? {
         if (!exists()) return null
-        // Si `usuarios/{id}` no se puede resolver (borrado, red caida al
+        // Si `perfilesPublicos/{id}` no se puede resolver (borrado, red caida al
         // resolverlo puntualmente), se descarta este profesional en vez de
         // abortar todo el listado — degradacion elegante, igual criterio
         // que una insignia/disponibilidad con datos corruptos mas abajo.
-        val usuario = (usuarioRepository.obtenerPorId(id) as? Result.Success)?.data ?: return null
+        // Nunca se lee `usuarios/{id}`: es privado de su dueno.
+        val perfil = (usuarioRepository.obtenerPerfilPublico(id) as? Result.Success)?.data ?: return null
 
         @Suppress("UNCHECKED_CAST")
         val especialidades = (get("especialidades") as? List<Any?>)
@@ -159,7 +160,7 @@ class ProfesionalRepositoryImpl @Inject constructor(
             ?: emptyList()
 
         return Profesional(
-            usuario = usuario,
+            perfil = perfil,
             especialidades = especialidades,
             rnpi = getString("rnpi") ?: "",
             servicios = obtenerServicios(id),

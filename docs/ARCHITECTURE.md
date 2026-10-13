@@ -171,7 +171,9 @@ de Firebase (`firebase use qa` / `firebase use prod`) al proyecto correcto.
   `:core:common` (`data/repository`, junto a su enum de error en
   `data/error`) + implementación con el SDK de Firebase en `:core:network`
   (`firebase/repository`), bindeados en `FirestoreRepositoryModule`
-  (`firebase/di`). Primer precedente: `UsuarioRepository` (`usuarios/{uid}`),
+  (`firebase/di`). Primer precedente: `UsuarioRepository` (`usuarios/{uid}`,
+  privado de su dueño, y `perfilesPublicos/{uid}` con nombre y foto para
+  mostrar a otras personas),
   `ClienteRepository` (`clientes/{uid}`: direcciones/favoritos),
   `ProfesionalRepository` (`profesionales/{uid}`, movido desde
   `:feature:search` cuando `:feature:client-panel` también necesitó

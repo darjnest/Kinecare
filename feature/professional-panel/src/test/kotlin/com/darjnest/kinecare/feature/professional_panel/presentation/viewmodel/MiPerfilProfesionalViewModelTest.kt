@@ -11,11 +11,11 @@ import com.darjnest.kinecare.core.common.data.repository.ProfesionalRepository
 import com.darjnest.kinecare.core.common.data.repository.UsuarioRepository
 import com.darjnest.kinecare.core.common.domain.model.EstadoVerificacion
 import com.darjnest.kinecare.core.common.domain.model.Insignia
+import com.darjnest.kinecare.core.common.domain.model.PerfilPublico
 import com.darjnest.kinecare.core.common.domain.model.Profesional
 import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.domain.model.TipoAtencion
 import com.darjnest.kinecare.core.common.domain.model.TipoInsignia
-import com.darjnest.kinecare.core.common.domain.model.Usuario
 import com.darjnest.kinecare.core.common.result.Result
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
@@ -62,17 +62,7 @@ class MiPerfilProfesionalViewModelTest {
         tiposAtencion: List<TipoAtencion> = listOf(TipoAtencion.KINESIOLOGIA),
         fotoUrl: String? = null,
     ) = Profesional(
-        usuario = Usuario(
-            id = uid,
-            nombre = "Ana Soto",
-            rut = "12345678-5",
-            email = "ana@kinecare.cl",
-            correoContacto = null,
-            telefono = null,
-            rol = RolUsuario.PROFESIONAL,
-            fotoUrl = fotoUrl,
-            fechaRegistro = Instant.fromEpochMilliseconds(0),
-        ),
+        perfil = PerfilPublico(id = uid, nombre = "Ana Soto", fotoUrl = fotoUrl),
         especialidades = listOf("Kinesiología", "Masoterapia"),
         rnpi = "123456",
         servicios = emptyList(),

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Crea una cuenta de Profesional en el proyecto QA (kinecare-cl-qa): usuario de Firebase Auth
-// (email sintetico derivado del RUT, igual que la app) + usuarios/{uid} + profesionales/{uid}.
+// (email sintetico derivado del RUT, igual que la app) + usuarios/{uid} + perfilesPublicos/{uid} +
+// rutsRegistrados/{rut} + profesionales/{uid}.
 //
 // Uso:
 //   gcloud auth application-default login   # o: export GOOGLE_APPLICATION_CREDENTIALS=<clave-de-cuenta-de-servicio.json>
@@ -119,6 +120,8 @@ const existente = await auth.getUserByEmail(email).catch((e) => (e.code === "aut
 if (existente) fallar(`ya existe un usuario de Auth para el RUT ${rut} (uid ${existente.uid})`);
 const rutEnUso = await db.collection("usuarios").where("rut", "==", rut).limit(1).get();
 if (!rutEnUso.empty) fallar(`el RUT ${rut} ya figura en usuarios/${rutEnUso.docs[0].id}`);
+const rutReclamado = await db.collection("rutsRegistrados").doc(rut).get();
+if (rutReclamado.exists) fallar(`el RUT ${rut} ya esta reclamado en rutsRegistrados (uid ${rutReclamado.get("uid")})`);
 
 const password = await pedirPassword();
 if (password.length < 6) fallar("la contrasena debe tener al menos 6 caracteres");
@@ -160,6 +163,9 @@ try {
     fotoUrl: null,
     fechaRegistro: FieldValue.serverTimestamp(),
   });
+  // Lo unico que ven los demas (usuarios/{uid} es privado) y el indice de unicidad del RUT.
+  batch.set(db.collection("perfilesPublicos").doc(uid), { nombre: args.nombre, fotoUrl: null });
+  batch.set(db.collection("rutsRegistrados").doc(rut), { uid });
   batch.set(db.collection("profesionales").doc(uid), perfil);
   if (!args.minimo) {
     batch.set(db.collection("profesionales").doc(uid).collection("servicios").doc(), {

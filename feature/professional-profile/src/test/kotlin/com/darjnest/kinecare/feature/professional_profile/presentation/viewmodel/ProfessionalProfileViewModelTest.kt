@@ -14,6 +14,7 @@ import com.darjnest.kinecare.core.common.domain.model.Disponibilidad
 import com.darjnest.kinecare.core.common.domain.model.EstadoVerificacion
 import com.darjnest.kinecare.core.common.domain.model.Insignia
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
+import com.darjnest.kinecare.core.common.domain.model.PerfilPublico
 import com.darjnest.kinecare.core.common.domain.model.Profesional
 import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.domain.model.Servicio
@@ -95,17 +96,7 @@ class ProfessionalProfileViewModelTest {
         descripcion: String = "  Kinesiologa deportiva  ",
         fotoUrl: String? = null,
     ) = Profesional(
-        usuario = Usuario(
-            id = id,
-            nombre = "Ana Soto Rojas",
-            rut = "12345678-5",
-            email = "ana@kinecare.cl",
-            correoContacto = null,
-            telefono = null,
-            rol = RolUsuario.PROFESIONAL,
-            fotoUrl = fotoUrl,
-            fechaRegistro = Instant.fromEpochMilliseconds(0),
-        ),
+        perfil = PerfilPublico(id = id, nombre = "Ana Soto Rojas", fotoUrl = fotoUrl),
         especialidades = listOf("Kinesiología"),
         rnpi = "123456",
         servicios = servicios,

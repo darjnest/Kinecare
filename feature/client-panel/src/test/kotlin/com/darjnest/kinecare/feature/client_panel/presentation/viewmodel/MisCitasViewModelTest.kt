@@ -18,16 +18,15 @@ import com.darjnest.kinecare.core.common.domain.model.Insignia
 import com.darjnest.kinecare.core.common.domain.model.MetodoPago
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
 import com.darjnest.kinecare.core.common.domain.model.Pago
+import com.darjnest.kinecare.core.common.domain.model.PerfilPublico
 import com.darjnest.kinecare.core.common.domain.model.Profesional
 import com.darjnest.kinecare.core.common.domain.model.Resena
 import com.darjnest.kinecare.core.common.domain.model.ReembolsoCancelacion
 import com.darjnest.kinecare.core.common.domain.model.Reserva
 import com.darjnest.kinecare.core.common.domain.model.ResultadoCancelacion
-import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.domain.model.Servicio
 import com.darjnest.kinecare.core.common.domain.model.TipoInsignia
 import com.darjnest.kinecare.core.common.domain.model.TipoMetodoPago
-import com.darjnest.kinecare.core.common.domain.model.Usuario
 import com.darjnest.kinecare.core.common.result.Result
 import com.darjnest.kinecare.feature.client_panel.data.repository.ReporteProblemaRepository
 import com.darjnest.kinecare.feature.client_panel.domain.EstadoReporte
@@ -91,17 +90,7 @@ class MisCitasViewModelTest {
     )
 
     private fun profesionalDePrueba(id: String, nombre: String): Profesional = Profesional(
-        usuario = Usuario(
-            id = id,
-            nombre = nombre,
-            rut = "9876543-2",
-            email = "$id@kinecare.cl",
-            correoContacto = null,
-            telefono = null,
-            rol = RolUsuario.PROFESIONAL,
-            fotoUrl = null,
-            fechaRegistro = Instant.fromEpochMilliseconds(0),
-        ),
+        perfil = PerfilPublico(id = id, nombre = nombre, fotoUrl = null),
         especialidades = listOf("KINESIOLOGIA"),
         rnpi = "RNPI-$id",
         servicios = listOf(

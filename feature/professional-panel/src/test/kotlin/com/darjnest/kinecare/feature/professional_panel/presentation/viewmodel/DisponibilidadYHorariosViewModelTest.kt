@@ -7,9 +7,8 @@ import com.darjnest.kinecare.core.common.data.error.ProfesionalError
 import com.darjnest.kinecare.core.common.data.repository.ProfesionalRepository
 import com.darjnest.kinecare.core.common.domain.model.Disponibilidad
 import com.darjnest.kinecare.core.common.domain.model.EstadoVerificacion
+import com.darjnest.kinecare.core.common.domain.model.PerfilPublico
 import com.darjnest.kinecare.core.common.domain.model.Profesional
-import com.darjnest.kinecare.core.common.domain.model.RolUsuario
-import com.darjnest.kinecare.core.common.domain.model.Usuario
 import com.darjnest.kinecare.core.common.result.Result
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
@@ -20,7 +19,6 @@ import io.mockk.mockk
 import io.mockk.slot
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.DayOfWeek
-import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -55,17 +53,7 @@ class DisponibilidadYHorariosViewModelTest {
         Disponibilidad(dia, LocalTime(inicio, 0), LocalTime(fin, 0), activo)
 
     private fun profesional(disponibilidad: List<Disponibilidad>) = Profesional(
-        usuario = Usuario(
-            id = uid,
-            nombre = "Ana Soto",
-            rut = "12345678-5",
-            email = "ana@kinecare.cl",
-            correoContacto = null,
-            telefono = null,
-            rol = RolUsuario.PROFESIONAL,
-            fotoUrl = null,
-            fechaRegistro = Instant.fromEpochMilliseconds(0),
-        ),
+        perfil = PerfilPublico(id = uid, nombre = "Ana Soto", fotoUrl = null),
         especialidades = emptyList(),
         rnpi = "",
         servicios = emptyList(),
