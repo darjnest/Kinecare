@@ -233,3 +233,116 @@ describe("reglas: responder una resena (resenas/{id}.respuestaProfesional)", () 
     assert.deepEqual(perfil, { calificacionPromedio: 4, totalResenas: 1 });
   });
 });
+
+const patch = (uid: string | null, ruta: string, campos: Record<string, unknown>) =>
+  llamar(uid, "PATCH", `${ruta}?${Object.keys(campos).map((m) => `updateMask.fieldPaths=${m}`).join("&")}`, {
+    fields: campos,
+  });
+
+const FOTO_PRO = (uid: string) =>
+  `https://firebasestorage.googleapis.com/v0/b/demo-kinecare.firebasestorage.app/o/profesionales%2F${uid}%2Ffoto-perfil.jpg?alt=media&token=abc&v=1`;
+
+describe("reglas: usuarios/{uid} (campos inmutables y fotoUrl)", () => {
+  beforeEach(async () => {
+    await db.collection("usuarios").doc(CLIENTE).set({
+      rol: "CLIENTE",
+      nombre: "Ana",
+      rut: "111111111",
+      email: "111111111@rut.kinecare.cl",
+      fechaRegistro: Timestamp.fromDate(new Date("2026-09-01T12:00:00Z")),
+      fotoUrl: null,
+    });
+  });
+
+  it("el dueno edita nombre, telefono y correoContacto", async () => {
+    ok(await patch(CLIENTE, `usuarios/${CLIENTE}`, { nombre: str("Ana Maria"), telefono: str("+56911111111") }));
+    assert.equal((await db.collection("usuarios").doc(CLIENTE).get()).get("nombre"), "Ana Maria");
+  });
+
+  it("no puede cambiar rut, email, fechaRegistro ni rol", async () => {
+    denegado(await patch(CLIENTE, `usuarios/${CLIENTE}`, { rut: str("222222222") }));
+    denegado(await patch(CLIENTE, `usuarios/${CLIENTE}`, { email: str("otro@x.cl") }));
+    denegado(await patch(CLIENTE, `usuarios/${CLIENTE}`, { fechaRegistro: { timestampValue: "2030-01-01T00:00:00Z" } }));
+    denegado(await patch(CLIENTE, `usuarios/${CLIENTE}`, { rol: str("PROFESIONAL") }));
+    assert.equal((await db.collection("usuarios").doc(CLIENTE).get()).get("rut"), "111111111");
+  });
+
+  it("nadie edita el usuario de otro", async () => {
+    denegado(await patch(OTRO_CLIENTE, `usuarios/${CLIENTE}`, { nombre: str("Intruso") }));
+    denegado(await patch(null, `usuarios/${CLIENTE}`, { nombre: str("Anonimo") }));
+  });
+
+  it("fotoUrl: acepta la URL de Storage de la propia foto y null", async () => {
+    ok(await patch(PRO, `usuarios/${PRO}`, { fotoUrl: str(FOTO_PRO(PRO)) }));
+    ok(await patch(PRO, `usuarios/${PRO}`, { fotoUrl: { nullValue: null } }));
+  });
+
+  it("fotoUrl: rechaza URLs externas, de otro usuario o con otro host parecido", async () => {
+    denegado(await patch(CLIENTE, `usuarios/${CLIENTE}`, { fotoUrl: str("https://atacante.example/pixel.png") }));
+    denegado(await patch(PRO, `usuarios/${PRO}`, { fotoUrl: str(FOTO_PRO(OTRO_PRO)) }));
+    denegado(
+      await patch(PRO, `usuarios/${PRO}`, {
+        fotoUrl: str(`https://firebasestorage.googleapis.com.atacante.example/v0/b/x/o/profesionales%2F${PRO}%2Ffoto-perfil.jpg?a=1`),
+      }),
+    );
+    denegado(await patch(PRO, `usuarios/${PRO}`, { fotoUrl: { integerValue: "5" } }));
+  });
+
+  it("registro: crea con fotoUrl de Google, nula o ausente; rechaza una URL arbitraria", async () => {
+    const crear = (uid: string, fotoUrl?: Valor | { nullValue: null }) =>
+      llamar(uid, "PATCH", `usuarios/${uid}`, {
+        fields: { rol: str("CLIENTE"), ...(fotoUrl === undefined ? {} : { fotoUrl }) },
+      });
+    ok(await crear("nuevo1", str("https://lh3.googleusercontent.com/a/abc=s96-c")));
+    ok(await crear("nuevo2", { nullValue: null }));
+    ok(await crear("nuevo3"));
+    denegado(await crear("nuevo4", str("https://atacante.example/pixel.png")));
+  });
+});
+
+describe("reglas: profesionales/{uid} (campos que edita el dueno)", () => {
+  beforeEach(async () => {
+    await db.collection("profesionales").doc(PRO).set({
+      tiposAtencion: ["KINESIOLOGIA"],
+      especialidades: [],
+      rnpi: "",
+      descripcion: "",
+      calificacionPromedio: 0,
+      totalResenas: 0,
+      estadoVerificacionGeneral: "NO_SOLICITADO",
+      insignias: [],
+      disponibilidad: [],
+    });
+  });
+
+  const ruta = `profesionales/${PRO}`;
+
+  it("el dueno edita descripcion, disponibilidad, tiposAtencion y especialidades", async () => {
+    ok(await patch(PRO, ruta, { descripcion: str("Kinesiologo deportivo") }));
+    ok(await patch(PRO, ruta, { disponibilidad: { arrayValue: { values: [] } } }));
+    ok(await patch(PRO, ruta, { tiposAtencion: { arrayValue: { values: [str("KINESIOLOGIA"), str("MASOTERAPIA")] } } }));
+    ok(await patch(PRO, ruta, { especialidades: { arrayValue: { values: [str("Deportiva")] } } }));
+  });
+
+  it("no puede cambiar rnpi, ni reputacion, ni verificacion, ni mercadoPagoConectado", async () => {
+    denegado(await patch(PRO, ruta, { rnpi: str("123456") }));
+    denegado(await patch(PRO, ruta, { calificacionPromedio: { doubleValue: 5 } }));
+    denegado(await patch(PRO, ruta, { totalResenas: { integerValue: "99" } }));
+    denegado(await patch(PRO, ruta, { estadoVerificacionGeneral: str("APROBADO") }));
+    denegado(await patch(PRO, ruta, { insignias: { arrayValue: { values: [str("X")] } } }));
+    denegado(await patch(PRO, ruta, { mercadoPagoConectado: { booleanValue: true } }));
+  });
+
+  it("no puede agregar claves arbitrarias, ni siquiera junto a una clave permitida", async () => {
+    denegado(await patch(PRO, ruta, { fotoUrl: str("https://atacante.example/pixel.png") }));
+    denegado(await patch(PRO, ruta, { descripcion: str("ok"), basura: str("x") }));
+    assert.equal((await db.collection("profesionales").doc(PRO).get()).get("descripcion"), "");
+  });
+
+  it("tiposAtencion sigue validado y otro usuario no puede editar el perfil", async () => {
+    denegado(await patch(PRO, ruta, { tiposAtencion: { arrayValue: { values: [] } } }));
+    denegado(await patch(PRO, ruta, { tiposAtencion: { arrayValue: { values: [str("DENTISTA")] } } }));
+    denegado(await patch(OTRO_PRO, ruta, { descripcion: str("Intruso") }));
+    denegado(await patch(null, ruta, { descripcion: str("Anonimo") }));
+  });
+});
