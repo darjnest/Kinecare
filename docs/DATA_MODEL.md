@@ -302,7 +302,7 @@ clave que cambia, string de 1 a 500 caracteres (`trim()` no vacío), y solo si
 la reseña aún no tenía respuesta (no se edita ni se borra); no toca
 `calificacion`, así que `recalcularCalificacion` no recalcula. `delete` está
 denegado. Validadas contra el Firestore Emulator local (no
-contra el proyecto Firebase real). Las reglas de respuesta y de `dispositivos`
+contra el proyecto Firebase real). Las reglas de respuesta, de `dispositivos`, de `usuarios` y de `profesionales`
 tienen pruebas automáticas (`functions/test/integration/reglas.integration.test.ts`,
 por REST contra el emulador con tokens de Auth sin firmar).
 
