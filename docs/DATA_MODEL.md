@@ -772,6 +772,7 @@ El backend va detrás de la interfaz `ProveedorVerificacion`
 `TIPO_NO_SOPORTADO`, `PERFIL_NO_ENCONTRADO`, `YA_VERIFICADO`,
 `PROVEEDOR_NO_CONFIGURADO` (falta `DIDIT_WORKFLOW_ID`),
 `PROVEEDOR_NO_DISPONIBLE` (Didit caído, 401/403, 429, créditos agotados),
+`LIMITE_DE_INTENTOS` (límite de frecuencia, ver Costos y límites),
 `SOLICITUD_NO_ENCONTRADA` (también para solicitudes ajenas).
 
 **Firma del webhook.** Se acepta `X-Signature` (HMAC-SHA256 hex sobre los bytes
@@ -827,7 +828,10 @@ con `MP_APP_ID`). Destino de webhook en Didit:
 --only functions` completo fallará: despliega las demás funciones por nombre.
 
 **Costos y límites.** Cada sesión nueva tras un rechazo/expiración puede gastar
-créditos de Didit y no hay límite de frecuencia por usuario; Didit responde 400
+créditos de Didit, por eso `solicitarVerificacion` limita por profesional en una
+ventana de 24 h: con 3 solicitudes ya resueltas o 6 en total responde
+`resource-exhausted` / `LIMITE_DE_INTENTOS` sin llamar a Didit (cuenta por
+`fechaSolicitud`, solo por `profesionalId ==`, sin índice compuesto); Didit responde 400
 también por créditos agotados (se ve en el log como `SOLICITUD_RECHAZADA` y el
 cliente recibe `PROVEEDOR_NO_DISPONIBLE`). Un 429 no se reintenta.
 `estadoVerificacion` sin id lee hasta 100 solicitudes del profesional y ordena en

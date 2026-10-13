@@ -28,5 +28,8 @@ enum class SolicitarVerificacionError : Error {
 
     /** El proveedor de verificacion no respondio. */
     PROVEEDOR_NO_DISPONIBLE,
+
+    /** Demasiados intentos de verificacion en las ultimas 24 h (proteccion de costos). */
+    LIMITE_DE_INTENTOS,
     DESCONOCIDO,
 }

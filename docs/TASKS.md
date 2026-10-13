@@ -556,10 +556,14 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       `AUTENTICIDAD`, `HISTORIAL`): hoy solo se soporta `IDENTIDAD`. Las
       credenciales dependen de Storage (bucket de QA sin crear) y de una
       revisión manual o contra el RNPI que no tiene herramienta.
-- [ ] Límite de frecuencia por profesional al pedir verificaciones (cada sesión
-      nueva tras un rechazo gasta créditos de Didit) y revisión manual cuando
-      Didit deja una sesión en `In Review` (hoy queda `PENDIENTE` sin que
-      nadie la resuelva desde KineCare).
+- [x] Límite de frecuencia por profesional al pedir verificaciones
+      (`solicitarVerificacion`, motivo `LIMITE_DE_INTENTOS`, `resource-exhausted`):
+      máximo 3 intentos ya resueltos o 6 solicitudes en total en 24 h, medido
+      sobre `solicitudesVerificacion` sin índice compuesto. Constantes en
+      `functions/src/constantes.ts`. Android muestra mensaje propio. Tests de
+      integración nuevos (432 con `npm run test:emulator`). Sin desplegar.
+- [ ] Revisión manual cuando Didit deja una sesión en `In Review` (hoy queda
+      `PENDIENTE` sin que nadie la resuelva desde KineCare).
 
 ## Fase 7 — Panel profesional
 - [x] `:feature:professional-panel`: dashboard/home fiel al mockup; resumen

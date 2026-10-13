@@ -1,5 +1,13 @@
 import { Timestamp, type Firestore } from "firebase-admin/firestore";
-import { COLECCION_PROFESIONALES, COLECCION_SOLICITUDES_VERIFICACION, COLECCION_USUARIOS, PROVEEDOR_VERIFICACION } from "../constantes.js";
+import {
+  COLECCION_PROFESIONALES,
+  COLECCION_SOLICITUDES_VERIFICACION,
+  COLECCION_USUARIOS,
+  PROVEEDOR_VERIFICACION,
+  VERIFICACION_MAX_INTENTOS_RESUELTOS,
+  VERIFICACION_MAX_SOLICITUDES,
+  VERIFICACION_VENTANA_HORAS,
+} from "../constantes.js";
 import { errorDeNegocio } from "../errores.js";
 import { esObjeto, invalido } from "../validacion.js";
 import type { EstadoSolicitud } from "./estados.js";
@@ -34,6 +42,31 @@ const yaVerificado = () => errorDeNegocio("failed-precondition", "YA_VERIFICADO"
 const perfilNoEncontrado = () => errorDeNegocio("not-found", "PERFIL_NO_ENCONTRADO", "No encontramos tu perfil profesional.");
 
 /**
+ * Lee las solicitudes de la ventana reciente y decide si esta llamada puede abrir una sesion nueva
+ * en el proveedor. Solo consulta por `profesionalId ==` y filtra en memoria: sin indice compuesto.
+ */
+async function verificarLimiteDeIntentos(db: Firestore, uid: string, ahora: Date): Promise<void> {
+  const desde = ahora.getTime() - VERIFICACION_VENTANA_HORAS * 60 * 60 * 1000;
+  const snap = await db.collection(COLECCION_SOLICITUDES_VERIFICACION).where("profesionalId", "==", uid).get();
+  let total = 0;
+  let resueltas = 0;
+  for (const doc of snap.docs) {
+    if (doc.get("tipo") !== TIPO_INSIGNIA_IDENTIDAD) continue;
+    const fecha = doc.get("fechaSolicitud");
+    if (!(fecha instanceof Timestamp) || fecha.toMillis() < desde) continue;
+    total += 1;
+    if (doc.get("estado") !== "PENDIENTE") resueltas += 1;
+  }
+  if (resueltas >= VERIFICACION_MAX_INTENTOS_RESUELTOS || total >= VERIFICACION_MAX_SOLICITUDES) {
+    throw errorDeNegocio(
+      "resource-exhausted",
+      "LIMITE_DE_INTENTOS",
+      "Alcanzaste el máximo de intentos de verificación por hoy. Inténtalo de nuevo mañana.",
+    );
+  }
+}
+
+/**
  * `solicitarVerificacion`: el profesional inicia (o retoma) la verificacion de identidad con Didit.
  * El cliente solo recibe una URL; el veredicto lo escribe el webhook (o `estadoVerificacion`) con
  * Admin SDK. Didit es idempotente por `vendor_data`: mientras haya una sesion sin terminar devuelve la
@@ -64,6 +97,8 @@ export async function solicitarVerificacionHandler(
   if (deps.workflowId.trim() === "") {
     throw errorDeNegocio("failed-precondition", "PROVEEDOR_NO_CONFIGURADO", "La verificación de identidad aún no está disponible.");
   }
+
+  await verificarLimiteDeIntentos(db, uid, ahora);
 
   let sesion;
   try {

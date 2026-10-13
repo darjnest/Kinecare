@@ -19,6 +19,8 @@ fun mensajeErrorSolicitar(error: SolicitarVerificacionError): String = when (err
         "La verificación de identidad no está disponible por ahora. Contacta a soporte de KineCare."
     SolicitarVerificacionError.PROVEEDOR_NO_DISPONIBLE ->
         "El proveedor de verificación no está disponible en este momento. Inténtalo de nuevo en unos minutos."
+    SolicitarVerificacionError.LIMITE_DE_INTENTOS ->
+        "Alcanzaste el máximo de intentos de verificación por hoy. Inténtalo de nuevo mañana o contacta a soporte."
     SolicitarVerificacionError.DESCONOCIDO -> "No pudimos iniciar la verificación. Inténtalo de nuevo en unos minutos."
 }
 
