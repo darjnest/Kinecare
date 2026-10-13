@@ -158,7 +158,7 @@ fun ServiciosYTarifasScreen(
                 ) {
                     Icon(Icons.Filled.AddCircle, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = "+ Agregar Nuevo Servicio", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(text = "Agregar Nuevo Servicio", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color.White)
                 }
 
                 FilaFiltrosModalidad(
@@ -287,7 +287,7 @@ private fun TarjetaResumenPortal(region: String, resumen: ResumenCatalogoServici
                             }
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "${catalogo.serviciosActivos} servicios",
+                                text = if (catalogo.serviciosActivos == 1) "1 servicio" else "${catalogo.serviciosActivos} servicios",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = TextoPrincipal,
