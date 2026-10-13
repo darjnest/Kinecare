@@ -90,8 +90,8 @@ private fun Profesional.aProfesionalFavorito(esPrincipal: Boolean): ProfesionalF
         it.tipo == TipoInsignia.CREDENCIALES && it.estado == EstadoVerificacion.APROBADO
     }
     return ProfesionalFavorito(
-        id = usuario.id,
-        nombre = usuario.nombre,
+        id = perfil.id,
+        nombre = perfil.nombre,
         especialidad = especialidades.firstOrNull().orEmpty(),
         universidad = "",
         esTerapeutaPrincipal = esPrincipal,

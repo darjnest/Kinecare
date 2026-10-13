@@ -212,9 +212,9 @@ class ProfessionalProfileViewModel @Inject constructor(
 internal fun Profesional.aPerfil(): PerfilProfesional {
     val insigniasPorTipo = insignias.associateBy { it.tipo }
     return PerfilProfesional(
-        id = usuario.id,
-        nombre = usuario.nombre,
-        fotoUrl = usuario.fotoUrl?.takeIf { it.isNotBlank() },
+        id = perfil.id,
+        nombre = perfil.nombre,
+        fotoUrl = perfil.fotoUrl?.takeIf { it.isNotBlank() },
         especialidades = especialidades,
         rnpi = rnpi,
         calificacionPromedio = calificacionPromedio.takeIf { totalResenas > 0 },

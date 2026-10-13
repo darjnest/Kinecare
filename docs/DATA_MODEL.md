@@ -23,12 +23,41 @@ fotoUrl: string?     // URL de descarga (con token) de la foto de perfil en Stor
                      // al final para que Coil no cachee la anterior; nula = la UI muestra iniciales
 fechaRegistro: timestamp
 ```
-**Security Rules.** Lectura: cualquier usuario autenticado (pendiente de
-separar los datos privados `rut`/`email`/`telefono` de los públicos). `update`
-del dueño: `rut`, `email`, `fechaRegistro` y `rol` son inmutables, y `fotoUrl`
-solo puede ser nula, la URL de descarga de la propia foto en Storage
+**Es privado.** Security Rules: **solo su dueño lo lee** (antes cualquier usuario
+autenticado podía listar `rut`, `email`, `correoContacto` y `telefono` de todos).
+Lo que el resto de la app ve de otra persona vive en `perfilesPublicos/{uid}`
+(abajo); las Cloud Functions lo leen con Admin SDK. `update` del dueño: `rut`,
+`email`, `fechaRegistro` y `rol` son inmutables, y `fotoUrl` solo puede ser
+nula, la URL de descarga de la propia foto en Storage
 (`clientes|profesionales/{uid}/foto-perfil.jpg`) o una foto de Google (el
-bucket no se fija en la regla). Misma validación de `fotoUrl` al crear.
+bucket no se fija en la regla). Misma validación de `fotoUrl` al crear. **Crear**
+exige además que el mismo batch reclame el RUT en `rutsRegistrados/{rut}` con
+`uid` igual al del usuario (`getAfter`).
+
+### `perfilesPublicos/{usuarioId}`
+```
+nombre: string       // 1..200 caracteres
+fotoUrl: string?     // misma validación que usuarios.fotoUrl
+```
+Nombre y foto de cualquier persona: el profesional de una cita o favorito, el
+paciente de una solicitud, el autor de una reseña, la búsqueda. **Lectura:**
+cualquier usuario autenticado. **Escritura:** solo el dueño, solo esas dos
+claves. Se escribe siempre **en el mismo batch** que `usuarios/{uid}` (registro,
+`UsuarioRepository.actualizarDatosPersonales` y `actualizarFotoUrl`) para que no
+diverjan; en el modelo de dominio es `PerfilPublico` (`Profesional.perfil`).
+
+### `rutsRegistrados/{rut}`
+```
+uid: string         // dueño del RUT
+```
+Índice de unicidad del RUT (id = RUT normalizado). **Nadie lo lee**, y no se
+modifica ni borra. El registro lo crea en el mismo batch que `usuarios/{uid}`: si
+el RUT ya está reclamado, `create` sobre un documento existente es un `update`
+(denegado) y **todo el batch falla** con `PERMISSION_DENIED`, que
+`AuthRepositoryImpl` traduce a `RUT_YA_REGISTRADO`. Reemplaza la consulta
+`usuarios where rut == …` que hacía el registro con Google (imposible con
+`usuarios` privado, y además permitía enumerar RUTs). Las cuentas anteriores a
+este cambio se migran con `scripts/migrar-perfiles-publicos-qa.mjs`.
 
 #### Subcolección `usuarios/{uid}/dispositivos/{token}`
 ```

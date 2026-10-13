@@ -436,7 +436,7 @@ class SolicitudesDeAtencionViewModel @Inject constructor(
         }
         for (clienteId in reservas.map { it.clienteId }.distinct()) {
             if (clienteId in pacientes) continue
-            val resultado = usuarioRepository.obtenerPorId(clienteId)
+            val resultado = usuarioRepository.obtenerPerfilPublico(clienteId)
             if (resultado is Result.Success) pacientes[clienteId] = resultado.data.nombre
         }
     }

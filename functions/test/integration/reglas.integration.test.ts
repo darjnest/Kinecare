@@ -289,14 +289,125 @@ describe("reglas: usuarios/{uid} (campos inmutables y fotoUrl)", () => {
   });
 
   it("registro: crea con fotoUrl de Google, nula o ausente; rechaza una URL arbitraria", async () => {
-    const crear = (uid: string, fotoUrl?: Valor | { nullValue: null }) =>
-      llamar(uid, "PATCH", `usuarios/${uid}`, {
-        fields: { rol: str("CLIENTE"), ...(fotoUrl === undefined ? {} : { fotoUrl }) },
-      });
-    ok(await crear("nuevo1", str("https://lh3.googleusercontent.com/a/abc=s96-c")));
-    ok(await crear("nuevo2", { nullValue: null }));
-    ok(await crear("nuevo3"));
-    denegado(await crear("nuevo4", str("https://atacante.example/pixel.png")));
+    const crear = (uid: string, rut: string, fotoUrl?: Valor | { nullValue: null }) =>
+      registrar(uid, rut, { rol: str("CLIENTE"), ...(fotoUrl === undefined ? {} : { fotoUrl }) });
+    ok(await crear("nuevo1", "111111111", str("https://lh3.googleusercontent.com/a/abc=s96-c")));
+    ok(await crear("nuevo2", "222222222", { nullValue: null }));
+    ok(await crear("nuevo3", "333333333"));
+    denegado(await crear("nuevo4", "444444444", str("https://atacante.example/pixel.png")));
+  });
+});
+
+/** Batch de registro: `usuarios/{uid}` + (opcional) `rutsRegistrados/{rut}` + `perfilesPublicos/{uid}`. */
+async function commitComoCliente(uid: string | null, escrituras: { ruta: string; campos: Record<string, unknown> }[]): Promise<number> {
+  const base = `projects/${PROJECT_ID}/databases/(default)/documents`;
+  const r = await fetch(`${BASE.replace(/\/documents$/, "")}/documents:commit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(uid === null ? {} : { Authorization: `Bearer ${jwt(uid)}` }) },
+    body: JSON.stringify({
+      writes: escrituras.map((e) => ({ update: { name: `${base}/${e.ruta}`, fields: e.campos } })),
+    }),
+  });
+  await r.text();
+  return r.status;
+}
+
+/** Registro completo como lo hace la app: reclama el RUT, crea el usuario y su perfil publico. */
+const registrar = (uid: string, rut: string, usuario: Record<string, unknown>, conIndiceDeRut = true) =>
+  commitComoCliente(uid, [
+    ...(conIndiceDeRut ? [{ ruta: `rutsRegistrados/${rut}`, campos: { uid: str(uid) } }] : []),
+    { ruta: `usuarios/${uid}`, campos: { rut: str(rut), nombre: str("Nueva"), ...usuario } },
+    { ruta: `perfilesPublicos/${uid}`, campos: { nombre: str("Nueva"), fotoUrl: usuario.fotoUrl ?? { nullValue: null } } },
+  ]);
+
+describe("reglas: usuarios privado, perfilesPublicos y rutsRegistrados", () => {
+  beforeEach(async () => {
+    await db.collection("usuarios").doc(CLIENTE).set({ rol: "CLIENTE", nombre: "Ana", rut: "111111111", telefono: "+56911111111" });
+    await db.collection("perfilesPublicos").doc(CLIENTE).set({ nombre: "Ana", fotoUrl: null });
+  });
+
+  it("usuarios/{uid} solo lo lee su dueno (get y list)", async () => {
+    ok(await llamar(CLIENTE, "GET", `usuarios/${CLIENTE}`));
+    denegado(await llamar(OTRO_CLIENTE, "GET", `usuarios/${CLIENTE}`));
+    denegado(await llamar(PRO, "GET", `usuarios/${CLIENTE}`));
+    denegado(await llamar(null, "GET", `usuarios/${CLIENTE}`));
+    denegado(await llamar(OTRO_CLIENTE, "GET", "usuarios"));
+    // Buscar por RUT (la consulta que hacia el registro con Google antes del indice de rutsRegistrados).
+    const consulta = await fetch(`${BASE}:runQuery`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt(OTRO_CLIENTE)}` },
+      body: JSON.stringify({
+        structuredQuery: {
+          from: [{ collectionId: "usuarios" }],
+          where: { fieldFilter: { field: { fieldPath: "rut" }, op: "EQUAL", value: str("111111111") } },
+        },
+      }),
+    });
+    denegado(consulta.status);
+  });
+
+  it("perfilesPublicos lo lee cualquier usuario autenticado, no un anonimo", async () => {
+    ok(await llamar(OTRO_CLIENTE, "GET", `perfilesPublicos/${CLIENTE}`));
+    ok(await llamar(PRO, "GET", `perfilesPublicos/${CLIENTE}`));
+    denegado(await llamar(null, "GET", `perfilesPublicos/${CLIENTE}`));
+  });
+
+  it("perfilesPublicos: solo el dueno escribe, solo nombre y fotoUrl validos", async () => {
+    ok(await patch(CLIENTE, `perfilesPublicos/${CLIENTE}`, { nombre: str("Ana Maria") }));
+    ok(await patch(CLIENTE, `perfilesPublicos/${CLIENTE}`, { fotoUrl: str("https://lh3.googleusercontent.com/a/abc") }));
+    denegado(await patch(OTRO_CLIENTE, `perfilesPublicos/${CLIENTE}`, { nombre: str("Intruso") }));
+    denegado(await patch(null, `perfilesPublicos/${CLIENTE}`, { nombre: str("Anonimo") }));
+    denegado(await patch(CLIENTE, `perfilesPublicos/${CLIENTE}`, { telefono: str("+56900000000") }));
+    denegado(await patch(CLIENTE, `perfilesPublicos/${CLIENTE}`, { rut: str("111111111") }));
+    denegado(await patch(CLIENTE, `perfilesPublicos/${CLIENTE}`, { fotoUrl: str("https://atacante.example/pixel.png") }));
+    denegado(await patch(CLIENTE, `perfilesPublicos/${CLIENTE}`, { nombre: str("") }));
+    denegado(await patch(CLIENTE, `perfilesPublicos/${CLIENTE}`, { nombre: str("x".repeat(201)) }));
+    denegado(await llamar(CLIENTE, "DELETE", `perfilesPublicos/${CLIENTE}`));
+  });
+
+  it("registro: reclama el RUT, crea el usuario y su perfil publico en un batch", async () => {
+    ok(await registrar("nuevo1", "123456785", { rol: str("CLIENTE") }));
+    assert.equal((await db.collection("rutsRegistrados").doc("123456785").get()).get("uid"), "nuevo1");
+    assert.equal((await db.collection("perfilesPublicos").doc("nuevo1").get()).get("nombre"), "Nueva");
+  });
+
+  it("registro con un RUT ya tomado: se rechaza el batch completo y no queda nada", async () => {
+    ok(await registrar("nuevo1", "123456785", { rol: str("CLIENTE") }));
+    denegado(await registrar("nuevo2", "123456785", { rol: str("CLIENTE") }));
+    assert.equal((await db.collection("usuarios").doc("nuevo2").get()).exists, false);
+    assert.equal((await db.collection("perfilesPublicos").doc("nuevo2").get()).exists, false);
+    assert.equal((await db.collection("rutsRegistrados").doc("123456785").get()).get("uid"), "nuevo1");
+  });
+
+  it("no se puede crear el usuario sin reclamar su RUT, ni reclamando el de otro uid", async () => {
+    denegado(await registrar("nuevo1", "123456785", { rol: str("CLIENTE") }, false));
+    // Reclama el RUT a nombre de otro: la clave `uid` no coincide con quien escribe.
+    denegado(
+      await commitComoCliente("nuevo1", [
+        { ruta: "rutsRegistrados/123456785", campos: { uid: str("otro") } },
+        { ruta: "usuarios/nuevo1", campos: { rut: str("123456785"), rol: str("CLIENTE") } },
+      ]),
+    );
+    // Reclama un RUT y crea el usuario con otro distinto.
+    denegado(
+      await commitComoCliente("nuevo1", [
+        { ruta: "rutsRegistrados/123456785", campos: { uid: str("nuevo1") } },
+        { ruta: "usuarios/nuevo1", campos: { rut: str("987654321"), rol: str("CLIENTE") } },
+      ]),
+    );
+    assert.equal((await db.collection("usuarios").doc("nuevo1").get()).exists, false);
+  });
+
+  it("rutsRegistrados: nadie lo lee ni lo modifica; el id y las claves se validan", async () => {
+    ok(await registrar("nuevo1", "123456785", { rol: str("CLIENTE") }));
+    denegado(await llamar("nuevo1", "GET", "rutsRegistrados/123456785"));
+    denegado(await llamar(OTRO_CLIENTE, "GET", "rutsRegistrados/123456785"));
+    denegado(await llamar("nuevo1", "GET", "rutsRegistrados"));
+    denegado(await patch("nuevo1", "rutsRegistrados/123456785", { uid: str(OTRO_CLIENTE) }));
+    denegado(await llamar("nuevo1", "DELETE", "rutsRegistrados/123456785"));
+    denegado(await commitComoCliente("x1", [{ ruta: "rutsRegistrados/no-es-un-rut", campos: { uid: str("x1") } }]));
+    denegado(await commitComoCliente("x1", [{ ruta: "rutsRegistrados/111111119", campos: { uid: str("x1"), extra: str("y") } }]));
+    ok(await commitComoCliente("x1", [{ ruta: "rutsRegistrados/11111111K", campos: { uid: str("x1") } }]));
   });
 });
 

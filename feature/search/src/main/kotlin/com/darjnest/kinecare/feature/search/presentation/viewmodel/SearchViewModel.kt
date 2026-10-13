@@ -230,11 +230,11 @@ private fun Profesional.aProfesionalDestacado(): ProfesionalDestacado {
     val activos = servicios.filter { it.activo }
     val especialidad = especialidadLegible()
     return ProfesionalDestacado(
-        id = usuario.id,
-        nombre = usuario.nombre,
+        id = perfil.id,
+        nombre = perfil.nombre,
         rnpi = rnpi,
         especialidad = especialidad,
-        indiceBusqueda = normalizarParaBusqueda("${usuario.nombre} $especialidad $descripcion"),
+        indiceBusqueda = normalizarParaBusqueda("${perfil.nombre} $especialidad $descripcion"),
         calificacion = calificacionPromedio,
         totalResenas = totalResenas,
         precioDesde = (activos.ifEmpty { servicios }).minOfOrNull { it.precio } ?: 0L,

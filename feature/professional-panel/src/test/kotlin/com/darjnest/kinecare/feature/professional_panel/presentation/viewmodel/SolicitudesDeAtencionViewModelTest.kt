@@ -17,14 +17,13 @@ import com.darjnest.kinecare.core.common.domain.model.EstadoReserva
 import com.darjnest.kinecare.core.common.domain.model.MetodoPago
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
 import com.darjnest.kinecare.core.common.domain.model.Pago
+import com.darjnest.kinecare.core.common.domain.model.PerfilPublico
 import com.darjnest.kinecare.core.common.domain.model.ReembolsoCancelacion
 import com.darjnest.kinecare.core.common.domain.model.Reserva
 import com.darjnest.kinecare.core.common.domain.model.ResultadoCancelacion
 import com.darjnest.kinecare.core.common.domain.model.RespuestaReserva
-import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.domain.model.Servicio
 import com.darjnest.kinecare.core.common.domain.model.TipoMetodoPago
-import com.darjnest.kinecare.core.common.domain.model.Usuario
 import com.darjnest.kinecare.core.common.result.Result
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
@@ -72,8 +71,8 @@ class SolicitudesDeAtencionViewModelTest {
         val firebaseUser = mockk<FirebaseUser>()
         every { firebaseUser.uid } returns uid
         every { firebaseAuth.currentUser } returns firebaseUser
-        coEvery { usuarioRepository.obtenerPorId(any()) } answers {
-            Result.Success(usuario(firstArg(), "Nombre ${firstArg<String>()}"))
+        coEvery { usuarioRepository.obtenerPerfilPublico(any()) } answers {
+            Result.Success(PerfilPublico(firstArg(), "Nombre ${firstArg<String>()}", null))
         }
         coEvery { servicioRepository.obtenerPorProfesional(uid) } returns Result.Success(
             listOf(servicio("srv-1", "Kinesiología deportiva"), servicio("srv-2", "Masoterapia")),
@@ -162,7 +161,7 @@ class SolicitudesDeAtencionViewModelTest {
 
     @Test
     fun `si fallan las lecturas de nombres usa textos genericos sin bloquear la pantalla`() = runTest {
-        coEvery { usuarioRepository.obtenerPorId(any()) } returns Result.Error(UsuarioError.DESCONOCIDO)
+        coEvery { usuarioRepository.obtenerPerfilPublico(any()) } returns Result.Error(UsuarioError.DESCONOCIDO)
         coEvery { servicioRepository.obtenerPorProfesional(uid) } returns Result.Error(ServicioError.DESCONOCIDO)
         conReservas(reserva("r1", AHORA + 3.hours))
 
@@ -182,8 +181,8 @@ class SolicitudesDeAtencionViewModelTest {
 
         crearViewModel()
 
-        coVerify(exactly = 1) { usuarioRepository.obtenerPorId("cli-1") }
-        coVerify(exactly = 1) { usuarioRepository.obtenerPorId("cli-2") }
+        coVerify(exactly = 1) { usuarioRepository.obtenerPerfilPublico("cli-1") }
+        coVerify(exactly = 1) { usuarioRepository.obtenerPerfilPublico("cli-2") }
     }
 
     @Test
@@ -655,18 +654,6 @@ private fun reserva(
     ),
     comisionPorcentaje = comision,
     expirada = expirada,
-)
-
-private fun usuario(id: String, nombre: String) = Usuario(
-    id = id,
-    nombre = nombre,
-    rut = "11.111.111-1",
-    email = "$id@test.cl",
-    correoContacto = null,
-    telefono = null,
-    rol = RolUsuario.CLIENTE,
-    fotoUrl = null,
-    fechaRegistro = AHORA,
 )
 
 private fun servicio(id: String, nombre: String) = Servicio(

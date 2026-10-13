@@ -252,7 +252,7 @@ class BookingViewModel @Inject constructor(
                     _state.update {
                         it.copy(
                             cargando = false,
-                            profesionalNombre = profesional.usuario.nombre,
+                            profesionalNombre = profesional.perfil.nombre,
                             profesionalSinPagos = !profesional.mercadoPagoConectado,
                             servicios = activos,
                         )

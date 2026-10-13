@@ -1,7 +1,8 @@
 package com.darjnest.kinecare.core.common.domain.model
 
 data class Profesional(
-    val usuario: Usuario,
+    /** Nombre y foto, de `perfilesPublicos/{id}`: el [Usuario] completo es privado de su dueno. */
+    val perfil: PerfilPublico,
     val especialidades: List<String>,
     val rnpi: String,
     val servicios: List<Servicio>,

@@ -141,7 +141,7 @@ const val LARGO_MAXIMO_BIOGRAFIA = 500
  * `credencialesAlDia` es la insignia `CREDENCIALES` en `APROBADO`.
  */
 private fun Profesional.aIdentidad(): IdentidadProfesional = IdentidadProfesional(
-    nombre = usuario.nombre,
+    nombre = perfil.nombre,
     especialidadPrincipal = especialidades.firstOrNull().orEmpty(),
     numeroRegistroSis = rnpi,
     credencialesAlDia = insignias.any {
@@ -227,7 +227,7 @@ class MiPerfilProfesionalViewModel @Inject constructor(
                             cargando = false,
                             errorCarga = false,
                             profesionalId = uid,
-                            fotoUrl = profesional.usuario.fotoUrl,
+                            fotoUrl = profesional.perfil.fotoUrl,
                             identidad = profesional.aIdentidad(),
                             // Atenciones completadas y puntualidad no existen
                             // en Firestore todavia (Fase 4): quedan nulas y la

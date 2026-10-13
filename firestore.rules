@@ -19,17 +19,52 @@ service cloud.firestore {
                 || data.fotoUrl.matches('https://lh[0-9][.]googleusercontent[.]com/.*')));
     }
 
-    // rut, email y fechaRegistro se fijan al registrarse y no se editan: la unicidad del RUT solo
-    // se comprueba en el cliente, y verificacion de identidad compara contra el.
+    // `usuarios/{uid}` es PRIVADO: rut, email, correoContacto y telefono solo los lee su dueno (antes
+    // cualquier usuario autenticado podia listarlos). Lo que el resto de la app necesita ver de otra
+    // persona (nombre y foto) vive en `perfilesPublicos/{uid}`; las Cloud Functions usan Admin SDK.
+    // rut, email y fechaRegistro se fijan al registrarse y no se editan: verificacion de identidad
+    // compara contra el rut. Crear la cuenta exige reclamar el RUT en `rutsRegistrados` en el mismo
+    // batch (getAfter), que es lo que garantiza su unicidad.
     match /usuarios/{usuarioId} {
-      allow read: if request.auth != null;
-      allow create: if esDueno(usuarioId) && fotoUrlValida(usuarioId, request.resource.data);
+      allow read: if esDueno(usuarioId);
+      allow create: if esDueno(usuarioId)
+        && fotoUrlValida(usuarioId, request.resource.data)
+        && request.resource.data.rut is string
+        && existsAfter(/databases/$(database)/documents/rutsRegistrados/$(request.resource.data.rut))
+        && getAfter(/databases/$(database)/documents/rutsRegistrados/$(request.resource.data.rut)).data.uid == usuarioId;
       allow update: if esDueno(usuarioId)
         && request.resource.data.rol == resource.data.rol
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['rut', 'email', 'fechaRegistro'])
         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['fotoUrl'])
             || fotoUrlValida(usuarioId, request.resource.data));
       allow delete: if false;
+    }
+
+    // Nombre y foto de cualquier persona, legibles por todo usuario autenticado (resolver al
+    // profesional de una cita, al paciente de una solicitud, al autor de una resena). Solo el
+    // dueno lo escribe, con esas dos claves; se mantiene al dia junto con `usuarios/{uid}`.
+    function perfilPublicoValido(uid, data) {
+      return data.keys().hasOnly(['nombre', 'fotoUrl'])
+        && data.keys().hasAll(['nombre'])
+        && data.nombre is string && data.nombre.size() >= 1 && data.nombre.size() <= 200
+        && fotoUrlValida(uid, data);
+    }
+    match /perfilesPublicos/{usuarioId} {
+      allow read: if request.auth != null;
+      allow create, update: if esDueno(usuarioId) && perfilPublicoValido(usuarioId, request.resource.data);
+      allow delete: if false;
+    }
+
+    // Indice de unicidad del RUT (id = RUT normalizado, sin puntos ni guion). Nadie lo lee: quien
+    // intenta registrar un RUT ya tomado falla porque `create` sobre un doc existente es un update,
+    // que esta denegado, y el batch completo del registro se rechaza.
+    match /rutsRegistrados/{rut} {
+      allow read: if false;
+      allow create: if request.auth != null
+        && rut.matches('[0-9]{6,8}[0-9K]')
+        && request.resource.data.keys().hasOnly(['uid'])
+        && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
     }
 
     // Tokens FCM del propio usuario (id del documento = token). Solo el dueno los lee, crea,

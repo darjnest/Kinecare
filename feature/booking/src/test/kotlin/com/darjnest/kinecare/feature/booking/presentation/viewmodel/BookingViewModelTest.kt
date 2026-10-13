@@ -16,6 +16,7 @@ import com.darjnest.kinecare.core.common.domain.model.Direccion
 import com.darjnest.kinecare.core.common.domain.model.Disponibilidad
 import com.darjnest.kinecare.core.common.domain.model.EstadoVerificacion
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
+import com.darjnest.kinecare.core.common.domain.model.PerfilPublico
 import com.darjnest.kinecare.core.common.domain.model.Profesional
 import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.domain.model.Servicio
@@ -131,7 +132,7 @@ class BookingViewModelTest {
         disponibilidad: List<Disponibilidad> = turnoDeLunes,
         mercadoPagoConectado: Boolean = false,
     ) = Profesional(
-        usuario = usuario(profesionalId, "Dra. Paula Rojas"),
+        perfil = PerfilPublico(id = profesionalId, nombre = "Dra. Paula Rojas", fotoUrl = null),
         especialidades = listOf("Kinesiologia"),
         rnpi = "123",
         servicios = servicios,

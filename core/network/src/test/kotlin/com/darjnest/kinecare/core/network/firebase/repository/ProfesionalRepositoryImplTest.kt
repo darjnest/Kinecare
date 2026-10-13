@@ -6,10 +6,9 @@ import com.darjnest.kinecare.core.common.data.error.ProfesionalError
 import com.darjnest.kinecare.core.common.data.error.UsuarioError
 import com.darjnest.kinecare.core.common.data.repository.UsuarioRepository
 import com.darjnest.kinecare.core.common.domain.model.Disponibilidad
+import com.darjnest.kinecare.core.common.domain.model.PerfilPublico
 import com.darjnest.kinecare.core.common.domain.model.Profesional
-import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.domain.model.TipoAtencion
-import com.darjnest.kinecare.core.common.domain.model.Usuario
 import com.darjnest.kinecare.core.common.result.Result
 import com.google.android.gms.tasks.Task
 import com.google.firebase.FirebaseNetworkException
@@ -29,7 +28,6 @@ import io.mockk.verify
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.DayOfWeek
-import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalTime
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -54,17 +52,7 @@ class ProfesionalRepositoryImplTest {
     private val usuarioRepository = mockk<UsuarioRepository>()
     private val repository = ProfesionalRepositoryImpl(firestore, usuarioRepository)
 
-    private val usuario = Usuario(
-        id = "prof-1",
-        nombre = "Ana Soto",
-        rut = "12345678-5",
-        email = "ana@kinecare.cl",
-        correoContacto = "ana.contacto@kinecare.cl",
-        telefono = "+56911111111",
-        rol = RolUsuario.PROFESIONAL,
-        fotoUrl = "https://foto.com/ana.png",
-        fechaRegistro = Instant.fromEpochMilliseconds(1_700_000_000_000L),
-    )
+    private val perfil = PerfilPublico(id = "prof-1", nombre = "Ana Soto", fotoUrl = "https://foto.com/ana.png")
 
     @BeforeEach
     fun setUp() {
@@ -78,7 +66,7 @@ class ProfesionalRepositoryImplTest {
 
     @Test
     fun `retorna profesionales mapeados cuando Firestore devuelve documentos validos`() = runTest {
-        coEvery { usuarioRepository.obtenerPorId("prof-1") } returns Result.Success(usuario)
+        coEvery { usuarioRepository.obtenerPerfilPublico("prof-1") } returns Result.Success(perfil)
         val servicioDoc = mockDocumentSnapshot(
             id = "serv-1",
             data = mapOf(
@@ -128,7 +116,7 @@ class ProfesionalRepositoryImplTest {
         val profesionales = (resultado as Result.Success).data
         assertEquals(1, profesionales.size)
         val profesional = profesionales.first()
-        assertEquals("Ana Soto", profesional.usuario.nombre)
+        assertEquals("Ana Soto", profesional.perfil.nombre)
         assertEquals("RNPI-1234", profesional.rnpi)
         assertEquals(listOf("KINESIOLOGIA", "kine-deportiva"), profesional.especialidades)
         assertEquals(listOf(TipoAtencion.KINESIOLOGIA, TipoAtencion.MASOTERAPIA), profesional.tiposAtencion)
@@ -152,9 +140,9 @@ class ProfesionalRepositoryImplTest {
 
     @Test
     fun `ignora valores desconocidos de tiposAtencion y lo deja vacio si el campo falta`() = runTest {
-        coEvery { usuarioRepository.obtenerPorId("prof-1") } returns Result.Success(usuario)
-        coEvery { usuarioRepository.obtenerPorId("prof-legado") } returns
-            Result.Success(usuario.copy(id = "prof-legado"))
+        coEvery { usuarioRepository.obtenerPerfilPublico("prof-1") } returns Result.Success(perfil)
+        coEvery { usuarioRepository.obtenerPerfilPublico("prof-legado") } returns
+            Result.Success(perfil.copy(id = "prof-legado"))
         val conValorRaro = mockDocumentSnapshot(
             id = "prof-1",
             data = mapOf("tiposAtencion" to listOf("Kinesiologia", "KINESIOLOGIA", 42L)),
@@ -209,8 +197,8 @@ class ProfesionalRepositoryImplTest {
 
     @Test
     fun `descarta insignia con tipo invalido sin romper el mapeo del resto del profesional`() = runTest {
-        val usuarioBruno = usuario.copy(id = "prof-2", nombre = "Bruno Diaz", rut = "9876543-2", correoContacto = null, telefono = null, fotoUrl = null)
-        coEvery { usuarioRepository.obtenerPorId("prof-2") } returns Result.Success(usuarioBruno)
+        val perfilBruno = perfil.copy(id = "prof-2", nombre = "Bruno Diaz", fotoUrl = null)
+        coEvery { usuarioRepository.obtenerPerfilPublico("prof-2") } returns Result.Success(perfilBruno)
         val insigniaInvalida = mapOf(
             "tipo" to "NO_EXISTE",
             "estado" to "APROBADO",
@@ -240,13 +228,13 @@ class ProfesionalRepositoryImplTest {
         assertTrue(resultado is Result.Success)
         val profesional = (resultado as Result.Success).data.first()
         assertTrue(profesional.insignias.isEmpty())
-        assertEquals("Bruno Diaz", profesional.usuario.nombre)
+        assertEquals("Bruno Diaz", profesional.perfil.nombre)
         assertEquals("RNPI-9999", profesional.rnpi)
     }
 
     @Test
-    fun `descarta el profesional cuando UsuarioRepository no encuentra el usuario`() = runTest {
-        coEvery { usuarioRepository.obtenerPorId("prof-3") } returns Result.Error(UsuarioError.NO_ENCONTRADO)
+    fun `descarta el profesional cuando UsuarioRepository no encuentra el perfil publico`() = runTest {
+        coEvery { usuarioRepository.obtenerPerfilPublico("prof-3") } returns Result.Error(UsuarioError.NO_ENCONTRADO)
         val profesionalDoc = mockDocumentSnapshot(
             id = "prof-3",
             data = mapOf(
@@ -269,7 +257,7 @@ class ProfesionalRepositoryImplTest {
 
     @Test
     fun `obtenerPorId retorna el profesional cuando el documento existe`() = runTest {
-        coEvery { usuarioRepository.obtenerPorId("prof-1") } returns Result.Success(usuario)
+        coEvery { usuarioRepository.obtenerPerfilPublico("prof-1") } returns Result.Success(perfil)
         val profesionalDoc = mockDocumentSnapshot(
             id = "prof-1",
             data = mapOf(
@@ -301,13 +289,13 @@ class ProfesionalRepositoryImplTest {
         val resultado = repository.obtenerPorId("prof-1")
 
         assertTrue(resultado is Result.Success)
-        assertEquals("Ana Soto", (resultado as Result.Success).data.usuario.nombre)
+        assertEquals("Ana Soto", (resultado as Result.Success).data.perfil.nombre)
     }
 
     @Test
     fun `obtenerPorId lee mercadoPagoConectado y lo deja en false si el campo falta`() = runTest {
-        coEvery { usuarioRepository.obtenerPorId("prof-1") } returns Result.Success(usuario)
-        coEvery { usuarioRepository.obtenerPorId("prof-2") } returns Result.Success(usuario.copy(id = "prof-2"))
+        coEvery { usuarioRepository.obtenerPerfilPublico("prof-1") } returns Result.Success(perfil)
+        coEvery { usuarioRepository.obtenerPerfilPublico("prof-2") } returns Result.Success(perfil.copy(id = "prof-2"))
         val conectado = obtenerPorIdConDocumento("prof-1", mapOf("mercadoPagoConectado" to true))
         val sinCampo = obtenerPorIdConDocumento("prof-2", mapOf("rnpi" to "RNPI-1"))
 
@@ -449,7 +437,7 @@ class ProfesionalRepositoryImplTest {
      * Encadena los mocks de Firestore que recorre
      * `ProfesionalRepositoryImpl.buscarPorTipoAtencion`: la query sobre
      * `profesionales` y la subcoleccion `profesionales/{id}/servicios`
-     * (el usuario ahora se resuelve via `UsuarioRepository`, mockeado
+     * (el perfil publico se resuelve via `UsuarioRepository`, mockeado
      * aparte con `coEvery` en cada test).
      */
     private fun setUpFirestore(

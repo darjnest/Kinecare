@@ -10,6 +10,7 @@ import com.darjnest.kinecare.core.common.data.repository.ProfesionalRepository
 import com.darjnest.kinecare.core.common.domain.model.Cliente
 import com.darjnest.kinecare.core.common.domain.model.EstadoVerificacion
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
+import com.darjnest.kinecare.core.common.domain.model.PerfilPublico
 import com.darjnest.kinecare.core.common.domain.model.Profesional
 import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.domain.model.Servicio
@@ -75,17 +76,7 @@ class SearchViewModelTest {
         calificacion: Double = 4.5,
         totalResenas: Int = 10,
     ): Profesional = Profesional(
-        usuario = Usuario(
-            id = id,
-            nombre = nombre,
-            rut = "12345678-5",
-            email = "ana@kinecare.cl",
-            correoContacto = null,
-            telefono = null,
-            rol = RolUsuario.PROFESIONAL,
-            fotoUrl = null,
-            fechaRegistro = Instant.fromEpochMilliseconds(0),
-        ),
+        perfil = PerfilPublico(id = id, nombre = nombre, fotoUrl = null),
         especialidades = especialidades,
         rnpi = "RNPI-1",
         servicios = listOf(

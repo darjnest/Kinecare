@@ -943,6 +943,22 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       `PRD` (2026-10-09, sin exigir rama al día con la base). **Pendiente:**
       sumar release firmado (Fase 5 del estándar) y revisar si el tiempo de la
       corrida justifica separar el job de Android.
+- [x] Seguridad de `usuarios`: separación público/privado (hallazgo de la
+      auditoría del 2026-10-12). `usuarios/{uid}` pasa a lectura **solo del
+      dueño**; nombre y foto viven en `perfilesPublicos/{uid}` (lectura para todo
+      usuario autenticado) y el RUT se reclama en `rutsRegistrados/{rut}` (nadie
+      lo lee), todo en el mismo batch del registro. `Profesional.usuario: Usuario`
+      pasa a `Profesional.perfil: PerfilPublico`; `UsuarioRepository` suma
+      `obtenerPerfilPublico` (lo usan Solicitudes, el panel del profesional y las
+      reseñas para resolver a *otra* persona) y sus escrituras de nombre/foto son
+      un batch. El registro con Google ya no consulta `usuarios` por RUT: el
+      `PERMISSION_DENIED` del batch se traduce a `RUT_YA_REGISTRADO`; el registro
+      por RUT+contraseña borra la cuenta de Auth recién creada si el RUT ya estaba
+      reclamado. 7 tests de reglas nuevos contra el emulador (más el de registro reescrito) y tests de repositorio.
+      **Sin desplegar:** hay que migrar los datos antes de desplegar las reglas
+      (`scripts/migrar-perfiles-publicos-qa.mjs --aplicar`, ver
+      [PENDIENTES.md](PENDIENTES.md)); una app anterior a este cambio deja de ver
+      nombres ajenos.
 - [ ] R8/ProGuard, revisión de seguridad
 - [ ] Publicación en Play Store
 

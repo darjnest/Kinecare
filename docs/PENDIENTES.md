@@ -175,13 +175,18 @@ casi todo esto:
       no hay un solo test de Compose UI. Cubrir al menos reserva y pago, que son
       los flujos críticos. Los tests de ViewModel/repositorio sí están bien,
       pero `:core:common`, `:core:designsystem` y `:core:database` casi no tienen.
-- [ ] **Reglas: separar datos privados de `usuarios`** (hallazgo de la auditoría
-      del 2026-10-12): hoy cualquier usuario autenticado puede listar y leer
-      `rut`, `email`, `correoContacto` y `telefono` de todos. Pasar a un doc
-      público mínimo (`nombre`, `fotoUrl`) + privado, y mover el chequeo de RUT
-      duplicado a una Cloud Function o doc índice. Tocan además: tope de
-      `servicios` por profesional. (Inmutables `rut`/`email`/`rnpi`, `fotoUrl` y
-      lista cerrada de `profesionales`: hechos en el PR de reglas.)
+- [ ] **Desplegar la separación público/privado de `usuarios`** (código hecho,
+      ver TASKS.md Fase 8). Orden: (1) ~~migrar los datos~~ **hecho el 2026-10-13 en
+      QA** con el MCP de Firebase (sin credenciales para el script): 20
+      `perfilesPublicos` y 19 `rutsRegistrados`; el RUT `123456785` está repetido
+      entre `usuarios/Btdqq2BvgmM934IVKBHTL9nKlWn2` (lo reclamó) y el seed
+      `usuarios/prof-javiera-munoz` (sin reclamar; conviene cambiarle el RUT).
+      Usuarios creados después de esa fecha se migran con
+      `node scripts/migrar-perfiles-publicos-qa.mjs --aplicar`; (2) desplegar
+      `firestore.rules` a QA; (3) instalar la app nueva. Verificar después con la
+      cuenta de profesional de prueba que Solicitudes muestra el nombre del
+      paciente y que "Cambiar foto"/"Información personal" siguen guardando. Aún
+      falta de aquel hallazgo el tope de `servicios` por profesional.
 - [ ] **Revisión de seguridad**: pasar `firebase-security-rules-auditor` sobre
       `firestore.rules` / `storage.rules` (las reglas crecieron mucho) y la skill
       `security-review` sobre la app.
