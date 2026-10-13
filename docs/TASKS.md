@@ -939,8 +939,9 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       encontraba 2 errores que ya estaban en `QA` (falta `@RequiresApi` en el
       `Geocoder` asíncrono de `:feature:search` y un `Locale.getDefault()` no
       observable en `LiquidacionesYFinanzasScreen`); corregidos en el mismo
-      cambio. El check `CI` ya es obligatorio en las rulesets de `QA` y
-      `PRD` (2026-10-09, sin exigir rama al día con la base). **Pendiente:**
+      cambio. El check `CI` se exigió en las rulesets de `QA` y `PRD`
+      (2026-10-09), pero hoy ya no: a 2026-10-13 las rulesets no exigen checks y
+      GitHub Actions está desactivado en el repo. **Pendiente:**
       sumar release firmado (Fase 5 del estándar) y revisar si el tiempo de la
       corrida justifica separar el job de Android.
 - [x] Seguridad de `usuarios`: separación público/privado (hallazgo de la
@@ -969,7 +970,8 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       `KineCareProfessionalBottomNavBar` en `:core:designsystem` (Inicio · Solicitudes ·
       Agenda · Perfil, antes "Reservas" vs "Solicitudes" y ícono carpeta vs credencial).
       Pendientes de esa revisión, sin arreglar: botones sin flujo en Documentos, enlaces de Términos/Privacidad que no abren nada, ícono de la app por
-      defecto y pluralización ("1 servicios").
+      defecto y textos truncados. Pluralización "1 servicios" y "+" duplicado de
+      "Agregar Nuevo Servicio" corregidos (PR #62).
 - [x] Mapa en la búsqueda del cliente (2026-10-13): alternancia Lista/Mapa en
       `:feature:search` con un pin por profesional en su **zona aproximada** (celda de ~1 km,
       `Coordenada.aproximada()` aplicada en `ProfesionalRepositoryImpl`: la ubicación exacta no

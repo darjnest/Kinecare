@@ -79,11 +79,14 @@ feature/* fix/* chore/*  ──PR──►  QA  ──PR (merge commit)──►
   - Verificado con `gh api repos/darjnest/Kinecare/rules/branches/<rama>`.
 
 CI: `.github/workflows/ci.yml` (build, lint y tests de Android + tests de
-Cloud Functions contra el emulador) corre en cada PR a `QA`/`PRD`.
+Cloud Functions contra el emulador) está pensado para correr en cada PR a
+`QA`/`PRD`, pero **GitHub Actions está desactivado en el repo** (2026-10-13)
+y las rulesets no exigen ningún check: hoy no corre nada automático. Antes de
+mergear, compilar y correr los tests en local.
 
 **PENDIENTE:** release firmado (Fase 5 del estándar del equipo, hasta que
-exista algo que publicar). El check `CI` ya es obligatorio en las rulesets de
-ambas ramas (2026-10-09).
+exista algo que publicar). Para volver a tener CI: reactivar Actions (Settings
+→ Actions → General) y volver a exigir el check `CI` en las rulesets.
 
 ## Agentes especializados
 Este proyecto define subagentes en `.claude/agents/` — úsalos para el tipo
