@@ -176,9 +176,13 @@ casi todo esto:
       los flujos críticos. Los tests de ViewModel/repositorio sí están bien,
       pero `:core:common`, `:core:designsystem` y `:core:database` casi no tienen.
 - [ ] **Desplegar la separación público/privado de `usuarios`** (código hecho,
-      ver TASKS.md Fase 8). Orden: (1) `node scripts/migrar-perfiles-publicos-qa.mjs`
-      (dry-run) y luego `--aplicar`; si avisa de un **RUT repetido** entre dos
-      usuarios, resolverlo a mano antes de seguir; (2) desplegar
+      ver TASKS.md Fase 8). Orden: (1) ~~migrar los datos~~ **hecho el 2026-10-13 en
+      QA** con el MCP de Firebase (sin credenciales para el script): 20
+      `perfilesPublicos` y 19 `rutsRegistrados`; el RUT `123456785` está repetido
+      entre `usuarios/Btdqq2BvgmM934IVKBHTL9nKlWn2` (lo reclamó) y el seed
+      `usuarios/prof-javiera-munoz` (sin reclamar; conviene cambiarle el RUT).
+      Usuarios creados después de esa fecha se migran con
+      `node scripts/migrar-perfiles-publicos-qa.mjs --aplicar`; (2) desplegar
       `firestore.rules` a QA; (3) instalar la app nueva. Verificar después con la
       cuenta de profesional de prueba que Solicitudes muestra el nombre del
       paciente y que "Cambiar foto"/"Información personal" siguen guardando. Aún
