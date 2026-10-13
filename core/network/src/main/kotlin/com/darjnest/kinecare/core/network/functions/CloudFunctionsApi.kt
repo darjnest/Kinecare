@@ -2,10 +2,15 @@ package com.darjnest.kinecare.core.network.functions
 
 import com.darjnest.kinecare.core.network.functions.dto.CallableRequest
 import com.darjnest.kinecare.core.network.functions.dto.CallableResponse
+import com.darjnest.kinecare.core.network.functions.dto.CancelarReservaRequestDto
+import com.darjnest.kinecare.core.network.functions.dto.CancelarReservaResultadoDto
 import com.darjnest.kinecare.core.network.functions.dto.ConectarMercadoPagoRequestDto
 import com.darjnest.kinecare.core.network.functions.dto.ConectarMercadoPagoResultadoDto
+import com.darjnest.kinecare.core.network.functions.dto.CompletarReservaRequestDto
+import com.darjnest.kinecare.core.network.functions.dto.CompletarReservaResultadoDto
 import com.darjnest.kinecare.core.network.functions.dto.CrearReservaRequestDto
 import com.darjnest.kinecare.core.network.functions.dto.CrearReservaResultadoDto
+import com.darjnest.kinecare.core.network.functions.dto.CuposOcupadosRequestDto
 import com.darjnest.kinecare.core.network.functions.dto.EstadoPagoRequestDto
 import com.darjnest.kinecare.core.network.functions.dto.EstadoPagoResultadoDto
 import com.darjnest.kinecare.core.network.functions.dto.EstadoVerificacionRequestDto
@@ -16,6 +21,7 @@ import com.darjnest.kinecare.core.network.functions.dto.ResponderReservaRequestD
 import com.darjnest.kinecare.core.network.functions.dto.ResponderReservaResultadoDto
 import com.darjnest.kinecare.core.network.functions.dto.SolicitarVerificacionRequestDto
 import com.darjnest.kinecare.core.network.functions.dto.SolicitarVerificacionResultadoDto
+import kotlinx.serialization.json.JsonElement
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.Header
@@ -42,6 +48,29 @@ interface CloudFunctionsApi {
         @Header("Authorization") autorizacion: String,
         @Body cuerpo: CallableRequest<ResponderReservaRequestDto>,
     ): Response<CallableResponse<ResponderReservaResultadoDto>>
+
+    @POST("completarReserva")
+    suspend fun completarReserva(
+        @Header("Authorization") autorizacion: String,
+        @Body cuerpo: CallableRequest<CompletarReservaRequestDto>,
+    ): Response<CallableResponse<CompletarReservaResultadoDto>>
+
+    @POST("cancelarReserva")
+    suspend fun cancelarReserva(
+        @Header("Authorization") autorizacion: String,
+        @Body cuerpo: CallableRequest<CancelarReservaRequestDto>,
+    ): Response<CallableResponse<CancelarReservaResultadoDto>>
+
+    /**
+     * El `result` llega como [JsonElement] porque la forma documentada es una
+     * lista `[{inicio, fin}]` pero el backend la entrega envuelta en
+     * `{"cupos": [...]}`: `ReservaRepositoryImpl` acepta ambas.
+     */
+    @POST("obtenerCuposOcupados")
+    suspend fun obtenerCuposOcupados(
+        @Header("Authorization") autorizacion: String,
+        @Body cuerpo: CallableRequest<CuposOcupadosRequestDto>,
+    ): Response<CallableResponse<JsonElement>>
 
     @POST("iniciarPago")
     suspend fun iniciarPago(

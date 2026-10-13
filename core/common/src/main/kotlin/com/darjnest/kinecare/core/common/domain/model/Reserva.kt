@@ -32,4 +32,10 @@ data class Reserva(
     val estado: EstadoReserva,
     val pago: Pago,
     val comisionPorcentaje: Double,
+    /**
+     * `true` si el backend cerro la solicitud por falta de respuesta (`expirarSolicitudes`):
+     * queda en [EstadoReserva.RECHAZADA] con `expirada = true`, y la UI la muestra como
+     * "Expirada" en vez de "Rechazada".
+     */
+    val expirada: Boolean = false,
 )

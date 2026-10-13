@@ -4,6 +4,8 @@ package com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.darjnest.kinecare.core.common.data.error.CancelarReservaError
+import com.darjnest.kinecare.core.common.data.error.CompletarReservaError
 import com.darjnest.kinecare.core.common.data.error.ResponderReservaError
 import com.darjnest.kinecare.core.common.data.repository.ReservaRepository
 import com.darjnest.kinecare.core.common.data.repository.ServicioRepository
@@ -11,6 +13,7 @@ import com.darjnest.kinecare.core.common.data.repository.UsuarioRepository
 import com.darjnest.kinecare.core.common.domain.model.EstadoPago
 import com.darjnest.kinecare.core.common.domain.model.EstadoReserva
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
+import com.darjnest.kinecare.core.common.domain.model.ReembolsoCancelacion
 import com.darjnest.kinecare.core.common.domain.model.Reserva
 import com.darjnest.kinecare.core.common.domain.model.RespuestaReserva
 import com.darjnest.kinecare.core.common.result.Result
@@ -84,6 +87,25 @@ data class SolicitudResuelta(
     val fechaHoraTexto: String,
     val estado: EstadoSolicitudResuelta,
     val estadoTexto: String,
+    /** Confirmada (o en curso) y con la hora ya cumplida: el profesional puede darla por realizada. */
+    val puedeCompletar: Boolean = false,
+    /** Confirmada y con la hora todavia por llegar: el profesional puede cancelarla (reembolso total al paciente). */
+    val puedeCancelar: Boolean = false,
+)
+
+/** Largo maximo del motivo de cancelacion; el backend rechaza mas (`MOTIVO_INVALIDO`). */
+const val MAX_MOTIVO_CANCELACION = 300
+
+/** Cancelacion en curso (dialogo abierto) de una cita confirmada. */
+data class CancelacionSolicitud(
+    val reservaId: String,
+    val pacienteNombre: String,
+    /** "Sesion - Hoy, 17:30 hrs", para identificar la cita en el dialogo. */
+    val resumen: String,
+    val motivo: String = "",
+    val cancelando: Boolean = false,
+    /** Error reintentable (sin conexion, fallo del servidor) mostrado dentro del dialogo. */
+    val error: String? = null,
 )
 
 data class SolicitudesDeAtencionState(
@@ -102,6 +124,8 @@ data class SolicitudesDeAtencionState(
     val respondiendoId: String? = null,
     /** Solicitud que el profesional pidio rechazar; la vista muestra un dialogo de confirmacion. */
     val solicitudPorRechazar: SolicitudAtencion? = null,
+    /** No nulo mientras el dialogo "Cancelar cita" esta abierto. */
+    val cancelacion: CancelacionSolicitud? = null,
     /** Aviso puntual para un Snackbar; la vista lo consume con [SolicitudesDeAtencionAction.MensajeMostrado]. */
     val mensaje: String? = null,
 )
@@ -115,6 +139,13 @@ sealed interface SolicitudesDeAtencionAction {
     data class RechazarSolicitud(val solicitudId: String) : SolicitudesDeAtencionAction
     data object ConfirmarRechazo : SolicitudesDeAtencionAction
     data object CancelarRechazo : SolicitudesDeAtencionAction
+    /** Da por realizada una atencion confirmada cuya hora ya llego (`completarReserva`). */
+    data class CompletarAtencion(val reservaId: String) : SolicitudesDeAtencionAction
+    /** Abre el dialogo para cancelar una cita confirmada futura. */
+    data class CancelarCita(val reservaId: String) : SolicitudesDeAtencionAction
+    data class CambiarMotivoCancelacion(val motivo: String) : SolicitudesDeAtencionAction
+    data object ConfirmarCancelacion : SolicitudesDeAtencionAction
+    data object DescartarCancelacion : SolicitudesDeAtencionAction
     data object Reintentar : SolicitudesDeAtencionAction
     data object MensajeMostrado : SolicitudesDeAtencionAction
 }
@@ -174,7 +205,7 @@ private fun ModalidadServicio.aTexto(): String = when (this) {
     ModalidadServicio.ONLINE -> "Online"
 }
 
-private fun Reserva.ubicacionTexto(): String = when (modalidad) {
+internal fun Reserva.ubicacionTexto(): String = when (modalidad) {
     ModalidadServicio.DOMICILIO -> direccion
         ?.let { d -> listOf("${d.calle} ${d.numero}".trim(), d.comuna).filter { it.isNotBlank() }.joinToString(", ") }
         ?.takeIf { it.isNotBlank() }
@@ -202,8 +233,8 @@ internal fun Reserva.aSolicitudAtencion(
         fechaHoraTexto = fechaHora.aFechaHoraTexto(ahora),
         direccion = ubicacionTexto(),
         honorarioClp = honorarioNeto(),
-        custodiaTexto = if (pagoAutorizado) "Pago en custodia KineCare" else null,
-        avisoPagoTexto = if (pagoAutorizado) "El paciente ya pagó; el monto se libera al completar la atención." else null,
+        custodiaTexto = if (pagoAutorizado) "Pago recibido en tu cuenta de Mercado Pago" else null,
+        avisoPagoTexto = if (pagoAutorizado) "El paciente ya pagó; el monto llega directo a tu cuenta de Mercado Pago." else null,
     )
 }
 
@@ -213,7 +244,7 @@ internal fun Reserva.estadoResuelto(ahora: Instant): EstadoSolicitudResuelta? = 
     EstadoReserva.CONFIRMADA -> EstadoSolicitudResuelta.CONFIRMADA
     EstadoReserva.EN_CURSO -> EstadoSolicitudResuelta.EN_CURSO
     EstadoReserva.COMPLETADA -> EstadoSolicitudResuelta.COMPLETADA
-    EstadoReserva.RECHAZADA -> EstadoSolicitudResuelta.RECHAZADA
+    EstadoReserva.RECHAZADA -> if (expirada) EstadoSolicitudResuelta.VENCIDA else EstadoSolicitudResuelta.RECHAZADA
     EstadoReserva.CANCELADA_CLIENTE, EstadoReserva.CANCELADA_PROFESIONAL -> EstadoSolicitudResuelta.CANCELADA
 }
 
@@ -226,6 +257,14 @@ private fun Reserva.textoEstadoResuelto(estado: EstadoSolicitudResuelta): String
         if (this.estado == EstadoReserva.CANCELADA_CLIENTE) "Cancelada por el paciente" else "Cancelada por ti"
     EstadoSolicitudResuelta.VENCIDA -> "Vencida sin respuesta"
 }
+
+/** Solo una atencion confirmada (o en curso) cuya hora ya llego; coincide con las reglas de `completarReserva`. */
+internal fun Reserva.puedeCompletarse(ahora: Instant): Boolean =
+    (estado == EstadoReserva.CONFIRMADA || estado == EstadoReserva.EN_CURSO) && fechaHora <= ahora
+
+/** Solo una cita `CONFIRMADA` cuya hora aun no llega; coincide con las reglas de `cancelarReserva`. */
+internal fun Reserva.puedeCancelarseComoProfesional(ahora: Instant): Boolean =
+    estado == EstadoReserva.CONFIRMADA && fechaHora > ahora
 
 /** Lunes de la semana (lunes a domingo) de [fecha]. */
 private fun lunesDe(fecha: LocalDate): LocalDate = fecha.minus(fecha.dayOfWeek.ordinal, DateTimeUnit.DAY)
@@ -241,6 +280,46 @@ private fun ResponderReservaError.aMensaje(): String = when (this) {
     ResponderReservaError.DESCONOCIDO,
     -> "No pudimos enviar tu respuesta. Inténtalo de nuevo."
 }
+
+private fun CompletarReservaError.aMensaje(): String = when (this) {
+    CompletarReservaError.SIN_INTERNET -> "Sin conexión. Revisa tu internet e inténtalo de nuevo."
+    CompletarReservaError.SIN_SESION -> "Tu sesión expiró. Vuelve a iniciar sesión."
+    CompletarReservaError.ROL_INVALIDO -> "Solo un profesional puede completar una atención."
+    CompletarReservaError.RESERVA_NO_ENCONTRADA -> "La atención ya no existe."
+    CompletarReservaError.RESERVA_NO_COMPLETABLE -> "Esta atención ya no está confirmada."
+    CompletarReservaError.CITA_NO_INICIADA -> "La atención todavía no empieza."
+    CompletarReservaError.DATOS_INVALIDOS,
+    CompletarReservaError.DESCONOCIDO,
+    -> "No pudimos completar la atención. Inténtalo de nuevo."
+}
+
+private fun CancelarReservaError.aMensaje(): String = when (this) {
+    CancelarReservaError.SIN_INTERNET -> "Sin conexión. Revisa tu internet e inténtalo de nuevo."
+    CancelarReservaError.SIN_SESION -> "Tu sesión expiró. Vuelve a iniciar sesión."
+    CancelarReservaError.NO_AUTORIZADO -> "No puedes cancelar esta cita."
+    CancelarReservaError.RESERVA_NO_ENCONTRADA -> "La cita ya no existe."
+    CancelarReservaError.ESTADO_INVALIDO -> "Esta cita ya no se puede cancelar: cambió de estado."
+    CancelarReservaError.CITA_YA_INICIADA -> "La hora de la cita ya llegó; no se puede cancelar."
+    CancelarReservaError.MOTIVO_INVALIDO -> "El motivo es demasiado largo. Acórtalo e inténtalo de nuevo."
+    CancelarReservaError.DATOS_INVALIDOS,
+    CancelarReservaError.DESCONOCIDO,
+    -> "No pudimos cancelar la cita. Inténtalo de nuevo."
+}
+
+/** Tras estos errores la cita cambio por otro lado: se cierra el dialogo y se recarga. */
+private val ERRORES_CANCELAR_QUE_RECARGAN = setOf(
+    CancelarReservaError.NO_AUTORIZADO,
+    CancelarReservaError.RESERVA_NO_ENCONTRADA,
+    CancelarReservaError.ESTADO_INVALIDO,
+    CancelarReservaError.CITA_YA_INICIADA,
+)
+
+/** Tras estos errores la reserva cambio por otro lado: se recarga para mostrar el estado real. */
+private val ERRORES_COMPLETAR_QUE_RECARGAN = setOf(
+    CompletarReservaError.RESERVA_NO_ENCONTRADA,
+    CompletarReservaError.RESERVA_NO_COMPLETABLE,
+    CompletarReservaError.CITA_NO_INICIADA,
+)
 
 /**
  * Errores tras los cuales la lista local quedo desactualizada (otra
@@ -301,6 +380,22 @@ class SolicitudesDeAtencionViewModel @Inject constructor(
 
             SolicitudesDeAtencionAction.CancelarRechazo ->
                 _state.update { it.copy(solicitudPorRechazar = null) }
+
+            is SolicitudesDeAtencionAction.CompletarAtencion -> completar(action.reservaId)
+
+            is SolicitudesDeAtencionAction.CancelarCita -> pedirCancelacion(action.reservaId)
+
+            is SolicitudesDeAtencionAction.CambiarMotivoCancelacion -> _state.update { estado ->
+                estado.cancelacion?.takeIf { !it.cancelando }?.let {
+                    estado.copy(cancelacion = it.copy(motivo = action.motivo, error = null))
+                } ?: estado
+            }
+
+            SolicitudesDeAtencionAction.ConfirmarCancelacion -> confirmarCancelacion()
+
+            SolicitudesDeAtencionAction.DescartarCancelacion -> _state.update { estado ->
+                if (estado.cancelacion?.cancelando == true) estado else estado.copy(cancelacion = null)
+            }
 
             SolicitudesDeAtencionAction.Reintentar -> cargar()
 
@@ -363,6 +458,8 @@ class SolicitudesDeAtencionViewModel @Inject constructor(
                         fechaHoraTexto = reserva.fechaHora.aFechaHoraTexto(ahora),
                         estado = resuelto,
                         estadoTexto = reserva.textoEstadoResuelto(resuelto),
+                        puedeCompletar = reserva.puedeCompletarse(ahora),
+                        puedeCancelar = reserva.puedeCancelarseComoProfesional(ahora),
                     ) to reserva.fechaHora
                 }
             }
@@ -377,6 +474,80 @@ class SolicitudesDeAtencionViewModel @Inject constructor(
             historial = historial,
             completadasEstaSemana = completadasEstaSemana,
         )
+    }
+
+    private fun pedirCancelacion(reservaId: String) {
+        if (_state.value.respondiendoId != null) return
+        val fila = _state.value.historial.firstOrNull { it.id == reservaId && it.puedeCancelar } ?: return
+        _state.update {
+            it.copy(
+                cancelacion = CancelacionSolicitud(
+                    reservaId = reservaId,
+                    pacienteNombre = fila.pacienteNombre,
+                    resumen = "${fila.pacienteNombre} • ${fila.servicioNombre} • ${fila.fechaHoraTexto}",
+                ),
+            )
+        }
+    }
+
+    private fun confirmarCancelacion() {
+        val cancelacion = _state.value.cancelacion ?: return
+        if (cancelacion.cancelando) return
+        _state.update { it.copy(cancelacion = cancelacion.copy(cancelando = true, error = null)) }
+        viewModelScope.launch {
+            val motivo = cancelacion.motivo.trim().ifBlank { null }
+            when (val resultado = reservaRepository.cancelar(cancelacion.reservaId, motivo)) {
+                is Result.Success -> {
+                    reservas = reservas.map {
+                        if (it.id == cancelacion.reservaId) it.copy(estado = resultado.data.estado) else it
+                    }
+                    val reembolso = if (resultado.data.reembolso == ReembolsoCancelacion.TOTAL) {
+                        " Se reembolsará el total al paciente."
+                    } else {
+                        ""
+                    }
+                    _state.update {
+                        derivar(it).copy(
+                            cancelacion = null,
+                            mensaje = "Cita con ${cancelacion.pacienteNombre} cancelada.$reembolso",
+                        )
+                    }
+                }
+                is Result.Error -> {
+                    val mensaje = resultado.error.aMensaje()
+                    if (resultado.error in ERRORES_CANCELAR_QUE_RECARGAN) {
+                        _state.update { it.copy(cancelacion = null, mensaje = mensaje) }
+                        cargar()
+                    } else {
+                        // Reintentable: el dialogo sigue abierto con el error a la vista.
+                        _state.update { it.copy(cancelacion = cancelacion.copy(cancelando = false, error = mensaje)) }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun completar(reservaId: String) {
+        if (_state.value.respondiendoId != null) return
+        val fila = _state.value.historial.firstOrNull { it.id == reservaId && it.puedeCompletar } ?: return
+        _state.update { it.copy(respondiendoId = reservaId) }
+        viewModelScope.launch {
+            when (val resultado = reservaRepository.completar(reservaId)) {
+                is Result.Success -> {
+                    reservas = reservas.map { if (it.id == reservaId) it.copy(estado = resultado.data) else it }
+                    _state.update {
+                        derivar(it).copy(
+                            respondiendoId = null,
+                            mensaje = "Atención con ${fila.pacienteNombre} completada.",
+                        )
+                    }
+                }
+                is Result.Error -> {
+                    _state.update { it.copy(respondiendoId = null, mensaje = resultado.error.aMensaje()) }
+                    if (resultado.error in ERRORES_COMPLETAR_QUE_RECARGAN) cargar()
+                }
+            }
+        }
     }
 
     private fun responder(reservaId: String, respuesta: RespuestaReserva) {

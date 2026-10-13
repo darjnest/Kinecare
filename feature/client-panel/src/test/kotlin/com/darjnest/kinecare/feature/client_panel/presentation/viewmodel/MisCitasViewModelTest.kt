@@ -3,6 +3,7 @@
 package com.darjnest.kinecare.feature.client_panel.presentation.viewmodel
 
 import app.cash.turbine.test
+import com.darjnest.kinecare.core.common.data.error.CancelarReservaError
 import com.darjnest.kinecare.core.common.data.error.ProfesionalError
 import com.darjnest.kinecare.core.common.data.error.ResenaError
 import com.darjnest.kinecare.core.common.data.error.ReservaError
@@ -13,14 +14,18 @@ import com.darjnest.kinecare.core.common.domain.model.Direccion
 import com.darjnest.kinecare.core.common.domain.model.EstadoPago
 import com.darjnest.kinecare.core.common.domain.model.EstadoReserva
 import com.darjnest.kinecare.core.common.domain.model.EstadoVerificacion
+import com.darjnest.kinecare.core.common.domain.model.Insignia
 import com.darjnest.kinecare.core.common.domain.model.MetodoPago
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
 import com.darjnest.kinecare.core.common.domain.model.Pago
 import com.darjnest.kinecare.core.common.domain.model.Profesional
 import com.darjnest.kinecare.core.common.domain.model.Resena
+import com.darjnest.kinecare.core.common.domain.model.ReembolsoCancelacion
 import com.darjnest.kinecare.core.common.domain.model.Reserva
+import com.darjnest.kinecare.core.common.domain.model.ResultadoCancelacion
 import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.domain.model.Servicio
+import com.darjnest.kinecare.core.common.domain.model.TipoInsignia
 import com.darjnest.kinecare.core.common.domain.model.TipoMetodoPago
 import com.darjnest.kinecare.core.common.domain.model.Usuario
 import com.darjnest.kinecare.core.common.result.Result
@@ -35,6 +40,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -207,11 +213,139 @@ class MisCitasViewModelTest {
         viewModel.state.test {
             val estado = awaitItem()
             assertFalse(estado.cargando)
+            // Error de carga distinguible del estado vacio: la vista ofrece "Reintentar".
+            assertTrue(estado.errorCarga)
             assertNull(estado.citaEnCurso)
             assertTrue(estado.proximasCitas.isEmpty())
             assertTrue(estado.historial.isEmpty())
             assertTrue(estado.canceladas.isEmpty())
         }
+    }
+
+    @Test
+    fun `mientras carga el estado esta cargando y sin error`() = runTest {
+        val gate = CompletableDeferred<Result<List<Reserva>, ReservaError>>()
+        coEvery { reservaRepository.obtenerPorCliente(uid) } coAnswers { gate.await() }
+
+        val viewModel = crearViewModel()
+
+        assertTrue(viewModel.state.value.cargando)
+        assertFalse(viewModel.state.value.errorCarga)
+        gate.complete(Result.Success(emptyList()))
+        assertFalse(viewModel.state.value.cargando)
+    }
+
+    @Test
+    fun `Reintentar tras un error vuelve a cargar y limpia errorCarga`() = runTest {
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns Result.Error(ReservaError.SIN_INTERNET)
+        val viewModel = crearViewModel()
+        assertTrue(viewModel.state.value.errorCarga)
+
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns
+            Result.Success(listOf(reservaDePrueba("r-1", "prof-1", EstadoReserva.CONFIRMADA)))
+        coEvery { profesionalRepository.obtenerPorId("prof-1") } returns
+            Result.Success(profesionalDePrueba("prof-1", "Bruno Diaz"))
+        viewModel.onAction(MisCitasAction.Reintentar)
+
+        val estado = viewModel.state.value
+        assertFalse(estado.errorCarga)
+        assertFalse(estado.cargando)
+        assertEquals(1, estado.proximasCitas.size)
+        coVerify(exactly = 2) { reservaRepository.obtenerPorCliente(uid) }
+    }
+
+    @Test
+    fun `un error al recargar conserva las citas ya cargadas`() = runTest {
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns
+            Result.Success(listOf(reservaDePrueba("r-1", "prof-1", EstadoReserva.CONFIRMADA)))
+        coEvery { profesionalRepository.obtenerPorId("prof-1") } returns
+            Result.Success(profesionalDePrueba("prof-1", "Bruno Diaz"))
+        val viewModel = crearViewModel()
+
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns Result.Error(ReservaError.SIN_INTERNET)
+        viewModel.onAction(MisCitasAction.Recargar)
+
+        assertTrue(viewModel.state.value.errorCarga)
+        assertTrue(viewModel.state.value.tieneCitas)
+        assertEquals(1, viewModel.state.value.proximasCitas.size)
+    }
+
+    // --- verificacion del profesional ---
+
+    @Test
+    fun `la cita en curso marca verificado segun la verificacion general y el RNPI segun la insignia CREDENCIALES`() = runTest {
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns
+            Result.Success(listOf(reservaDePrueba("r-en-curso", "prof-1", EstadoReserva.EN_CURSO)))
+        val sinCredenciales = profesionalDePrueba("prof-1", "Bruno Diaz")
+        coEvery { profesionalRepository.obtenerPorId("prof-1") } returns Result.Success(sinCredenciales)
+
+        val sin = requireNotNull(crearViewModel().state.value.citaEnCurso)
+        assertTrue(sin.verificado)
+        assertFalse(sin.rnpiVerificado)
+
+        val conCredenciales = sinCredenciales.copy(
+            insignias = listOf(
+                Insignia(
+                    tipo = TipoInsignia.CREDENCIALES,
+                    estado = EstadoVerificacion.APROBADO,
+                    detalle = null,
+                    fechaActualizacion = Instant.fromEpochMilliseconds(0),
+                ),
+            ),
+        )
+        coEvery { profesionalRepository.obtenerPorId("prof-1") } returns Result.Success(conCredenciales)
+        val con = requireNotNull(crearViewModel().state.value.citaEnCurso)
+        assertTrue(con.rnpiVerificado)
+
+        coEvery { profesionalRepository.obtenerPorId("prof-1") } returns Result.Success(
+            sinCredenciales.copy(estadoVerificacionGeneral = EstadoVerificacion.PENDIENTE),
+        )
+        val pendiente = requireNotNull(crearViewModel().state.value.citaEnCurso)
+        assertFalse(pendiente.verificado)
+        assertFalse(pendiente.rnpiVerificado)
+    }
+
+    @Test
+    fun `si el profesional no se puede resolver la cita en curso no se marca verificada`() = runTest {
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns
+            Result.Success(listOf(reservaDePrueba("r-en-curso", "prof-x", EstadoReserva.EN_CURSO)))
+        coEvery { profesionalRepository.obtenerPorId("prof-x") } returns Result.Error(ProfesionalError.NO_ENCONTRADO)
+
+        val cita = requireNotNull(crearViewModel().state.value.citaEnCurso)
+
+        assertFalse(cita.verificado)
+        assertFalse(cita.rnpiVerificado)
+    }
+
+    // --- agregar a Google Calendar ---
+
+    @Test
+    fun `la cita proxima lleva inicio, duracion y direccion para el evento de calendario`() = runTest {
+        val cita = cargarReservaConfirmadaConPago(EstadoPago.AUTORIZADO)
+
+        assertEquals(1_700_000_000_000, cita.inicioEpochMillis)
+        assertEquals(60, cita.duracionMinutos)
+        assertEquals("Los Aromos 123, Providencia, Santiago", cita.direccionTexto)
+    }
+
+    @Test
+    fun `si el servicio no se puede resolver la cita no trae duracion`() = runTest {
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns
+            Result.Success(listOf(reservaDePrueba("r-1", "prof-x", EstadoReserva.CONFIRMADA)))
+        coEvery { profesionalRepository.obtenerPorId("prof-x") } returns Result.Error(ProfesionalError.NO_ENCONTRADO)
+
+        assertNull(crearViewModel().state.value.proximasCitas.single().duracionMinutos)
+    }
+
+    @Test
+    fun `AgregarAGoogleCalendar lo resuelve el Root y no cambia el estado`() = runTest {
+        cargarReservaConfirmadaConPago(EstadoPago.PENDIENTE)
+        val viewModel = crearViewModel()
+        val antes = viewModel.state.value
+
+        viewModel.onAction(MisCitasAction.AgregarAGoogleCalendar("r-pago"))
+
+        assertEquals(antes, viewModel.state.value)
     }
 
     @Test
@@ -558,5 +692,213 @@ class MisCitasViewModelTest {
         val cita = viewModel.state.value.proximasCitas.single()
         assertFalse(cita.puedePagar)
         assertEquals(EstadoPago.AUTORIZADO, cita.estadoPago)
+    }
+
+    // --- cancelar cita ---
+
+    private fun cargarConfirmada(
+        fechaHora: Instant = Instant.fromEpochMilliseconds(1_700_000_000_000),
+        estado: EstadoReserva = EstadoReserva.CONFIRMADA,
+        estadoPago: EstadoPago = EstadoPago.AUTORIZADO,
+    ): MisCitasViewModel {
+        coEvery { profesionalRepository.obtenerPorId("prof-1") } returns
+            Result.Success(profesionalDePrueba("prof-1", "Bruno Diaz"))
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns
+            Result.Success(listOf(reservaDePrueba("r-1", "prof-1", estado, fechaHora, estadoPago)))
+        return crearViewModel()
+    }
+
+    @Test
+    fun `una cita proxima futura se puede cancelar y una que ya comenzo no`() = runTest {
+        val futura = cargarConfirmada()
+        assertTrue(futura.state.value.proximasCitas.single().puedeCancelar)
+
+        val comenzada = cargarConfirmada(fechaHora = ahora - 1.hours)
+        assertFalse(comenzada.state.value.proximasCitas.single().puedeCancelar)
+    }
+
+    @Test
+    fun `pedir cancelar con 24 horas o mas y pago autorizado avisa reembolso total`() = runTest {
+        val viewModel = cargarConfirmada(fechaHora = ahora + 24.hours)
+
+        viewModel.onAction(MisCitasAction.CancelarCita("r-1"))
+
+        val cancelacion = requireNotNull(viewModel.state.value.cancelacion)
+        assertEquals("r-1", cancelacion.citaId)
+        assertEquals(PoliticaReembolso.TOTAL, cancelacion.politica)
+        assertTrue(cancelacion.resumen.contains("Bruno Diaz"))
+    }
+
+    @Test
+    fun `pedir cancelar con menos de 24 horas y pago autorizado avisa que no hay reembolso automatico`() = runTest {
+        val viewModel = cargarConfirmada(fechaHora = ahora + 23.hours)
+
+        viewModel.onAction(MisCitasAction.CancelarCita("r-1"))
+
+        assertEquals(PoliticaReembolso.SIN_REEMBOLSO_AUTOMATICO, viewModel.state.value.cancelacion?.politica)
+    }
+
+    @Test
+    fun `pedir cancelar sin pago cobrado no habla de reembolso`() = runTest {
+        val solicitada = cargarConfirmada(estado = EstadoReserva.SOLICITADA, fechaHora = ahora + 2.hours)
+        solicitada.onAction(MisCitasAction.CancelarCita("r-1"))
+        assertEquals(PoliticaReembolso.SIN_COBRO, solicitada.state.value.cancelacion?.politica)
+
+        val pendiente = cargarConfirmada(estadoPago = EstadoPago.PENDIENTE, fechaHora = ahora + 2.hours)
+        pendiente.onAction(MisCitasAction.CancelarCita("r-1"))
+        assertEquals(PoliticaReembolso.SIN_COBRO, pendiente.state.value.cancelacion?.politica)
+    }
+
+    @Test
+    fun `pedir cancelar una cita que no esta en proximas o ya comenzo no abre el dialogo`() = runTest {
+        val viewModel = cargarConfirmada(fechaHora = ahora - 1.hours)
+
+        viewModel.onAction(MisCitasAction.CancelarCita("r-1"))
+        viewModel.onAction(MisCitasAction.CancelarCita("no-existe"))
+
+        assertNull(viewModel.state.value.cancelacion)
+    }
+
+    @Test
+    fun `descartar cierra el dialogo sin llamar al backend`() = runTest {
+        val viewModel = cargarConfirmada()
+        viewModel.onAction(MisCitasAction.CancelarCita("r-1"))
+
+        viewModel.onAction(MisCitasAction.DescartarCancelacion)
+
+        assertNull(viewModel.state.value.cancelacion)
+        coVerify(exactly = 0) { reservaRepository.cancelar(any(), any()) }
+    }
+
+    @Test
+    fun `confirmar cancela con el motivo, avisa y recarga la lista`() = runTest {
+        val viewModel = cargarConfirmada()
+        coEvery { reservaRepository.cancelar("r-1", "Imprevisto") } returns Result.Success(ResultadoCancelacion(EstadoReserva.CANCELADA_CLIENTE, ReembolsoCancelacion.TOTAL))
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns Result.Success(
+            listOf(reservaDePrueba("r-1", "prof-1", EstadoReserva.CANCELADA_CLIENTE)),
+        )
+        viewModel.onAction(MisCitasAction.CancelarCita("r-1"))
+        viewModel.onAction(MisCitasAction.CambiarMotivoCancelacion("  Imprevisto "))
+
+        viewModel.eventos.test {
+            viewModel.onAction(MisCitasAction.ConfirmarCancelacion)
+
+            val evento = awaitItem() as MisCitasEvent.MostrarMensaje
+            assertTrue(evento.texto.startsWith("Cita cancelada"))
+            assertTrue(evento.texto.contains("reembolsará el total"))
+        }
+
+        val estado = viewModel.state.value
+        assertNull(estado.cancelacion)
+        assertTrue(estado.proximasCitas.isEmpty())
+        assertEquals(listOf("r-1"), estado.canceladas.map { it.id })
+        coVerify(exactly = 2) { reservaRepository.obtenerPorCliente(uid) }
+    }
+
+    @Test
+    fun `el aviso posterior sigue lo que informa el backend aunque la politica local difiera`() = runTest {
+        val viewModel = cargarConfirmada(fechaHora = ahora + 48.hours)
+        coEvery { reservaRepository.cancelar(any(), any()) } returns
+            Result.Success(ResultadoCancelacion(EstadoReserva.CANCELADA_CLIENTE, ReembolsoCancelacion.NINGUNO))
+        viewModel.onAction(MisCitasAction.CancelarCita("r-1"))
+        assertEquals(PoliticaReembolso.TOTAL, viewModel.state.value.cancelacion?.politica)
+
+        viewModel.eventos.test {
+            viewModel.onAction(MisCitasAction.ConfirmarCancelacion)
+
+            val evento = awaitItem() as MisCitasEvent.MostrarMensaje
+            assertEquals("Cita cancelada. Por la anticipación, no hay reembolso automático.", evento.texto)
+        }
+    }
+
+    @Test
+    fun `una solicitud expirada por falta de respuesta se muestra como vencida y no como rechazada`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId("prof-1") } returns
+            Result.Success(profesionalDePrueba("prof-1", "Bruno Diaz"))
+        coEvery { reservaRepository.obtenerPorCliente(uid) } returns Result.Success(
+            listOf(
+                reservaDePrueba("r-exp", "prof-1", EstadoReserva.RECHAZADA).copy(expirada = true),
+                reservaDePrueba("r-rech", "prof-1", EstadoReserva.RECHAZADA),
+            ),
+        )
+
+        val canceladas = crearViewModel().state.value.canceladas.associate { it.id to it.motivo }
+
+        assertEquals("Solicitud vencida sin respuesta", canceladas["r-exp"])
+        assertEquals("Solicitud rechazada", canceladas["r-rech"])
+    }
+
+    @Test
+    fun `un motivo en blanco se envia como null`() = runTest {
+        val viewModel = cargarConfirmada()
+        coEvery { reservaRepository.cancelar("r-1", null) } returns Result.Success(ResultadoCancelacion(EstadoReserva.CANCELADA_CLIENTE, ReembolsoCancelacion.TOTAL))
+        viewModel.onAction(MisCitasAction.CancelarCita("r-1"))
+        viewModel.onAction(MisCitasAction.CambiarMotivoCancelacion("   "))
+
+        viewModel.onAction(MisCitasAction.ConfirmarCancelacion)
+
+        coVerify { reservaRepository.cancelar("r-1", null) }
+    }
+
+    @Test
+    fun `mientras cancela el dialogo queda bloqueado y una segunda confirmacion se ignora`() = runTest {
+        val viewModel = cargarConfirmada()
+        val gate = CompletableDeferred<Result<ResultadoCancelacion, CancelarReservaError>>()
+        coEvery { reservaRepository.cancelar(any(), any()) } coAnswers { gate.await() }
+        viewModel.onAction(MisCitasAction.CancelarCita("r-1"))
+
+        viewModel.onAction(MisCitasAction.ConfirmarCancelacion)
+        viewModel.onAction(MisCitasAction.ConfirmarCancelacion)
+        viewModel.onAction(MisCitasAction.CambiarMotivoCancelacion("nuevo"))
+        viewModel.onAction(MisCitasAction.DescartarCancelacion)
+
+        val cancelacion = requireNotNull(viewModel.state.value.cancelacion)
+        assertTrue(cancelacion.cancelando)
+        assertEquals("", cancelacion.motivo)
+        coVerify(exactly = 1) { reservaRepository.cancelar(any(), any()) }
+        gate.complete(Result.Success(ResultadoCancelacion(EstadoReserva.CANCELADA_CLIENTE, ReembolsoCancelacion.TOTAL)))
+    }
+
+    @Test
+    fun `un error reintentable deja el dialogo abierto con el mensaje`() = runTest {
+        val viewModel = cargarConfirmada()
+        coEvery { reservaRepository.cancelar(any(), any()) } returns Result.Error(CancelarReservaError.SIN_INTERNET)
+        viewModel.onAction(MisCitasAction.CancelarCita("r-1"))
+
+        viewModel.onAction(MisCitasAction.ConfirmarCancelacion)
+
+        val cancelacion = requireNotNull(viewModel.state.value.cancelacion)
+        assertFalse(cancelacion.cancelando)
+        assertEquals("Sin conexión. Revisa tu internet e inténtalo de nuevo.", cancelacion.error)
+        coVerify(exactly = 1) { reservaRepository.obtenerPorCliente(uid) }
+    }
+
+    @Test
+    fun `escribir el motivo despues de un error limpia el error`() = runTest {
+        val viewModel = cargarConfirmada()
+        coEvery { reservaRepository.cancelar(any(), any()) } returns Result.Error(CancelarReservaError.DESCONOCIDO)
+        viewModel.onAction(MisCitasAction.CancelarCita("r-1"))
+        viewModel.onAction(MisCitasAction.ConfirmarCancelacion)
+
+        viewModel.onAction(MisCitasAction.CambiarMotivoCancelacion("otro"))
+
+        assertNull(viewModel.state.value.cancelacion?.error)
+    }
+
+    @Test
+    fun `si la cita ya cambio de estado cierra el dialogo, avisa y recarga`() = runTest {
+        val viewModel = cargarConfirmada()
+        coEvery { reservaRepository.cancelar(any(), any()) } returns Result.Error(CancelarReservaError.ESTADO_INVALIDO)
+        viewModel.onAction(MisCitasAction.CancelarCita("r-1"))
+
+        viewModel.eventos.test {
+            viewModel.onAction(MisCitasAction.ConfirmarCancelacion)
+
+            val evento = awaitItem() as MisCitasEvent.MostrarMensaje
+            assertEquals("Esta cita ya no se puede cancelar: cambió de estado.", evento.texto)
+        }
+
+        assertNull(viewModel.state.value.cancelacion)
+        coVerify(exactly = 2) { reservaRepository.obtenerPorCliente(uid) }
     }
 }

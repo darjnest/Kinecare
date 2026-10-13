@@ -2,6 +2,7 @@
 
 package com.darjnest.kinecare.feature.booking.domain.service
 
+import com.darjnest.kinecare.core.common.domain.model.CupoOcupado
 import com.darjnest.kinecare.core.common.domain.model.Disponibilidad
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.Instant
@@ -32,6 +33,28 @@ data class DiaConHorarios(
 )
 
 /**
+ * Quita de [dias] los cupos de [duracionMinutos] que se solapan con algun
+ * tramo de [ocupados] (`[inicio, fin)` contra `[horario, horario + duracion)`:
+ * un cupo que empieza justo cuando termina otra reserva no se descarta) y los
+ * dias que se quedan sin cupos. Con [ocupados] vacio devuelve [dias] igual.
+ */
+fun descontarCuposOcupados(
+    dias: List<DiaConHorarios>,
+    duracionMinutos: Int,
+    ocupados: List<CupoOcupado>,
+): List<DiaConHorarios> {
+    if (ocupados.isEmpty()) return dias
+    val duracion = duracionMinutos.minutes
+    return dias.mapNotNull { dia ->
+        val libres = dia.horarios.filter { horario ->
+            val fin = horario + duracion
+            ocupados.none { horario < it.fin && fin > it.inicio }
+        }
+        libres.takeIf { it.isNotEmpty() }?.let { dia.copy(horarios = it) }
+    }
+}
+
+/**
  * Cupos de [duracionMinutos] dentro de los turnos activos de
  * [disponibilidad], expresados en [zona] (hora de Chile, ver
  * `ZonaHorariaChile`). Cada turno se parte desde `horaInicio` en pasos de la
@@ -40,7 +63,9 @@ data class DiaConHorarios(
  * `ahora + ANTICIPACION_MINIMA`.
  *
  * No conoce las reservas de otros clientes (firestore.rules solo deja leer
- * las propias): un cupo ya tomado se detecta al confirmar, cuando
+ * las propias): los cupos tomados se descuentan aparte con
+ * [descontarCuposOcupados] (datos de `obtenerCuposOcupados`) y, si esa
+ * consulta falla, un cupo tomado se detecta al confirmar, cuando
  * `crearReserva` responde `HORARIO_OCUPADO`.
  */
 fun generarDiasConHorarios(

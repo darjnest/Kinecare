@@ -5,11 +5,13 @@ package com.darjnest.kinecare.feature.booking.presentation.viewmodel
 import androidx.lifecycle.SavedStateHandle
 import com.darjnest.kinecare.core.common.data.error.ClienteError
 import com.darjnest.kinecare.core.common.data.error.CrearReservaError
+import com.darjnest.kinecare.core.common.data.error.CuposOcupadosError
 import com.darjnest.kinecare.core.common.data.error.ProfesionalError
 import com.darjnest.kinecare.core.common.data.repository.ClienteRepository
 import com.darjnest.kinecare.core.common.data.repository.ProfesionalRepository
 import com.darjnest.kinecare.core.common.data.repository.ReservaRepository
 import com.darjnest.kinecare.core.common.domain.model.Cliente
+import com.darjnest.kinecare.core.common.domain.model.CupoOcupado
 import com.darjnest.kinecare.core.common.domain.model.Direccion
 import com.darjnest.kinecare.core.common.domain.model.Disponibilidad
 import com.darjnest.kinecare.core.common.domain.model.EstadoVerificacion
@@ -32,11 +34,13 @@ import io.mockk.mockk
 import io.mockk.slot
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.runTest
+import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
+import kotlinx.datetime.plus
 import kotlinx.datetime.toInstant
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -125,6 +129,7 @@ class BookingViewModelTest {
     private fun profesional(
         servicios: List<Servicio> = listOf(domicilio, consulta, consultaLarga, pausado),
         disponibilidad: List<Disponibilidad> = turnoDeLunes,
+        mercadoPagoConectado: Boolean = false,
     ) = Profesional(
         usuario = usuario(profesionalId, "Dra. Paula Rojas"),
         especialidades = listOf("Kinesiologia"),
@@ -136,6 +141,7 @@ class BookingViewModelTest {
         totalResenas = 10,
         descripcion = "",
         estadoVerificacionGeneral = EstadoVerificacion.PENDIENTE,
+        mercadoPagoConectado = mercadoPagoConectado,
     )
 
     private fun cliente(direcciones: List<Direccion> = listOf(direccionGuardada)) = Cliente(
@@ -161,8 +167,10 @@ class BookingViewModelTest {
         conSesion: Boolean = true,
         profesionalIdArg: String? = profesionalId,
         servicioIdArg: String? = null,
+        cupos: Result<List<CupoOcupado>, CuposOcupadosError> = Result.Success(emptyList()),
     ): BookingViewModel {
         iniciarSesion(if (conSesion) uid else null)
+        coEvery { reservaRepository.obtenerCuposOcupados(any(), any(), any()) } returns cupos
         coEvery { profesionalRepository.obtenerPorId(any()) } returns profesional
         coEvery { clienteRepository.obtenerPorId(any()) } returns direcciones
         val args = buildMap {
@@ -262,6 +270,15 @@ class BookingViewModelTest {
             assertFalse(state.cargando, "cargando colgado para $error")
             assertTrue(state.servicios.isEmpty())
         }
+    }
+
+    @Test
+    fun `avisa que el profesional no activo pagos solo si no tiene Mercado Pago conectado`() = runTest {
+        val sinPagos = crearViewModel(profesional = Result.Success(profesional(mercadoPagoConectado = false)))
+        assertTrue(sinPagos.state.value.profesionalSinPagos)
+
+        val conPagos = crearViewModel(profesional = Result.Success(profesional(mercadoPagoConectado = true)))
+        assertFalse(conPagos.state.value.profesionalSinPagos)
     }
 
     @Test
@@ -1055,5 +1072,120 @@ class BookingViewModelTest {
 
         assertEquals(antes, viewModel.state.value)
         coVerify(exactly = 0) { reservaRepository.crear(any()) }
+    }
+
+    // ------------------------------------------------------ cupos ocupados
+
+    private fun ocupado(fecha: LocalDate, hora: Int, minuto: Int = 0, duracionMinutos: Int = 60): CupoOcupado {
+        val inicio = instante(fecha, hora, minuto)
+        return CupoOcupado(inicio, Instant.fromEpochMilliseconds(inicio.toEpochMilliseconds() + duracionMinutos * 60_000L))
+    }
+
+    @Test
+    fun `al abrir FECHA_HORA consulta los cupos ocupados desde ahora hasta el fin del horizonte de 14 dias`() = runTest {
+        val viewModel = crearViewModel(servicioIdArg = consulta.id)
+        coVerify(exactly = 0) { reservaRepository.obtenerCuposOcupados(any(), any(), any()) }
+
+        viewModel.onAction(BookingAction.Continuar)
+
+        val medianocheDia14 = instante(hoy.plus(DatePeriod(days = 14)), 0)
+        coVerify(exactly = 1) { reservaRepository.obtenerCuposOcupados(profesionalId, ahora, medianocheDia14) }
+        assertFalse(viewModel.state.value.cargandoCupos)
+    }
+
+    @Test
+    fun `descuenta los cupos que se solapan con un tramo ocupado`() = runTest {
+        // Ocupado 10:30-11:30 del lunes siguiente: se caen los cupos de las 10:00 y las 11:00, quedan 09:00 y 12:00.
+        val viewModel = crearViewModel(
+            servicioIdArg = consulta.id,
+            cupos = Result.Success(listOf(ocupado(proximoLunes, 10, 30))),
+        )
+
+        viewModel.onAction(BookingAction.Continuar)
+        viewModel.onAction(BookingAction.SeleccionarFecha(proximoLunes))
+
+        assertEquals(listOf(instante(proximoLunes, 9), instante(proximoLunes, 12)), viewModel.state.value.horariosDelDia)
+        // Hoy no se toca.
+        assertEquals(3, viewModel.state.value.dias.first { it.fecha == hoy }.horarios.size)
+    }
+
+    @Test
+    fun `un dia con todos sus cupos ocupados desaparece y se elige el siguiente`() = runTest {
+        val viewModel = crearViewModel(
+            servicioIdArg = consulta.id,
+            cupos = Result.Success(listOf(ocupado(hoy, 10, duracionMinutos = 180))),
+        )
+
+        viewModel.onAction(BookingAction.Continuar)
+
+        assertTrue(viewModel.state.value.dias.none { it.fecha == hoy })
+        assertEquals(proximoLunes, viewModel.state.value.fechaSeleccionada)
+    }
+
+    @Test
+    fun `si la consulta de cupos falla no bloquea y se ofrecen todos los horarios`() = runTest {
+        val viewModel = crearViewModel(
+            servicioIdArg = consulta.id,
+            cupos = Result.Error(CuposOcupadosError.SIN_INTERNET),
+        )
+
+        viewModel.onAction(BookingAction.Continuar)
+
+        val state = viewModel.state.value
+        assertFalse(state.cargandoCupos)
+        assertEquals(PasoReserva.FECHA_HORA, state.paso)
+        assertEquals(3, state.horariosDelDia.size)
+        assertNull(state.errorEnvio)
+    }
+
+    @Test
+    fun `mientras consulta los cupos no deja elegir horario ni continuar`() = runTest {
+        val viewModel = crearViewModel(servicioIdArg = consulta.id)
+        val gate = CompletableDeferred<Result<List<CupoOcupado>, CuposOcupadosError>>()
+        coEvery { reservaRepository.obtenerCuposOcupados(any(), any(), any()) } coAnswers { gate.await() }
+
+        viewModel.onAction(BookingAction.Continuar)
+        assertTrue(viewModel.state.value.cargandoCupos)
+        viewModel.onAction(BookingAction.SeleccionarHorario(instante(hoy, 11)))
+        assertNull(viewModel.state.value.horarioSeleccionado)
+        assertFalse(viewModel.state.value.puedeContinuar)
+
+        gate.complete(Result.Success(emptyList()))
+        assertFalse(viewModel.state.value.cargandoCupos)
+        viewModel.onAction(BookingAction.SeleccionarHorario(instante(hoy, 11)))
+        assertEquals(instante(hoy, 11), viewModel.state.value.horarioSeleccionado)
+    }
+
+    @Test
+    fun `un horario elegido que despues se ocupa se descarta al volver a abrir el paso`() = runTest {
+        val viewModel = crearViewModel(servicioIdArg = consulta.id)
+        viewModel.onAction(BookingAction.Continuar)
+        viewModel.onAction(BookingAction.SeleccionarHorario(instante(hoy, 11)))
+        viewModel.onAction(BookingAction.PasoAnterior)
+        coEvery { reservaRepository.obtenerCuposOcupados(any(), any(), any()) } returns
+            Result.Success(listOf(ocupado(hoy, 11)))
+
+        viewModel.onAction(BookingAction.Continuar)
+
+        val state = viewModel.state.value
+        assertNull(state.horarioSeleccionado)
+        assertEquals(listOf(instante(hoy, 10), instante(hoy, 12)), state.horariosDelDia)
+    }
+
+    @Test
+    fun `tras HORARIO_OCUPADO se vuelven a consultar los cupos ocupados`() = runTest {
+        coEvery { reservaRepository.crear(any()) } returns Result.Error(CrearReservaError.HORARIO_OCUPADO)
+        val viewModel = crearViewModel()
+        viewModel.avanzarHastaRevision(consulta, horario = instante(hoy, 11))
+        coVerify(exactly = 1) { reservaRepository.obtenerCuposOcupados(any(), any(), any()) }
+        coEvery { reservaRepository.obtenerCuposOcupados(any(), any(), any()) } returns
+            Result.Success(listOf(ocupado(hoy, 12)))
+
+        viewModel.onAction(BookingAction.Confirmar)
+
+        val state = viewModel.state.value
+        assertEquals(PasoReserva.FECHA_HORA, state.paso)
+        assertEquals(listOf(instante(hoy, 10)), state.horariosDelDia)
+        coVerify(exactly = 2) { reservaRepository.obtenerCuposOcupados(any(), any(), any()) }
     }
 }

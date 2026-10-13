@@ -22,10 +22,15 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,6 +43,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.darjnest.kinecare.core.common.data.error.ResenaError
 import com.darjnest.kinecare.core.designsystem.components.card.KineCareCard
+import com.darjnest.kinecare.core.designsystem.components.dialog.KineCareTextInputDialog
 import com.darjnest.kinecare.core.designsystem.components.loading.KineCareFullScreenLoading
 import com.darjnest.kinecare.core.designsystem.theme.InicioDorado
 import com.darjnest.kinecare.core.designsystem.theme.KineCareSpacing
@@ -45,9 +51,12 @@ import com.darjnest.kinecare.core.designsystem.theme.KineCareTheme
 import com.darjnest.kinecare.feature.reviews.presentation.util.formatearCalificacion
 import com.darjnest.kinecare.feature.reviews.presentation.util.formatearFecha
 import com.darjnest.kinecare.feature.reviews.presentation.util.textoResenas
+import com.darjnest.kinecare.feature.reviews.presentation.viewmodel.MAX_RESPUESTA_PROFESIONAL
+import com.darjnest.kinecare.feature.reviews.presentation.viewmodel.RespuestaEnCurso
 import com.darjnest.kinecare.feature.reviews.presentation.viewmodel.ResenaItem
 import com.darjnest.kinecare.feature.reviews.presentation.viewmodel.ResumenResenas
 import com.darjnest.kinecare.feature.reviews.presentation.viewmodel.ReviewsAction
+import com.darjnest.kinecare.feature.reviews.presentation.viewmodel.ReviewsEvent
 import com.darjnest.kinecare.feature.reviews.presentation.viewmodel.ReviewsState
 import com.darjnest.kinecare.feature.reviews.presentation.viewmodel.ReviewsViewModel
 import kotlin.math.roundToInt
@@ -59,8 +68,17 @@ fun ReviewsRoot(
     onVolver: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(viewModel) {
+        viewModel.eventos.collect { evento ->
+            when (evento) {
+                is ReviewsEvent.MostrarMensaje -> snackbarHostState.showSnackbar(evento.texto)
+            }
+        }
+    }
     ReviewsScreen(
         state = state,
+        snackbarHostState = snackbarHostState,
         onAction = { accion ->
             // Volver atras es navegacion, no estado del ViewModel: el Root la
             // resuelve directo contra el NavGraph.
@@ -75,10 +93,14 @@ fun ReviewsRoot(
 fun ReviewsScreen(
     state: ReviewsState,
     onAction: (ReviewsAction) -> Unit = {},
+    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
     modifier: Modifier = Modifier,
 ) {
+    state.respuesta?.let { DialogoResponderResena(respuesta = it, onAction = onAction) }
+
     Scaffold(
         modifier = modifier,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("Reseñas") },
@@ -101,7 +123,7 @@ fun ReviewsScreen(
                 modifier = contenidoModifier,
             )
             state.resenas.isEmpty() -> EstadoSinResenas(modifier = contenidoModifier)
-            else -> ListadoResenas(state = state, modifier = contenidoModifier)
+            else -> ListadoResenas(state = state, onAction = onAction, modifier = contenidoModifier)
         }
     }
 }
@@ -131,6 +153,7 @@ private fun EstadoSinResenas(modifier: Modifier = Modifier) {
 @Composable
 private fun ListadoResenas(
     state: ReviewsState,
+    onAction: (ReviewsAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
@@ -142,7 +165,10 @@ private fun ListadoResenas(
             item(key = "resumen") { ResumenCalificaciones(resumen = resumen) }
         }
         items(items = state.resenas, key = { it.id }) { resena ->
-            TarjetaResena(resena = resena)
+            TarjetaResena(
+                resena = resena,
+                onResponder = { onAction(ReviewsAction.Responder(resena.id)) },
+            )
         }
     }
 }
@@ -230,7 +256,7 @@ private fun FilaDistribucion(
 }
 
 @Composable
-private fun TarjetaResena(resena: ResenaItem) {
+private fun TarjetaResena(resena: ResenaItem, onResponder: () -> Unit) {
     KineCareCard {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -260,7 +286,32 @@ private fun TarjetaResena(resena: ResenaItem) {
         if (resena.respuestaProfesional != null) {
             RespuestaProfesional(texto = resena.respuestaProfesional)
         }
+        if (resena.puedeResponder) {
+            TextButton(onClick = onResponder, modifier = Modifier.padding(top = KineCareSpacing.xs)) {
+                Text("Responder")
+            }
+        }
     }
+}
+
+/** Redaccion de la respuesta del profesional a una resena (hasta [MAX_RESPUESTA_PROFESIONAL] caracteres). */
+@Composable
+private fun DialogoResponderResena(respuesta: RespuestaEnCurso, onAction: (ReviewsAction) -> Unit) {
+    KineCareTextInputDialog(
+        titulo = "Responder a ${respuesta.autor}",
+        mensaje = "Tu respuesta será pública y aparecerá bajo la reseña. No se puede editar después.",
+        etiquetaCampo = "Tu respuesta",
+        valor = respuesta.texto,
+        onValorChange = { onAction(ReviewsAction.CambiarRespuesta(it)) },
+        maxCaracteres = MAX_RESPUESTA_PROFESIONAL,
+        textoConfirmar = "Publicar",
+        textoCancelar = "Cancelar",
+        error = respuesta.error,
+        enProgreso = respuesta.enviando,
+        puedeConfirmar = respuesta.puedeEnviar || respuesta.enviando,
+        onConfirmar = { onAction(ReviewsAction.EnviarRespuesta) },
+        onCancelar = { onAction(ReviewsAction.DescartarRespuesta) },
+    )
 }
 
 @Composable
@@ -305,6 +356,7 @@ private val resenasDePrueba = listOf(
         comentario = null,
         fechaMillis = 1_771_000_000_000L,
         respuestaProfesional = null,
+        puedeResponder = true,
     ),
 )
 
@@ -314,6 +366,21 @@ private fun ReviewsScreenPreview() {
     KineCareTheme {
         ReviewsScreen(
             state = ReviewsState(cargando = false, resumen = resumenDePrueba, resenas = resenasDePrueba),
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ReviewsScreenResponderPreview() {
+    KineCareTheme {
+        ReviewsScreen(
+            state = ReviewsState(
+                cargando = false,
+                resumen = resumenDePrueba,
+                resenas = resenasDePrueba,
+                respuesta = RespuestaEnCurso(resenaId = "r2", autor = "Cliente", texto = "Gracias por tu comentario."),
+            ),
         )
     }
 }

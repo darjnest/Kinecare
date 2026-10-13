@@ -47,6 +47,9 @@ class AuthRepositoryImplTest {
     private val profesionales = mockk<CollectionReference>()
     private val usuarioRef = mockk<DocumentReference>()
     private val profesionalRef = mockk<DocumentReference>()
+    private val clientes = mockk<CollectionReference>()
+    private val clienteRef = mockk<DocumentReference>()
+    private val datosCliente = slot<Any>()
     private val batch = mockk<WriteBatch>()
     private val datosProfesional = slot<Any>()
 
@@ -56,12 +59,15 @@ class AuthRepositoryImplTest {
 
         every { firestore.collection("usuarios") } returns usuarios
         every { firestore.collection("profesionales") } returns profesionales
+        every { firestore.collection("clientes") } returns clientes
+        every { clientes.document(UID) } returns clienteRef
         every { usuarios.document(UID) } returns usuarioRef
         every { profesionales.document(UID) } returns profesionalRef
 
         every { firestore.batch() } returns batch
         every { batch.set(usuarioRef, any()) } returns batch
         every { batch.set(profesionalRef, capture(datosProfesional)) } returns batch
+        every { batch.set(clienteRef, capture(datosCliente)) } returns batch
         val commitTask = mockk<Task<Void>>()
         coEvery { commitTask.await() } returns mockk()
         every { batch.commit() } returns commitTask
@@ -106,6 +112,7 @@ class AuthRepositoryImplTest {
         assertTrue(resultado is Result.Success)
         verify(exactly = 1) { batch.set(usuarioRef, any()) }
         verify(exactly = 1) { batch.set(profesionalRef, any()) }
+        verify(exactly = 0) { batch.set(clienteRef, any()) }
         verify(exactly = 1) { batch.commit() }
         @Suppress("UNCHECKED_CAST")
         val perfil = datosProfesional.captured as Map<String, Any>
@@ -115,7 +122,7 @@ class AuthRepositoryImplTest {
     }
 
     @Test
-    fun `registrar un cliente no crea documento en profesionales`() = runTest {
+    fun `registrar un cliente crea usuarios y un clientes vacio, sin profesionales`() = runTest {
         setUpCuentaEmailCreada()
 
         repository.registrar(
@@ -130,6 +137,12 @@ class AuthRepositoryImplTest {
 
         verify(exactly = 1) { batch.set(usuarioRef, any()) }
         verify(exactly = 0) { batch.set(profesionalRef, any()) }
+        verify(exactly = 1) { batch.set(clienteRef, any()) }
+        @Suppress("UNCHECKED_CAST")
+        val cliente = datosCliente.captured as Map<String, Any>
+        assertEquals(emptyList<Any>(), cliente["direcciones"])
+        assertEquals(emptyList<Any>(), cliente["favoritos"])
+        assertEquals(emptyList<Any>(), cliente["metodosPago"])
     }
 
     @Test

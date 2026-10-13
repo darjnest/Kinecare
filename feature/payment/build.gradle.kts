@@ -56,6 +56,7 @@ dependencies {
 
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.navigation.compose)
     // `Response<CallableResponse<T>>` de `CloudFunctionsApi` (Retrofit).
     implementation(libs.retrofit.core)

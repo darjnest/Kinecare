@@ -15,6 +15,8 @@ import com.darjnest.kinecare.core.common.result.Result
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.slot
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
@@ -50,7 +52,11 @@ class MiPerfilClienteViewModelTest {
     private fun crearViewModel(): MiPerfilClienteViewModel =
         MiPerfilClienteViewModel(usuarioRepository, clienteRepository, firebaseAuth)
 
-    private fun usuarioDePrueba(nombre: String = "Ana Maria Soto", rut: String = "12345678-5"): Usuario = Usuario(
+    private fun usuarioDePrueba(
+        nombre: String = "Ana Maria Soto",
+        rut: String = "12345678-5",
+        fotoUrl: String? = null,
+    ): Usuario = Usuario(
         id = uid,
         nombre = nombre,
         rut = rut,
@@ -58,7 +64,7 @@ class MiPerfilClienteViewModelTest {
         correoContacto = null,
         telefono = null,
         rol = RolUsuario.CLIENTE,
-        fotoUrl = null,
+        fotoUrl = fotoUrl,
         fechaRegistro = Instant.fromEpochMilliseconds(0),
     )
 
@@ -157,5 +163,137 @@ class MiPerfilClienteViewModelTest {
                 assertEquals("", resumen.ciudad)
             }
         }
+    }
+
+    private fun cargarVacio(): MiPerfilClienteViewModel {
+        coEvery { usuarioRepository.obtenerPorId(uid) } returns Result.Success(usuarioDePrueba())
+        coEvery { clienteRepository.obtenerPorId(uid) } returns Result.Success(clienteDePrueba())
+        return crearViewModel()
+    }
+
+    private fun MiPerfilClienteViewModel.completarFormulario() {
+        onAction(MiPerfilClienteAction.CambiarCampoDireccion(CampoDireccion.CALLE, " Los Aromos "))
+        onAction(MiPerfilClienteAction.CambiarCampoDireccion(CampoDireccion.NUMERO, "123"))
+        onAction(MiPerfilClienteAction.CambiarCampoDireccion(CampoDireccion.COMUNA, "Providencia"))
+        onAction(MiPerfilClienteAction.CambiarCampoDireccion(CampoDireccion.CIUDAD, "Santiago"))
+    }
+
+    @Test
+    fun `agregar nueva direccion abre un formulario vacio que aun no se puede guardar`() = runTest {
+        val viewModel = cargarVacio()
+
+        viewModel.onAction(MiPerfilClienteAction.AgregarNuevaDireccion)
+
+        val formulario = requireNotNull(viewModel.state.value.formularioDireccion)
+        assertFalse(formulario.puedeGuardar)
+    }
+
+    @Test
+    fun `guardar sin los campos obligatorios no llama al repositorio`() = runTest {
+        val viewModel = cargarVacio()
+        viewModel.onAction(MiPerfilClienteAction.AgregarNuevaDireccion)
+        viewModel.onAction(MiPerfilClienteAction.CambiarCampoDireccion(CampoDireccion.CALLE, "Los Aromos"))
+
+        viewModel.onAction(MiPerfilClienteAction.GuardarDireccion)
+
+        coVerify(exactly = 0) { clienteRepository.agregarDireccion(any(), any()) }
+        assertTrue(viewModel.state.value.formularioDireccion != null)
+    }
+
+    @Test
+    fun `guardar una direccion valida la persiste recortada, cierra el formulario y la lista`() = runTest {
+        val guardada = slot<Direccion>()
+        coEvery { clienteRepository.agregarDireccion(uid, capture(guardada)) } returns Result.Success(Unit)
+        val viewModel = cargarVacio()
+        viewModel.onAction(MiPerfilClienteAction.AgregarNuevaDireccion)
+        viewModel.completarFormulario()
+
+        viewModel.onAction(MiPerfilClienteAction.GuardarDireccion)
+
+        assertEquals("Los Aromos", guardada.captured.calle)
+        assertNull(guardada.captured.indicaciones)
+        val estado = viewModel.state.value
+        assertNull(estado.formularioDireccion)
+        assertEquals(1, estado.direcciones.size)
+        assertEquals("Los Aromos 123", estado.direcciones[0].calle)
+        assertTrue(estado.direcciones[0].predeterminada)
+        assertEquals("Santiago", estado.resumen?.ciudad)
+    }
+
+    @Test
+    fun `si guardar falla el formulario sigue abierto con el borrador y un mensaje`() = runTest {
+        coEvery { clienteRepository.agregarDireccion(uid, any()) } returns Result.Error(ClienteError.SIN_INTERNET)
+        val viewModel = cargarVacio()
+        viewModel.onAction(MiPerfilClienteAction.AgregarNuevaDireccion)
+        viewModel.completarFormulario()
+
+        viewModel.onAction(MiPerfilClienteAction.GuardarDireccion)
+
+        val formulario = requireNotNull(viewModel.state.value.formularioDireccion)
+        assertEquals(" Los Aromos ", formulario.calle)
+        assertFalse(formulario.guardando)
+        assertTrue(formulario.error != null)
+        assertTrue(viewModel.state.value.direcciones.isEmpty())
+    }
+
+    @Test
+    fun `ver los derechos del paciente abre el dialogo informativo y cerrarlo lo oculta`() = runTest {
+        val viewModel = cargarVacio()
+        assertFalse(viewModel.state.value.mostrandoDerechos)
+
+        viewModel.onAction(MiPerfilClienteAction.VerDerechosDelPaciente)
+        assertTrue(viewModel.state.value.mostrandoDerechos)
+
+        viewModel.onAction(MiPerfilClienteAction.CerrarDerechosDelPaciente)
+        assertFalse(viewModel.state.value.mostrandoDerechos)
+    }
+
+    @Test
+    fun `cancelar cierra el formulario sin guardar`() = runTest {
+        val viewModel = cargarVacio()
+        viewModel.onAction(MiPerfilClienteAction.AgregarNuevaDireccion)
+
+        viewModel.onAction(MiPerfilClienteAction.CancelarDireccion)
+
+        assertNull(viewModel.state.value.formularioDireccion)
+        coVerify(exactly = 0) { clienteRepository.agregarDireccion(any(), any()) }
+    }
+
+    @Test
+    fun `el resumen trae la foto de perfil del usuario`() = runTest {
+        coEvery { usuarioRepository.obtenerPorId(uid) } returns Result.Success(usuarioDePrueba(fotoUrl = "https://dl/a.jpg"))
+        coEvery { clienteRepository.obtenerPorId(uid) } returns Result.Success(clienteDePrueba())
+
+        val viewModel = crearViewModel()
+
+        assertEquals("https://dl/a.jpg", viewModel.state.value.resumen?.fotoUrl)
+    }
+
+    @Test
+    fun `al volver a la pantalla se relee la foto sin tocar el resto del perfil`() = runTest {
+        coEvery { usuarioRepository.obtenerPorId(uid) } returns Result.Success(usuarioDePrueba(fotoUrl = null))
+        coEvery { clienteRepository.obtenerPorId(uid) } returns Result.Success(clienteDePrueba())
+        val viewModel = crearViewModel()
+        assertNull(viewModel.state.value.resumen?.fotoUrl)
+
+        coEvery { usuarioRepository.obtenerPorId(uid) } returns Result.Success(usuarioDePrueba(fotoUrl = "https://dl/nueva.jpg"))
+        viewModel.onAction(MiPerfilClienteAction.RefrescarFoto)
+
+        val estado = viewModel.state.value
+        assertEquals("https://dl/nueva.jpg", estado.resumen?.fotoUrl)
+        assertEquals("Ana Maria Soto", estado.resumen?.nombreCompleto)
+        assertFalse(estado.cargando)
+    }
+
+    @Test
+    fun `refrescar la foto sin conexion deja la foto que ya se mostraba`() = runTest {
+        coEvery { usuarioRepository.obtenerPorId(uid) } returns Result.Success(usuarioDePrueba(fotoUrl = "https://dl/a.jpg"))
+        coEvery { clienteRepository.obtenerPorId(uid) } returns Result.Success(clienteDePrueba())
+        val viewModel = crearViewModel()
+
+        coEvery { usuarioRepository.obtenerPorId(uid) } returns Result.Error(UsuarioError.SIN_INTERNET)
+        viewModel.onAction(MiPerfilClienteAction.RefrescarFoto)
+
+        assertEquals("https://dl/a.jpg", viewModel.state.value.resumen?.fotoUrl)
     }
 }

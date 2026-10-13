@@ -30,6 +30,7 @@ import kotlin.time.Clock
 
 private const val COLECCION_USUARIOS = "usuarios"
 private const val COLECCION_PROFESIONALES = "profesionales"
+private const val COLECCION_CLIENTES = "clientes"
 
 class AuthRepositoryImpl @Inject constructor(
     private val firebaseAuth: FirebaseAuth,
@@ -182,7 +183,9 @@ class AuthRepositoryImpl @Inject constructor(
      * Escribe `usuarios/{uid}` y, para un Profesional, `profesionales/{uid}`
      * en un solo batch: si el perfil profesional fallara por separado
      * quedaria una cuenta PROFESIONAL sin documento, invisible en la
-     * busqueda y sin donde guardar disponibilidad ni biografia.
+     * busqueda y sin donde guardar disponibilidad ni biografia. Para un
+     * Cliente crea `clientes/{uid}` vacio (direcciones, favoritos): sin el,
+     * `ClienteRepository.obtenerPorId` responde `NO_ENCONTRADO`.
      */
     private suspend fun crearDocumentosDeCuenta(
         uid: String,
@@ -196,6 +199,16 @@ class AuthRepositoryImpl @Inject constructor(
             batch.set(
                 firestore.collection(COLECCION_PROFESIONALES).document(uid),
                 perfilProfesionalInicial(tiposAtencion),
+            )
+        }
+        if (rol == RolUsuario.CLIENTE) {
+            batch.set(
+                firestore.collection(COLECCION_CLIENTES).document(uid),
+                mapOf(
+                    "direcciones" to emptyList<Any>(),
+                    "metodosPago" to emptyList<Any>(),
+                    "favoritos" to emptyList<String>(),
+                ),
             )
         }
         batch.commit().await()

@@ -14,6 +14,14 @@ export type Motivo =
   | "RESERVA_NO_ENCONTRADA"
   | "RESERVA_YA_RESPONDIDA"
   | "RESERVA_VENCIDA"
+  // completarReserva
+  | "RESERVA_NO_COMPLETABLE"
+  | "CITA_NO_INICIADA"
+  // cancelarReserva
+  | "NO_AUTORIZADO"
+  | "ESTADO_INVALIDO"
+  | "CITA_YA_INICIADA"
+  | "MOTIVO_INVALIDO"
   // pagos
   | "RESERVA_NO_PAGABLE"
   | "PAGO_YA_REALIZADO"

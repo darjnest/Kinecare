@@ -149,13 +149,17 @@ de Firebase (`firebase use qa` / `firebase use prod`) al proyecto correcto.
   así QA nunca llama a las funciones de producción. El `motivo` de cada
   `HttpsError` se mapea 1:1 a un enum de error de `:core:common`
   (`CrearReservaError`, `ResponderReservaError`).
-- **Cloud Messaging**: notificaciones, tópicos separados por reserva y por rol.
-  Sin configurar todavía.
-- **Storage**: fotos de perfil y credenciales de profesionales. **Bloqueado
-  en plan Spark** — Google ya no permite inicializar Storage en proyectos
-  nuevos sin plan Blaze. QA (Blaze) ya tiene `storage.rules` en el repo; falta
-  crear el bucket desde la consola. Producción debe subir a Blaze antes de la
-  Fase 6.
+- **Cloud Messaging**: push de reservas (ver
+  [Notificaciones push](#notificaciones-push-fcm)). El backend envía por token
+  (`usuarios/{uid}/dispositivos`), no por tópicos.
+- **Storage**: fotos de perfil (Cliente y Profesional) y credenciales de
+  profesionales. **Bloqueado en plan Spark** — Google ya no permite inicializar
+  Storage en proyectos nuevos sin plan Blaze. QA (Blaze) ya tiene bucket y
+  `storage.rules`; producción debe subir a Blaze antes de la Fase 6 y mientras
+  tanto "Cambiar foto" degrada con un mensaje (`FotoPerfilError.ALMACENAMIENTO_NO_DISPONIBLE`).
+  La foto se sube con `FotoPerfilRepository` (interfaz en `:core:common`, impl en
+  `:core:network`; ver [DATA_MODEL.md](DATA_MODEL.md#firebase-storage)) y se
+  muestra con `KineCareAvatar` (`:core:designsystem`, Coil) que cae a iniciales.
 - Acceso a Firestore/Storage/Auth vía SDK directo; acceso a Cloud Functions
   HTTP vía Retrofit (`:core:network`).
 - **Llamadas a Cloud Functions `onCall`**: el helper público
@@ -183,13 +187,104 @@ de Firebase (`firebase use qa` / `firebase use prod`) al proyecto correcto.
   esa feature — no todo repositorio sube a `:core:*`,
   solo el que 2+ features necesitan de verdad (sin abstracciones para
   casos hipotéticos que no existen hoy).
+  Otros precedentes: `FotoPerfilRepository` (Storage) y `DispositivoPushRepository`
+  (token FCM), ambos en `FirestoreRepositoryModule` aunque no usen Firestore.
+
+## Notificaciones push (FCM)
+- **Token.** `DispositivoPushRepository` (`:core:common` + impl en `:core:network`,
+  `firebase-messaging`) registra el token en `usuarios/{uid}/dispositivos/{token}`:
+  `AuthViewModel` lo hace en cuanto hay sesión (login, Google o sesión restaurada)
+  y `KineCareMessagingService.onNewToken` cuando FCM lo rota. Al cerrar sesión
+  `AuthViewModel.cerrarSesion()` lo borra **antes** de cerrar (acotado a 3 s) y el
+  `NavHost` espera a que termine antes de ir al acceso: con la sesión aún abierta
+  esa pantalla reenviaría al inicio del rol.
+- **Mostrar.** `KineCareMessagingService` (`:app`, `@AndroidEntryPoint`) solo recibe
+  `onMessageReceived` con la app en primer plano y muestra la notificación en el
+  canal "Citas" (creado en `KineCareApplication`). Con la app en segundo plano la
+  muestra el sistema en el mismo canal (meta-data `default_notification_channel_id`)
+  y el `data` llega como extras del intent de `MainActivity`.
+- **Tocar.** `MainActivity` (`singleTask`) recibe el intent de arranque o
+  `onNewIntent`; `KineCareNavHost` lo traduce con `AperturaNotificacion`
+  (`:core:common`: `data {tipo, reservaId}` o el enlace interno
+  `kinecare://notificacion?tipo=..&reservaId=..`, que la app usa solo en `PendingIntent`
+  explícitos, por eso **no** hay `intent-filter` nuevo y otras apps o un navegador no
+  pueden dispararlo). Espera a que haya sesión y a salir del acceso, y abre Mis Citas
+  (Cliente) o Solicitudes (Profesional) según el rol; sin sesión o de otro rol se
+  descarta. Un `tipo` que la app no conoce solo abre la app.
+- **Permiso.** `POST_NOTIFICATIONS` (Android 13+) se pide desde `:app` una vez que
+  hay sesión, una sola vez por apertura y sin bloquear nada: sin el permiso la app
+  funciona igual y solo no avisa.
 
 ## Seguridad
 - Pagos y cambios de estado de verificación se resuelven **siempre** en una
   Cloud Function, nunca en el cliente.
 - No se persiste biometría ni documentos de identidad en el dispositivo,
   solo el resultado (`SolicitudVerificacion.estado`).
-- Certificate pinning en llamadas de pago (OkHttp `CertificatePinner`).
+- **Certificate pinning** (OkHttp `CertificatePinner`) en el cliente que llama a
+  las Cloud Functions (`:core:network`, `security/CertificatePins.kt`): pagos,
+  verificación de identidad y reservas comparten ese cliente y host
+  (`*.cloudfunctions.net`, QA y producción).
+  - **Qué se pinea:** las cuatro raíces de Google Trust Services (R1 y R2 RSA,
+    R3 y R4 ECC; vencen en 2036), no el certificado del servidor ni un
+    intermedio. El hoja es un certificado compartido de Google que se renueva
+    cada ~3 meses y Google rota los intermedios (WR1..WR5, WE1..WE4) sin avisar.
+    Las cuatro raíces son además el respaldo mutuo: un pin único sin respaldo
+    bloquea la app en una rotación. Hoy coincide la raíz R1 (el servidor envía
+    la copia con firma cruzada de GlobalSign, que comparte su clave).
+  - **Qué no cubre:** Firestore, Auth y el resto del SDK de Firebase (usan su
+    propio stack, no este cliente), ni el Custom Tab de Mercado Pago o de Didit
+    (es el navegador del sistema). El tráfico con Mercado Pago y Didit sale del
+    backend, no de la app.
+  - **Riesgo operativo:** un pin que deje de coincidir bloquea a **todas** las
+    versiones instaladas hasta que se actualicen. Por eso
+    `scripts/verificar-pins.sh` compara los pins del código con la cadena real
+    que sirve Google y corre cada semana y en cada PR que toca los pins
+    (`.github/workflows/pins.yml`). **Si Google cambia de CA raíz** (no solo de
+    intermedio): agregar su pin, publicar una versión de la app y esperar a que
+    se adopte **antes** de que el servidor cambie. Si se llegara tarde, existe
+    el interruptor remoto de abajo.
+  - **Interruptor remoto (Firebase Remote Config), firmado.** Parámetro
+    `cf_pinning_override` (String) con un JSON `{"v":1,"desde":…,"hasta":…,"firma":"…"}`
+    (segundos Unix). Un booleano simple sería una puerta falsa: Remote Config se
+    descarga de `firebaseremoteconfig.googleapis.com`, que **no** está pineado, así
+    que quien tuviera una CA falsa en el camino (justo la amenaza que frena el
+    pinning) podría responder "desactiva el pinning". Por eso la app **solo**
+    respeta un override con firma ECDSA P-256 válida contra la clave pública
+    embebida (`CLAVE_PUBLICA_OVERRIDE_PINNING`), y ante cualquier duda (vacío,
+    basura, firma ajena, valor alterado, vencido, aún no vigente) el pinning
+    sigue activo. La ventana va firmada y no puede pasar de **30 días**, así que
+    un override no deja el pinning apagado indefinidamente ni puede extenderse
+    sin la clave; al vencer, el pinning vuelve solo. Un `Call.Factory` decide
+    por llamada entre el cliente con pinning y uno idéntico sin él, así que
+    surte efecto en cuanto Remote Config activa el valor, sin reiniciar. Es un
+    canal independiente: llega aunque el pinning bloquee las funciones.
+    - **Estado actual: clave embebida (2026-10-09).** La clave pública ya está en
+      `CLAVE_PUBLICA_OVERRIDE_PINNING`; el pinning sigue activo mientras Remote
+      Config no tenga un override firmado y vigente. Con la clave vacía el
+      interruptor queda inutilizable (así salía de fábrica).
+    - **1. Una sola vez:** `scripts/pinning-override.sh generar-clave <archivo.pem>`
+      (se niega a escribir dentro del repo). Pegar la clave pública que imprime en
+      `CLAVE_PUBLICA_OVERRIDE_PINNING` y publicar una versión. **Guardar la clave
+      privada fuera del repo y respaldada**: quien la tenga puede apagar el
+      pinning de todas las apps hasta 30 días seguidos; si se pierde, el
+      interruptor queda inutilizable hasta publicar una versión con otra clave.
+    - **2. En una emergencia** (los pins ya no coinciden con lo que sirve Google,
+      p. ej. falla `pins.yml` o llegan reportes de que nada llama a las
+      funciones): `scripts/pinning-override.sh firmar <archivo.pem> <días ≤ 30>`
+      imprime el JSON; crear en la consola de Firebase → Remote Config el
+      parámetro `cf_pinning_override` (String) con ese valor y **publicar**. Las
+      apps lo toman en su próxima descarga (intervalo mínimo de 1 h, al abrir la
+      app) y lo aplican de inmediato.
+    - **3. Mientras tanto:** agregar el pin nuevo, publicar una versión y esperar
+      la adopción. Después retirar el parámetro (o dejar que venza).
+    - **Límites:** no ayuda a una app que nunca descargó Remote Config (instalada
+      sin red) ni a quien no la abra dentro de la ventana. Mientras está activo, el
+      tráfico a las Cloud Functions queda protegido solo por la validación normal
+      del sistema (sin pinning). La app registra en logcat (etiqueta `KineCarePinning`) cuándo cambia el
+      estado. Si el parámetro se publica mal (valor inválido) no pasa nada: sigue
+      el pinning.
+  - **Efecto secundario:** un proxy con CA instalada (Charles, mitmproxy) no
+    puede inspeccionar estas llamadas, ni en debug.
 - Tokens en Android Keystore / `EncryptedSharedPreferences`; nunca en
   `SharedPreferences` planas ni en `DataStore` sin cifrar.
 - R8/ProGuard habilitado en build de release.
@@ -209,6 +304,9 @@ de Firebase (`firebase use qa` / `firebase use prod`) al proyecto correcto.
   + `Geocoder` de Android — no se agregó el SDK de Google Maps (ver
   [TASKS.md](TASKS.md#fase-1--arquitectura-base) sobre Maps Compose, que
   sigue diferido hasta que se necesite mostrar un mapa real).
+- Excepción: `POST_NOTIFICATIONS` no pertenece a ninguna feature, así que se
+  declara y solicita desde `:app` (ver [Notificaciones push](#notificaciones-push-fcm)).
+  El selector de fotos de perfil (`PickVisualMedia`) no necesita permiso alguno.
 
 ## Persistencia local
 - **Room** (`:core:database`) solo para: caché offline de resultados de

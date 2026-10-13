@@ -82,9 +82,8 @@ CI: `.github/workflows/ci.yml` (build, lint y tests de Android + tests de
 Cloud Functions contra el emulador) corre en cada PR a `QA`/`PRD`.
 
 **PENDIENTE:** release firmado (Fase 5 del estándar del equipo, hasta que
-exista algo que publicar). También pendiente: exigir el check `CI` como
-obligatorio en las rulesets de ambas ramas (recién se puede elegir tras la
-primera corrida del workflow en GitHub).
+exista algo que publicar). El check `CI` ya es obligatorio en las rulesets de
+ambas ramas (2026-10-09).
 
 ## Agentes especializados
 Este proyecto define subagentes en `.claude/agents/` — úsalos para el tipo

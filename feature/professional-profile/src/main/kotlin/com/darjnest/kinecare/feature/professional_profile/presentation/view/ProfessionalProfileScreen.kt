@@ -20,18 +20,24 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -46,6 +52,7 @@ import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
 import com.darjnest.kinecare.core.common.domain.model.Servicio
 import com.darjnest.kinecare.core.common.domain.model.TipoInsignia
 import com.darjnest.kinecare.core.common.util.formatComoClp
+import com.darjnest.kinecare.core.designsystem.components.avatar.KineCareAvatar
 import com.darjnest.kinecare.core.designsystem.components.button.KineCarePrimaryButton
 import com.darjnest.kinecare.core.designsystem.components.card.KineCareCard
 import com.darjnest.kinecare.core.designsystem.components.label.KineCareBadge
@@ -107,14 +114,33 @@ fun ProfessionalProfileScreen(
     onAction: (ProfessionalProfileAction) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(state.mensaje) {
+        state.mensaje?.let {
+            snackbarHostState.showSnackbar(it)
+            onAction(ProfessionalProfileAction.MensajeMostrado)
+        }
+    }
     Scaffold(
         modifier = modifier,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("Perfil profesional") },
                 navigationIcon = {
                     IconButton(onClick = { onAction(ProfessionalProfileAction.VolverAtras) }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                    }
+                },
+                actions = {
+                    if (state.puedeGuardarFavorito) {
+                        IconButton(onClick = { onAction(ProfessionalProfileAction.AlternarFavorito) }) {
+                            Icon(
+                                imageVector = if (state.esFavorito) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                                contentDescription = if (state.esFavorito) "Quitar de favoritos" else "Guardar en favoritos",
+                                tint = if (state.esFavorito) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 },
             )
@@ -125,7 +151,16 @@ fun ProfessionalProfileScreen(
             val perfil = state.perfil
             if (perfil != null && perfil.servicios.isNotEmpty()) {
                 Surface(tonalElevation = KineCareSpacing.xs) {
-                    Box(modifier = Modifier.padding(KineCareSpacing.l)) {
+                    Column(modifier = Modifier.padding(KineCareSpacing.l)) {
+                        if (!perfil.mercadoPagoConectado) {
+                            Text(
+                                text = "Este profesional aún no activa los pagos con Mercado Pago. " +
+                                    "Puedes solicitar la hora, pero solo podrás pagarla cuando los active.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(bottom = KineCareSpacing.s),
+                            )
+                        }
                         KineCarePrimaryButton(
                             text = "Reservar hora",
                             onClick = { onAction(ProfessionalProfileAction.Reservar(perfil.id)) },
@@ -241,18 +276,11 @@ private fun ContenidoPerfil(
 private fun EncabezadoPerfil(perfil: PerfilProfesional) {
     KineCareCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(KineCareSpacing.avatarGrande)
-                    .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = perfil.iniciales,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-            }
+            KineCareAvatar(
+                iniciales = perfil.iniciales,
+                fotoUrl = perfil.fotoUrl,
+                contentDescription = "Foto de ${perfil.nombre}",
+            )
             Column(
                 modifier = Modifier
                     .weight(1f)

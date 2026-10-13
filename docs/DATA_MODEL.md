@@ -19,9 +19,41 @@ email: string        // correo de Firebase Auth: sintético (derivado del RUT) s
 correoContacto: string?  // correo real de contacto (= correo de Google cuando aplica)
 telefono: string?
 rol: "CLIENTE" | "PROFESIONAL"
-fotoUrl: string?
+fotoUrl: string?     // URL de descarga (con token) de la foto de perfil en Storage, con `&v=<epoch>`
+                     // al final para que Coil no cachee la anterior; nula = la UI muestra iniciales
 fechaRegistro: timestamp
 ```
+**Security Rules.** Lectura: cualquier usuario autenticado (pendiente de
+separar los datos privados `rut`/`email`/`telefono` de los públicos). `update`
+del dueño: `rut`, `email`, `fechaRegistro` y `rol` son inmutables, y `fotoUrl`
+solo puede ser nula, la URL de descarga de la propia foto en Storage
+(`clientes|profesionales/{uid}/foto-perfil.jpg`) o una foto de Google (el
+bucket no se fija en la regla). Misma validación de `fotoUrl` al crear.
+
+#### Subcolección `usuarios/{uid}/dispositivos/{token}`
+```
+plataforma: "ANDROID"
+actualizadoEn: timestamp   // serverTimestamp() del cliente al registrar/refrescar
+```
+Un documento por dispositivo; **el id es el token FCM**. Las reglas
+(`firestore.rules`, **sin desplegar**) solo dejan al dueño leer, crear,
+refrescar (re-registrar el mismo token es un `update` permitido) y borrar los
+suyos, con claves exactas `plataforma` + `actualizadoEn` (`== request.time`) y
+`plataforma == "ANDROID"`; nadie toca los de otro usuario. Los lee la función
+`notificarReserva` (Admin SDK), que borra los tokens que FCM declara inválidos
+(`registration-token-not-registered`, `invalid-registration-token`). La app
+debe **borrar su token al cerrar sesión**: un mismo token bajo dos usuarios haría
+llegar avisos de uno al otro en ese dispositivo. Sin índice (solo se lista la
+subcolección completa).
+
+Lado Android (`DispositivoPushRepository`, impl en `:core:network`): al haber
+sesión (`AuthViewModel`: login, registro con Google o sesión restaurada) y en
+`onNewToken` escribe `set({plataforma: "ANDROID", actualizadoEn: serverTimestamp()})`
+en `usuarios/{uid}/dispositivos/{token}` (idempotente); al cerrar sesión, **antes**
+de cerrarla (las reglas exigen auth), borra ese documento y llama a
+`FirebaseMessaging.deleteToken()` para que la próxima cuenta en el dispositivo
+reciba un token nuevo. El borrado está acotado a 3 s para que la falta de red no
+impida salir; si no alcanzó, el backend limpia el token cuando FCM lo rechaza.
 
 ### `clientes/{usuarioId}` (doc 1:1 con `usuarios`)
 ```
@@ -72,10 +104,13 @@ documentos sin ese campo), por eso el perfil inicial lo escribe en 0.
 queda en `PROFESIONAL` (`getAfter`, por el batch), claves exactamente las
 del perfil inicial, `tiposAtencion` no vacío y dentro del enum, y estado
 inicial obligatorio (sin insignias, `NO_SOLICITADO`, reputación en 0).
-`update`: el dueño no puede tocar `insignias`, `estadoVerificacionGeneral`,
-`calificacionPromedio` ni `totalResenas` (estas dos ordenan la búsqueda);
-si cambia `tiposAtencion` debe quedar válido. Perfiles legados sin
-`tiposAtencion` se pueden seguir actualizando en los demás campos.
+`update`: lista cerrada — el dueño solo edita `tiposAtencion`, `especialidades`,
+`descripcion` y `disponibilidad`. Todo lo demás (`rnpi`, `insignias`,
+`estadoVerificacionGeneral`, `calificacionPromedio`, `totalResenas`,
+`mercadoPagoConectado`, claves nuevas) lo escribe solo el backend; `rnpi` no se
+autodeclara tras registrarse. Si cambia `tiposAtencion` debe quedar válido.
+Perfiles legados sin `tiposAtencion` se pueden seguir actualizando en los demás
+campos permitidos.
 
 Índices compuestos: `tiposAtencion` (array-contains) +
 `calificacionPromedio` (desc) — reemplaza al de `especialidades`, que ya
@@ -115,7 +150,17 @@ creadoEn: timestamp
 actualizadoEn: timestamp
 respondidaEn: timestamp?             // lo escribe responderReserva al aceptar/rechazar;
                                      // ausente mientras la reserva sigue SOLICITADA
+completadaEn: timestamp?             // lo escribe completarReserva; solo en reservas COMPLETADA
+canceladaEn: timestamp?              // lo escribe cancelarReserva; solo en CANCELADA_*
+canceladaPor: string?                // uid de quien canceló (cliente o profesional)
+motivoCancelacion: string?           // texto libre <= 300 o null; lo escribe cancelarReserva
+expirada: boolean?                   // true si expirarSolicitudes cerró una solicitud sin respuesta
+expiradaEn: timestamp?               // idem; ver "Expiración" más abajo
 ```
+**Expiración.** `EstadoReserva` no tiene `EXPIRADA`. Mientras no exista, una
+solicitud que nadie respondió antes de la hora de la cita queda con
+`estado = "RECHAZADA"` y `expirada = true` (sin `respondidaEn`): una app que no
+conozca `expirada` la ve como rechazada; las que sí, como "Expirada".
 `pago` lo inicializa `crearReserva` como `{ id: null, monto: servicio.precio,
 estado: "PENDIENTE" }`: **`pago.id` es `null` hasta que el cliente paga**:
 `iniciarPago` crea el documento en `pagos` y escribe su id aquí, y el webhook
@@ -147,6 +192,12 @@ profesional en orden ascendente; pendientes e historial se separan en el
 (`kinecare-cl-qa`); el Firestore Emulator no exige índices, así que la
 consulta todavía no se ha ejercitado contra uno real.
 
+`estado` (asc) + `fechaHora` (asc) — lo usa `expirarSolicitudes`
+(`estado == "SOLICITADA"` y `fechaHora < ahora`, orden por `fechaHora`, `limit`).
+`obtenerCuposOcupados` reutiliza `profesionalId` + `fechaHora`. Declarado en
+`firestore.indexes.json`, **sin desplegar**; el emulador no exige índices, así
+que no se ha ejercitado contra uno real.
+
 ### `bloqueosAgenda/{profesionalId}`
 ```
 profesionalId: string
@@ -172,9 +223,13 @@ preferenceId: string?            // preferencia de Checkout Pro
 initPoint: string?               // URL de pago de Mercado Pago (siempre init_point, nunca sandbox)
 creadoEn: timestamp
 actualizadoEn: timestamp
+reembolsoPendiente: boolean?     // true = corresponde devolver el dinero (cancelarReserva sobre un pago AUTORIZADO, o pago tardío)
+reembolsoPolitica: "TOTAL" | "NINGUNO"?   // política aplicada al cancelar
+reembolsoMotivo: "PAGO_TARDIO"?  // solo si el cobro se aprobó DESPUÉS de cancelar/rechazar la reserva (lo escribe el webhook)
+reembolsoSolicitadoEn: timestamp?
 ```
 Escrito **solo** por Cloud Functions (`iniciarPago`, `webhookMercadoPago`,
-`estadoPago`). El cliente Android y el profesional de la reserva tienen
+`estadoPago`, `cancelarReserva`). El cliente Android y el profesional de la reserva tienen
 permiso de lectura únicamente (Security Rules). Un mismo `pagos/{id}` es un
 intento de cobro: si Mercado Pago lo rechaza, un nuevo `iniciarPago` crea otro
 documento y `reservas.pago.id` pasa a apuntar al nuevo. `external_reference`
@@ -241,9 +296,15 @@ desplegadas**): además de auth (`clienteId == request.auth.uid`), reserva
 `comentario` ausente/null o string de hasta 500 caracteres,
 `respuestaProfesional` ausente, y claves restringidas a `reservaId`,
 `clienteId`, `profesionalId`, `calificacion`, `comentario`, `fecha`.
-`update` solo permite al profesional dueño modificar `respuestaProfesional`;
-`delete` está denegado. Validadas contra el Firestore Emulator local (no
-contra el proyecto Firebase real).
+`update` solo permite al profesional dueño (`resource.profesionalId == uid` y
+`usuarios/{uid}.rol == "PROFESIONAL"`) agregar `respuestaProfesional`: única
+clave que cambia, string de 1 a 500 caracteres (`trim()` no vacío), y solo si
+la reseña aún no tenía respuesta (no se edita ni se borra); no toca
+`calificacion`, así que `recalcularCalificacion` no recalcula. `delete` está
+denegado. Validadas contra el Firestore Emulator local (no
+contra el proyecto Firebase real). Las reglas de respuesta, de `dispositivos`, de `usuarios` y de `profesionales`
+tienen pruebas automáticas (`functions/test/integration/reglas.integration.test.ts`,
+por REST contra el emulador con tokens de Auth sin firmar).
 
 > **`profesionales.calificacionPromedio` y `totalResenas` los mantiene la
 > Cloud Function `recalcularCalificacion`** (ver [Cloud Functions](#cloud-functions)).
@@ -429,15 +490,183 @@ Reglas de detalle:
 - **Sin plazo de respuesta.** Una solicitud no respondida no expira sola;
   cuando su hora pasa, el panel profesional la muestra como "Vencida sin
   respuesta" (derivado, no se escribe) y ya no se puede aceptar. Expirarlas
-  en el backend requiere una función programada.
-- No notifica al cliente (FCM sin configurar): el cliente ve el cambio al
-  recargar "Mis Citas".
+  en el backend lo hace `expirarSolicitudes` (ver más abajo; **sin desplegar**).
+- No notifica por sí misma: el aviso al cliente lo manda el trigger
+  `notificarReserva` (ver más abajo; **sin desplegar**). Hasta entonces el
+  cliente ve el cambio al recargar "Mis Citas".
 
 Pruebas: `test/unit/responderReserva.test.ts` (validación del payload) y
 `test/integration/responderReserva.integration.test.ts` (17 casos contra el
 Firestore Emulator: camino feliz, cada `motivo`, reserva ajena, concurrencia).
 Desplegada con `firebase deploy --only functions:responderReserva -P qa`;
 verificado que sin sesión responde 401 `SIN_SESION`.
+
+### `completarReserva` (callable) — **sin desplegar** (código y tests listos)
+Mismo protocolo que `responderReserva` (`POST .../completarReserva`). El
+profesional dueño da por realizada una atención `CONFIRMADA` (o `EN_CURSO`)
+cuya hora ya llegó. Es el paso que habilita dejar una reseña, el "por
+liquidar" del dashboard y las liquidaciones.
+
+Request `data`: `{ reservaId: string }`. Cualquier otra clave se ignora (el
+estado nunca lo elige el cliente). Response `result`:
+`{ estado: "COMPLETADA" }`. Actualiza `reservas/{reservaId}`: `estado`,
+`completadaEn` y `actualizadoEn` (hora del servidor); no toca pago, comisión
+ni `bloqueosAgenda`.
+
+| `status` (HTTP) | `motivo` | Cuándo |
+|---|---|---|
+| `UNAUTHENTICATED` (401) | `SIN_SESION` | Sin sesión |
+| `INVALID_ARGUMENT` (400) | `DATOS_INVALIDOS` | `reservaId` vacío/no texto/con `/`/> 128 caracteres |
+| `PERMISSION_DENIED` (403) | `ROL_INVALIDO` | `usuarios/{uid}.rol != "PROFESIONAL"` (o sin documento) |
+| `NOT_FOUND` (404) | `RESERVA_NO_ENCONTRADA` | No existe **o es de otro profesional** |
+| `FAILED_PRECONDITION` (400) | `RESERVA_NO_COMPLETABLE` | `estado` no es `CONFIRMADA`/`EN_CURSO` (solicitada, rechazada, cancelada o ya completada) |
+| `FAILED_PRECONDITION` (400) | `CITA_NO_INICIADA` | `fechaHora > ahora` (o sin `fechaHora`) |
+
+Reglas de detalle:
+- Solo el profesional puede completar: un cliente podría dar por hecha una
+  atención que no ocurrió.
+- Lectura y escritura en una transacción: dos llamadas simultáneas → una gana
+  y la otra recibe `RESERVA_NO_COMPLETABLE` (probado en el emulador).
+- **No libera ni captura pagos:** con Mercado Pago Marketplace el dinero va
+  directo al profesional (ver "Liquidaciones y finanzas" en TASKS.md).
+- La app la ofrece en "Solicitudes de atención → Historial" como "Marcar como
+  completada", con confirmación.
+
+Pruebas: `test/unit/completarReserva.test.ts` y
+`test/integration/completarReserva.integration.test.ts` (camino feliz, cada
+`motivo`, reserva ajena, concurrencia). Despliegue pendiente:
+`firebase deploy --only functions:completarReserva -P qa`.
+
+### `cancelarReserva` (callable) — **sin desplegar** (código y tests listos)
+Mismo protocolo que `responderReserva` (`POST .../cancelarReserva`). Cancela el
+cliente o el profesional dueño de la reserva.
+
+Request `data`: `{ reservaId: string, motivo?: string | null }` (`motivo` <= 300
+caracteres tras `trim()`; vacío se guarda como `null`). Quién cancela sale de
+comparar el uid de la sesión con `clienteId`/`profesionalId` de la reserva (el
+payload no puede elegirlo; otras claves se ignoran). Response `result`:
+```
+{ estado: "CANCELADA_CLIENTE" | "CANCELADA_PROFESIONAL",
+  reembolso: "NO_APLICA" | "TOTAL" | "NINGUNO" }
+```
+Actualiza `reservas/{id}`: `estado`, `canceladaEn`, `canceladaPor` (uid),
+`motivoCancelacion` (string o `null`) y `actualizadoEn`.
+
+| `status` (HTTP) | `motivo` | Cuándo |
+|---|---|---|
+| `UNAUTHENTICATED` (401) | `SIN_SESION` | Sin sesión |
+| `INVALID_ARGUMENT` (400) | `DATOS_INVALIDOS` | `reservaId` vacío/no texto/con `/`/> 128 caracteres, o cuerpo no objeto |
+| `INVALID_ARGUMENT` (400) | `MOTIVO_INVALIDO` | `motivo` no es texto o excede 300 caracteres |
+| `NOT_FOUND` (404) | `RESERVA_NO_ENCONTRADA` | La reserva no existe |
+| `PERMISSION_DENIED` (403) | `NO_AUTORIZADO` | Existe pero el llamador no es su cliente ni su profesional |
+| `FAILED_PRECONDITION` (400) | `ESTADO_INVALIDO` | `estado` no es `SOLICITADA`/`CONFIRMADA` (incluye una cancelación repetida) |
+| `FAILED_PRECONDITION` (400) | `CITA_YA_INICIADA` | `fechaHora <= ahora` (o sin `fechaHora`) |
+
+Reglas de detalle:
+- Lectura y escritura en una transacción: cancelaciones simultáneas (o contra
+  una respuesta) → una gana y las demás reciben `ESTADO_INVALIDO` (probado con 8
+  llamadas paralelas en el emulador).
+- **Agenda.** No toca `bloqueosAgenda`: ese documento solo serializa a
+  `crearReserva`; la disponibilidad sale del `estado`, y `CANCELADA_*` no ocupa
+  agenda.
+- **Reembolso (política).** Solo se evalúa si `pagos/{reserva.pago.id}.estado ==
+  "AUTORIZADO"`; si no, `reembolso = "NO_APLICA"` y el pago no se toca. Cancela el
+  profesional → `TOTAL`; cancela el cliente con >= 24 h de anticipación → `TOTAL`;
+  con menos → `NINGUNO` (solo se registra). En el pago se escribe
+  `reembolsoPendiente` (`true` si `TOTAL`), `reembolsoPolitica` y
+  `reembolsoSolicitadoEn`; **`pagos.estado` no cambia** (solo el webhook lo hace).
+- **El reembolso real es un pendiente manual.** No existe cliente de reembolso de
+  Mercado Pago en el backend y no se inventó una llamada a la API: alguien debe
+  devolver el dinero desde Mercado Pago a las filas con `reembolsoPendiente ==
+  true` (después el webhook pasará el pago a `REEMBOLSADO`).
+- **Pago tardío (resuelto).** Un pago `PENDIENTE` con la preferencia de Checkout Pro
+  todavía abierta puede pagarse después de cancelar. Cuando el webhook (o `estadoPago`)
+  aprueba un cobro y la reserva está `CANCELADA_CLIENTE`, `CANCELADA_PROFESIONAL` o
+  `RECHAZADA`, `aplicarPago` lo registra `AUTORIZADO` (el dinero sí se cobró) pero lo
+  deja con `reembolsoPendiente: true`, `reembolsoPolitica: "TOTAL"` y
+  `reembolsoMotivo: "PAGO_TARDIO"`, sin importar la anticipación: cobrar algo que nadie
+  va a atender nunca corresponde. La reserva sigue cancelada. Cancelar y aplicar el
+  pago se serializan en transacción, así que no hay carrera. Sigue siendo una
+  devolución manual (ver arriba) y la preferencia no se cierra en Mercado Pago.
+
+Pruebas: `test/unit/cancelarReserva.test.ts` y
+`test/integration/cancelarReserva.integration.test.ts`.
+
+### `expirarSolicitudes` (función programada) — **sin desplegar**
+`onSchedule("every 15 minutes", us-central1)` (Cloud Scheduler; requiere Blaze).
+Cierra las reservas `SOLICITADA` cuya `fechaHora` es anterior a la hora actual:
+`estado = "RECHAZADA"`, `expirada = true`, `expiradaEn`, `actualizadoEn` (ver la
+nota de **Expiración** en `reservas`: el enum de dominio no tiene `EXPIRADA`;
+constante `ESTADO_AL_EXPIRAR` en `src/expirarSolicitudes.ts`).
+- **Idempotente.** Consulta `estado == "SOLICITADA" && fechaHora < ahora` y cada
+  lote relee sus documentos dentro de una transacción, saltando los que ya no
+  están `SOLICITADA` (si el profesional acepta/rechaza o el cliente cancela en
+  ese instante, esa respuesta gana). Una reserva sin `fechaHora` nunca se expira.
+- **Por lotes.** 100 documentos por consulta/transacción, hasta 20 lotes por
+  ejecución (el resto lo toma la siguiente).
+- No toca pagos ni `bloqueosAgenda`. Requiere el índice `reservas(estado,
+  fechaHora)`. Probada con `test/integration/expirarSolicitudes.integration.test.ts`;
+  no se ejecutó nunca como job programado real.
+
+### `obtenerCuposOcupados` (callable) — **sin desplegar**
+Mismo protocolo (`POST .../obtenerCuposOcupados`). Solo un `CLIENTE` (rol de
+`usuarios/{uid}`). Existe porque un cliente no puede leer reservas ajenas
+(Security Rules): permite no ofrecer horarios tomados, sin ver quién los reservó.
+La verdad la sigue decidiendo `crearReserva` (`HORARIO_OCUPADO`).
+
+Request `data`: `{ profesionalId: string, desde: string, hasta: string }`
+(ISO-8601 con zona; `hasta > desde`; ventana <= 15 días). Response `result`:
+```
+{ cupos: [ { inicio: "2026-10-06T15:00:00.000Z", fin: "2026-10-06T15:45:00.000Z" } ] }
+```
+Instantes UTC, ordenados por `inicio`; **solo** `inicio`/`fin`. Incluye las
+reservas `SOLICITADA`/`CONFIRMADA`/`EN_CURSO` del profesional que se solapan con
+`[desde, hasta)` (una que empieza antes pero cruza `desde` entra; una que termina
+justo en `desde`, no). Duración ausente = 60 min. Un profesional inexistente da
+`cupos: []`.
+
+| `status` (HTTP) | `motivo` | Cuándo |
+|---|---|---|
+| `UNAUTHENTICATED` (401) | `SIN_SESION` | Sin sesión |
+| `PERMISSION_DENIED` (403) | `ROL_INVALIDO` | `usuarios/{uid}.rol != "CLIENTE"` (o sin documento) |
+| `INVALID_ARGUMENT` (400) | `DATOS_INVALIDOS` | Ids/fechas mal formados, `hasta <= desde` o ventana > 15 días |
+
+Pruebas: `test/unit/cupos.test.ts` y `test/integration/cupos.integration.test.ts`.
+
+### `notificarReserva` (trigger Firestore, push FCM) — **sin desplegar**
+`onDocumentWritten("reservas/{reservaId}", us-central1)`, **sin** `retry` (un
+reintento duplicaría avisos; un push perdido no rompe nada). Cuando cambia el
+`estado` (o la reserva nace `SOLICITADA`) arma un mensaje y lo envía, con
+`sendEachForMulticast` (prioridad alta), a todos los tokens de
+`usuarios/{destinatario}/dispositivos`; los tokens que FCM declara inválidos se
+borran. Si FCM falla, solo se loguea.
+
+| Cambio | Destinatario | `data.tipo` | Título |
+|---|---|---|---|
+| Nace `SOLICITADA` | profesional | `NUEVA_SOLICITUD` | Nueva solicitud |
+| → `CONFIRMADA` | cliente | `RESERVA_CONFIRMADA` | Reserva confirmada |
+| → `RECHAZADA` | cliente | `RESERVA_RECHAZADA` | Solicitud rechazada |
+| → `RECHAZADA` con `expirada == true` | cliente | `SOLICITUD_EXPIRADA` | Solicitud sin respuesta |
+| → `CANCELADA_CLIENTE` | profesional | `RESERVA_CANCELADA` | Reserva cancelada |
+| → `CANCELADA_PROFESIONAL` | cliente | `RESERVA_CANCELADA` | Reserva cancelada |
+| → `COMPLETADA` | cliente | `DEJAR_RESENA` | ¿Cómo fue tu atención? |
+
+`EN_CURSO`, ediciones que no tocan `estado` (p. ej. `pago`) y borrados no avisan.
+Cada mensaje lleva `notification` (título/cuerpo en español de Chile, con la fecha
+en hora de Chile) y `data: { tipo, reservaId }` (solo strings). No se fija
+`channelId` de Android: la app usa el canal por defecto de FCM, que declara en el
+manifest y crea al arrancar como canal "Citas".
+
+Lado Android: `RESERVA_CANCELADA` llega a ambos roles, así que el destino de la
+pantalla lo decide el rol de la cuenta (`TipoNotificacion.destinatarios` /
+`DestinoNotificacion.para` en `:core:common`): Cliente → Mis Citas, Profesional →
+Solicitudes. Un `tipo` desconocido muestra la notificación y solo abre la app; una
+notificación del otro rol se descarta. Ver
+[ARCHITECTURE.md](ARCHITECTURE.md#notificaciones-push-fcm).
+
+Pruebas: `test/unit/notificaciones.test.ts` (armado y selección de destinatario) y
+`test/integration/notificaciones.integration.test.ts` (con un doble de FCM contra
+el emulador de Firestore). **Nunca se envió un push real** (ni siquiera contra QA).
 
 ### `recalcularCalificacion` (trigger Firestore) — **desplegada en QA**, no en producción
 `onDocumentWritten` sobre `resenas/{resenaId}` (`us-central1`, `retry: true`).
@@ -661,17 +890,36 @@ Reglas de detalle:
 
 ```
 /profesionales/{usuarioId}/foto-perfil.jpg
+/clientes/{usuarioId}/foto-perfil.jpg
 /profesionales/{usuarioId}/credenciales/{archivo}     // acceso restringido, solo backend/proveedor
 ```
 
-Reglas en `storage.rules` (referenciadas desde `firebase.json`; validadas con
-`firebase_validate_security_rules`, **todavía sin desplegar**: el bucket de QA
-no está creado, ver [TASKS.md](TASKS.md)). `foto-perfil.jpg`: lectura pública
-(se ve en el perfil público), `create`/`update` solo del dueño, solo
-`image/jpeg` y < 5 MB, sin `delete`. `credenciales/**`: nada desde la app
-(lo maneja el backend/proveedor con Admin SDK, que ignora las reglas). Todo lo
-demás, denegado. No hay ruta definida para la foto del Cliente
-(`usuarios/{uid}.fotoUrl`): falta decidirla antes de activar "Cambiar foto".
+Reglas en `storage.rules` (referenciadas desde `firebase.json`). El bucket de QA
+existe y las reglas de `profesionales/**` están desplegadas; la ruta `clientes/**`
+**está en el repo pero sin desplegar** (`firebase deploy --only storage -P qa`);
+producción no tiene bucket (plan Spark).
+- `profesionales/{uid}/foto-perfil.jpg`: lectura pública (se ve en el perfil
+  público), `create`/`update` solo del dueño, solo `image/jpeg` y < 5 MB, sin
+  `delete`.
+- `clientes/{uid}/foto-perfil.jpg`: mismas restricciones de escritura; la
+  **lectura es solo del dueño** (no es pública). Los demás ven la foto por la URL
+  de descarga con token que queda en `usuarios/{uid}.fotoUrl`, que no pasa por las
+  reglas.
+- `credenciales/**`: nada desde la app (lo maneja el backend/proveedor con Admin
+  SDK, que ignora las reglas). Todo lo demás, denegado.
+
+Validadas con `scripts/probar-storage-rules.sh` (emuladores de Auth y Storage,
+20 casos: dueño, ajeno, anónimo, PNG, >= 5 MB, borrado, otro nombre de archivo).
+
+Subida desde la app (`FotoPerfilRepository`, `:core:common` + `:core:network`):
+el selector del sistema (`PickVisualMedia`, sin permisos) entrega un `content://`;
+`LectorImagenAndroid` lo decodifica con `inSampleSize`, aplica la orientación EXIF,
+reduce el lado mayor a 1280 px y comprime a JPEG (calidad 85 → 70 → 55 hasta bajar
+de 4 MB), todo en memoria (no escribe archivos ni caché; recomprimir descarta el
+EXIF, ubicación incluida). Sube con `contentType = image/jpeg`, obtiene la URL de
+descarga y el ViewModel la guarda con `UsuarioRepository.actualizarFotoUrl`.
+Sin bucket (producción) el SDK falla y se mapea a `ALMACENAMIENTO_NO_DISPONIBLE`
+con un mensaje propio; la app no se rompe.
 
 ## Entidades Room (`:core:database`, solo caché offline)
 

@@ -1,5 +1,6 @@
 package com.darjnest.kinecare.feature.payment.presentation.view
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -42,6 +43,11 @@ fun PagoResultadoRoot(
     onIniciarSesion: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    // Con el pago ya aprobado o en proceso, "atras" no debe devolver a "Pagar reserva" (que
+    // sigue debajo en el back stack): sale a Mis Citas igual que el boton de la pantalla.
+    BackHandler(enabled = state.fase == FasePagoResultado.APROBADO || state.fase == FasePagoResultado.EN_PROCESO) {
+        onIrAMisCitas()
+    }
     PagoResultadoScreen(
         state = state,
         onAction = { accion ->

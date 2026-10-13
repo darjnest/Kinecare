@@ -36,6 +36,10 @@ dependencies {
     implementation(project(":core:common"))
     implementation(project(":core:designsystem"))
 
+    // Solo para resolver el uid del usuario autenticado (favoritos); las features no comparten un AuthRepository.
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.auth)
+
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)

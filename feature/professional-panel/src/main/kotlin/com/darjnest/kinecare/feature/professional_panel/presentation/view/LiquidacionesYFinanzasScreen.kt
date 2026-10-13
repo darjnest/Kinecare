@@ -33,17 +33,24 @@ import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -96,10 +103,19 @@ fun LiquidacionesYFinanzasScreen(
     onVolver: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(state.mensaje) {
+        state.mensaje?.let {
+            snackbarHostState.showSnackbar(it)
+            onAction(LiquidacionesYFinanzasAction.MensajeMostrado)
+        }
+    }
+
     Scaffold(
         modifier = modifier,
         containerColor = LoginFondo,
         topBar = { EncabezadoFinanzas(onVolver = onVolver) },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -111,6 +127,20 @@ fun LiquidacionesYFinanzasScreen(
         ) {
             Spacer(modifier = Modifier.height(4.dp))
             FilaTituloYEstadoSii(siiConectado = state.siiConectado)
+
+            if (state.cargando && state.resumenMensual == null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 48.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator(color = LoginPrimarioOscuro)
+                }
+            } else if (state.errorCarga) {
+                Spacer(modifier = Modifier.height(16.dp))
+                TarjetaErrorCarga(onReintentar = { onAction(LiquidacionesYFinanzasAction.Reintentar) })
+            }
 
             state.resumenFinanciero?.let { resumenFinanciero ->
                 Spacer(modifier = Modifier.height(16.dp))
@@ -129,11 +159,15 @@ fun LiquidacionesYFinanzasScreen(
 
             if (state.historialPagos.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(24.dp))
-                SeccionHistorialPagos(pagos = state.historialPagos, onAction = onAction)
+                SeccionHistorialPagos(pagos = state.historialPagos)
+            } else if (state.resumenMensual != null) {
+                Spacer(modifier = Modifier.height(24.dp))
+                Text(
+                    text = "Aún no tienes pagos. Aparecerán aquí cuando un paciente pague una atención confirmada.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = LoginGrisTexto,
+                )
             }
-
-            Spacer(modifier = Modifier.height(24.dp))
-            TarjetaOperacionRenta(onClick = { onAction(LiquidacionesYFinanzasAction.DescargarCertificadoAnual) })
 
             Spacer(modifier = Modifier.height(24.dp))
         }
@@ -165,8 +199,6 @@ private fun EncabezadoFinanzas(onVolver: () -> Unit) {
             color = TextoPrincipal,
             modifier = Modifier.weight(1f).padding(start = 4.dp),
         )
-        Icon(Icons.Filled.MoreVert, contentDescription = "Más opciones", tint = LoginGrisTexto)
-        Spacer(modifier = Modifier.width(12.dp))
         Box(
             modifier = Modifier
                 .size(32.dp)
@@ -298,7 +330,7 @@ private fun TarjetaMontoPorLiquidar(resumenFinanciero: ResumenFinanciero) {
                 Icon(Icons.Filled.Shield, contentDescription = null, tint = LoginMenta, modifier = Modifier.size(14.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "En custodia KineCare Protect • 100% garantizado",
+                    text = "Pagado vía Mercado Pago",
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
@@ -445,8 +477,9 @@ private fun SeccionResumenMensual(resumenMensual: ResumenMensual) {
                         color = TextoPrincipal,
                     )
                     Spacer(modifier = Modifier.height(4.dp))
+                    resumenMensual.variacionPorcentaje?.let { variacion ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        val subeIngreso = resumenMensual.variacionPorcentaje >= 0
+                        val subeIngreso = variacion >= 0
                         Icon(
                             imageVector = if (subeIngreso) Icons.Filled.TrendingUp else Icons.Filled.TrendingDown,
                             contentDescription = null,
@@ -455,10 +488,11 @@ private fun SeccionResumenMensual(resumenMensual: ResumenMensual) {
                         )
                         Spacer(modifier = Modifier.width(3.dp))
                         Text(
-                            text = "${if (subeIngreso) "+" else ""}${resumenMensual.variacionPorcentaje}% vs mes anterior",
+                            text = "${if (subeIngreso) "+" else ""}$variacion% vs mes anterior",
                             style = MaterialTheme.typography.labelSmall,
                             color = if (subeIngreso) LoginPrimario else RojoError40,
                         )
+                    }
                     }
                 }
             }
@@ -520,7 +554,7 @@ private fun SeccionResumenMensual(resumenMensual: ResumenMensual) {
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(text = "Comisión de plataforma KineCare", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = TextoPrincipal)
-                            Text(text = "Infraestructura, pasarelas y soporte 24/7", style = MaterialTheme.typography.labelSmall, color = LoginGrisTexto)
+                            Text(text = "Infraestructura y pasarela de pago", style = MaterialTheme.typography.labelSmall, color = LoginGrisTexto)
                         }
                     }
                     Text(text = "${resumenMensual.comisionPlataformaPorcentaje}%", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = AzulPetroleo30)
@@ -534,38 +568,40 @@ private fun SeccionResumenMensual(resumenMensual: ResumenMensual) {
                         .background(LoginGrisClaro),
                 )
 
-                Spacer(modifier = Modifier.height(10.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
+                resumenMensual.boletasEmitidas?.let { boletas ->
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .background(LoginMenta),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(Icons.Filled.ReceiptLong, contentDescription = null, tint = LoginPrimarioOscuro, modifier = Modifier.size(16.dp))
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(text = "Boletas de honorarios automáticas", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = TextoPrincipal)
+                                Text(text = "Sincronizado con Servicio de Impuestos Internos", style = MaterialTheme.typography.labelSmall, color = LoginGrisTexto)
+                            }
+                        }
+                        Text(
+                            text = "$boletas emitidas",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = TextoPrincipal,
                             modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(LoginMenta),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(Icons.Filled.ReceiptLong, contentDescription = null, tint = LoginPrimarioOscuro, modifier = Modifier.size(16.dp))
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(text = "Boletas de honorarios automáticas", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = TextoPrincipal)
-                            Text(text = "Sincronizado con Servicio de Impuestos Internos", style = MaterialTheme.typography.labelSmall, color = LoginGrisTexto)
-                        }
+                                .clip(RoundedCornerShape(50))
+                                .background(LoginGrisClaro)
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                        )
                     }
-                    Text(
-                        text = "${resumenMensual.boletasEmitidas} emitidas",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = TextoPrincipal,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(LoginGrisClaro)
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
-                    )
                 }
             }
         }
@@ -573,10 +609,7 @@ private fun SeccionResumenMensual(resumenMensual: ResumenMensual) {
 }
 
 @Composable
-private fun SeccionHistorialPagos(
-    pagos: List<PagoHistorico>,
-    onAction: (LiquidacionesYFinanzasAction) -> Unit,
-) {
+private fun SeccionHistorialPagos(pagos: List<PagoHistorico>) {
     Column {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -584,22 +617,19 @@ private fun SeccionHistorialPagos(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(text = "Historial de Pagos", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = TextoPrincipal)
-            Text(text = "${pagos.size} últimos ciclos", style = MaterialTheme.typography.labelSmall, color = AzulPetroleo30)
+            Text(text = "${pagos.size} más recientes", style = MaterialTheme.typography.labelSmall, color = AzulPetroleo30)
         }
         Spacer(modifier = Modifier.height(10.dp))
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             pagos.forEach { pago ->
-                TarjetaPagoHistorico(pago = pago, onClick = { onAction(LiquidacionesYFinanzasAction.DescargarComprobante(pago.id)) })
+                TarjetaPagoHistorico(pago = pago)
             }
         }
     }
 }
 
 @Composable
-private fun TarjetaPagoHistorico(
-    pago: PagoHistorico,
-    onClick: () -> Unit,
-) {
+private fun TarjetaPagoHistorico(pago: PagoHistorico) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -621,25 +651,34 @@ private fun TarjetaPagoHistorico(
                         .background(LoginMenta),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = LoginPrimarioOscuro, modifier = Modifier.size(20.dp))
+                    Icon(
+                        imageVector = if (pago.estado == EstadoPago.EXITOSA) Icons.Filled.CheckCircle else Icons.Filled.Schedule,
+                        contentDescription = null,
+                        tint = LoginPrimarioOscuro,
+                        modifier = Modifier.size(20.dp),
+                    )
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(text = pago.titulo, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = TextoPrincipal)
                         Spacer(modifier = Modifier.width(8.dp))
-                        if (pago.estado == EstadoPago.EXITOSA) {
-                            Text(
-                                text = "EXITOSA",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = LoginPrimarioOscuro,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(50))
-                                    .background(LoginMenta)
-                                    .padding(horizontal = 6.dp, vertical = 2.dp),
-                            )
+                        val (textoEstado, colorEstado, fondoEstado) = when (pago.estado) {
+                            EstadoPago.EXITOSA -> Triple("EXITOSA", LoginPrimarioOscuro, LoginMenta)
+                            EstadoPago.PENDIENTE -> Triple("PENDIENTE", LoginGrisTexto, LoginGrisClaro)
+                            EstadoPago.RECHAZADA -> Triple("RECHAZADO", RojoError40, LoginGrisClaro)
+                            EstadoPago.REEMBOLSADA -> Triple("REEMBOLSADO", AzulPetroleo30, LoginAzulSuave)
                         }
+                        Text(
+                            text = textoEstado,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = colorEstado,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(fondoEstado)
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
                     }
                     Text(
                         text = "${pago.fechaTexto} • ${pago.medioTexto}",
@@ -649,66 +688,46 @@ private fun TarjetaPagoHistorico(
                     )
                 }
             }
-            Column(horizontalAlignment = Alignment.End) {
-                Text(text = formatearClp(pago.monto), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = TextoPrincipal)
-                Row(
-                    modifier = Modifier.clickable(onClick = onClick),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Filled.PictureAsPdf, contentDescription = null, tint = AzulPetroleo30, modifier = Modifier.size(13.dp))
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Text(text = "Comprobante", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = AzulPetroleo30)
-                }
-            }
+            // Sin boton de comprobante: los documentos tributarios aun no se generan.
+            Text(text = formatearClp(pago.monto), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = TextoPrincipal)
         }
     }
 }
 
 @Composable
-private fun TarjetaOperacionRenta(onClick: () -> Unit) {
+private fun TarjetaErrorCarga(onReintentar: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = LiquidacionesCelesteRenta),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(AzulPetroleo30),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.Filled.Assignment, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Text(text = "Operación Renta 2025", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = LiquidacionesCelesteRentaTexto)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Obtén el consolidado fiscal timbrado de todas tus atenciones kine para tu declaración anual de impuestos (F22).",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = LiquidacionesCelesteRentaTexto,
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(14.dp))
-            Row(
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 32.dp, horizontal = 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Icon(Icons.Filled.WifiOff, contentDescription = null, tint = LoginGrisTexto, modifier = Modifier.size(30.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "No pudimos cargar tus finanzas",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = TextoPrincipal,
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "Reintentar",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
                 modifier = Modifier
-                    .fillMaxWidth()
                     .clip(RoundedCornerShape(50))
                     .background(LoginPrimarioOscuro)
-                    .clickable(onClick = onClick)
-                    .padding(vertical = 14.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.Filled.Download, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(text = "Descargar Certificado Anual de Ingresos", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color.White)
-            }
+                    .clickable(onClick = onReintentar)
+                    .padding(horizontal = 24.dp, vertical = 10.dp),
+            )
         }
     }
 }

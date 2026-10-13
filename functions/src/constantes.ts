@@ -67,3 +67,19 @@ export const TOLERANCIA_FIRMA_DIDIT_SEGUNDOS = 300;
 
 /** Tope de solicitudes que se leen por profesional al buscar la mas reciente (se ordena en memoria). */
 export const MAX_SOLICITUDES_POR_PROFESIONAL = 100;
+/** Cancelacion (ver cancelarReserva.ts). */
+export const MAX_LARGO_MOTIVO_CANCELACION = 300;
+/** Anticipacion minima con que un cliente cancela para tener reembolso total. */
+export const HORAS_REEMBOLSO_TOTAL = 24;
+
+/**
+ * Estados de reserva que ya no se atienden: un cobro que se aprueba sobre una reserva asi
+ * (preferencia de Checkout Pro que siguio abierta tras cancelar) debe devolverse.
+ */
+export const ESTADOS_RESERVA_SIN_ATENCION = ["CANCELADA_CLIENTE", "CANCELADA_PROFESIONAL", "RECHAZADA"] as const;
+
+/** Subcoleccion `usuarios/{uid}/dispositivos/{token}` con los tokens FCM del usuario. */
+export const SUBCOLECCION_DISPOSITIVOS = "dispositivos";
+
+/** Ventana maxima que puede pedir obtenerCuposOcupados. */
+export const VENTANA_MAXIMA_CUPOS_DIAS = 15;

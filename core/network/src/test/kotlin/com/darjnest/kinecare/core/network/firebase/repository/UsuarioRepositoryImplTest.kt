@@ -113,6 +113,37 @@ class UsuarioRepositoryImplTest {
         }
     }
 
+    @Test
+    fun `actualizarFotoUrl escribe solo fotoUrl`() = runTest {
+        val usuariosCollection = mockk<CollectionReference>()
+        val docRef = mockk<DocumentReference>()
+        every { firestore.collection(COLECCION_USUARIOS) } returns usuariosCollection
+        every { usuariosCollection.document("cliente-1") } returns docRef
+        val updateTask = mockk<Task<Void>>()
+        coEvery { updateTask.await() } returns mockk()
+        every { docRef.update(any<Map<String, Any?>>()) } returns updateTask
+
+        val resultado = repository.actualizarFotoUrl("cliente-1", "https://foto.com/nueva.jpg")
+
+        assertTrue(resultado is Result.Success)
+        verify { docRef.update(mapOf("fotoUrl" to "https://foto.com/nueva.jpg")) }
+    }
+
+    @Test
+    fun `actualizarFotoUrl retorna SIN_INTERNET ante FirebaseNetworkException`() = runTest {
+        val usuariosCollection = mockk<CollectionReference>()
+        val docRef = mockk<DocumentReference>()
+        every { firestore.collection(COLECCION_USUARIOS) } returns usuariosCollection
+        every { usuariosCollection.document("cliente-1") } returns docRef
+        val updateTask = mockk<Task<Void>>()
+        coEvery { updateTask.await() } throws FirebaseNetworkException("sin conexion")
+        every { docRef.update(any<Map<String, Any?>>()) } returns updateTask
+
+        val resultado = repository.actualizarFotoUrl("cliente-1", "https://foto.com/nueva.jpg")
+
+        assertEquals(UsuarioError.SIN_INTERNET, (resultado as Result.Error).error)
+    }
+
     private fun setUpGet(doc: DocumentSnapshot? = null, exception: Exception? = null) {
         val usuariosCollection = mockk<CollectionReference>()
         val docRef = mockk<DocumentReference>()

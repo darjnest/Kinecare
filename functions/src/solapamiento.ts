@@ -29,7 +29,7 @@ export function ventanaDeConsulta(inicio: Date, finSlot: Date): { desde: Date; h
   return { desde: new Date(inicio.getTime() - DURACION_MAXIMA_MINUTOS * MS_MINUTO), hasta: finSlot };
 }
 
-function duracionEfectiva(valor: unknown): number {
+export function duracionEfectiva(valor: unknown): number {
   return typeof valor === "number" && Number.isFinite(valor) && valor > 0 ? valor : DURACION_POR_DEFECTO_MINUTOS;
 }
 

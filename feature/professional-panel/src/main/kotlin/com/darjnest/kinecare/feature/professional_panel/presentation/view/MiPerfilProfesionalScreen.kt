@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Edit
@@ -32,7 +33,6 @@ import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.HomeWork
 import androidx.compose.material.icons.filled.HowToReg
 import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PinDrop
 import androidx.compose.material.icons.filled.Psychology
@@ -49,13 +49,12 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -74,6 +73,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.darjnest.kinecare.core.designsystem.components.avatar.KineCareAvatar
+import com.darjnest.kinecare.core.designsystem.components.avatar.rememberSelectorFoto
 import com.darjnest.kinecare.core.designsystem.theme.AzulPetroleo30
 import com.darjnest.kinecare.core.designsystem.theme.InicioDorado
 import com.darjnest.kinecare.core.designsystem.theme.KineCareSpacing
@@ -105,9 +106,17 @@ fun MiPerfilProfesionalRoot(
     viewModel: MiPerfilProfesionalViewModel = hiltViewModel(),
     onVolver: () -> Unit = {},
     onVerResenas: (String) -> Unit = {},
+    onPrevisualizarPerfil: (String) -> Unit = {},
+    onEditarCredenciales: () -> Unit = {},
     onCerrarSesion: () -> Unit = {},
+    onIrAInicio: () -> Unit = {},
+    onIrASolicitudes: () -> Unit = {},
+    onIrAAgenda: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val abrirSelectorFoto = rememberSelectorFoto { uri ->
+        viewModel.onAction(MiPerfilProfesionalAction.FotoElegida(uri))
+    }
     MiPerfilProfesionalScreen(
         state = state,
         onAction = { accion ->
@@ -117,10 +126,17 @@ fun MiPerfilProfesionalRoot(
             when (accion) {
                 MiPerfilProfesionalAction.VolverAtras -> onVolver()
                 MiPerfilProfesionalAction.VerTodasLasResenas -> state.profesionalId?.let(onVerResenas)
+                MiPerfilProfesionalAction.PrevisualizarPerfilPublico -> state.profesionalId?.let(onPrevisualizarPerfil)
+                MiPerfilProfesionalAction.EditarPerfilYCredenciales -> onEditarCredenciales()
+                // El selector de fotos necesita el contexto de la Activity: lo abre el Root.
+                MiPerfilProfesionalAction.CambiarFoto -> abrirSelectorFoto()
                 else -> viewModel.onAction(accion)
             }
         },
         onCerrarSesion = onCerrarSesion,
+        onIrAInicio = onIrAInicio,
+        onIrASolicitudes = onIrASolicitudes,
+        onIrAAgenda = onIrAAgenda,
         modifier = modifier,
     )
 }
@@ -130,6 +146,9 @@ fun MiPerfilProfesionalScreen(
     state: MiPerfilProfesionalState,
     onAction: (MiPerfilProfesionalAction) -> Unit = {},
     onCerrarSesion: () -> Unit = {},
+    onIrAInicio: () -> Unit = {},
+    onIrASolicitudes: () -> Unit = {},
+    onIrAAgenda: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     if (state.editandoBiografia) {
@@ -142,7 +161,13 @@ fun MiPerfilProfesionalScreen(
     Scaffold(
         modifier = modifier,
         containerColor = LoginFondo,
-        bottomBar = { BarraNavegacionInferiorPerfil() },
+        bottomBar = {
+            BarraNavegacionInferiorPerfil(
+                onIrAInicio = onIrAInicio,
+                onIrASolicitudes = onIrASolicitudes,
+                onIrAAgenda = onIrAAgenda,
+            )
+        },
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -157,10 +182,28 @@ fun MiPerfilProfesionalScreen(
                 modifier = Modifier.padding(horizontal = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                BannerPerfilPublico(activo = state.perfilPublicoActivo, onAction = onAction)
+                if (state.identidad == null) {
+                    when {
+                        state.cargando -> Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 32.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            CircularProgressIndicator(color = LoginPrimarioOscuro)
+                        }
+                        state.errorCarga -> ErrorCargaPerfil(onReintentar = { onAction(MiPerfilProfesionalAction.Reintentar) })
+                    }
+                }
 
                 state.identidad?.let { identidad ->
-                    TarjetaIdentidadProfesional(identidad = identidad)
+                    TarjetaIdentidadProfesional(
+                        identidad = identidad,
+                        fotoUrl = state.fotoUrl,
+                        subiendoFoto = state.subiendoFoto,
+                        errorFoto = state.errorFoto,
+                        onAction = onAction,
+                    )
                 }
 
                 state.metricas?.let { metricas ->
@@ -267,80 +310,48 @@ private fun EncabezadoMiPerfil(onAction: (MiPerfilProfesionalAction) -> Unit) {
                 )
             }
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                Icons.Filled.NotificationsNone,
-                contentDescription = "Notificaciones",
-                tint = TextoPrincipal,
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(LoginGrisClaro),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Filled.Person, contentDescription = "Mi perfil", tint = LoginGrisTexto, modifier = Modifier.size(20.dp))
-            }
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(LoginGrisClaro),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Filled.Person, contentDescription = "Mi perfil", tint = LoginGrisTexto, modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
+/** La lectura del perfil fallo y no hay nada que mostrar: se dice y se ofrece reintentar. */
+@Composable
+private fun ErrorCargaPerfil(onReintentar: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = "No pudimos cargar tu perfil",
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Bold,
+            color = TextoPrincipal,
+        )
+        TextButton(onClick = onReintentar) {
+            Text(text = "Reintentar", fontWeight = FontWeight.Bold, color = LoginPrimarioOscuro)
         }
     }
 }
 
 @Composable
-private fun BannerPerfilPublico(
-    activo: Boolean,
+private fun TarjetaIdentidadProfesional(
+    identidad: IdentidadProfesional,
+    fotoUrl: String?,
+    subiendoFoto: Boolean,
+    errorFoto: String?,
     onAction: (MiPerfilProfesionalAction) -> Unit,
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = LoginAzulSuave),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(Color.White),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.Filled.Visibility, contentDescription = null, tint = AzulPetroleo30, modifier = Modifier.size(20.dp))
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Text(
-                        text = "Perfil público activo",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = AzulPetroleo30,
-                    )
-                    Text(
-                        text = "Visible en búsquedas de pacientes",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = AzulPetroleo30,
-                    )
-                }
-            }
-            Switch(
-                checked = activo,
-                onCheckedChange = { onAction(MiPerfilProfesionalAction.CambiarPerfilPublico(it)) },
-                colors = SwitchDefaults.colors(checkedTrackColor = LoginPrimarioOscuro),
-            )
-        }
-    }
-}
-
-@Composable
-private fun TarjetaIdentidadProfesional(identidad: IdentidadProfesional) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -354,19 +365,33 @@ private fun TarjetaIdentidadProfesional(identidad: IdentidadProfesional) {
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box {
+                    KineCareAvatar(
+                        iniciales = inicialesDeNombre(identidad.nombre),
+                        fotoUrl = fotoUrl,
+                        tamano = KineCareSpacing.avatarGrande,
+                        colorFondo = LoginGrisClaro,
+                        colorContenido = LoginGrisTexto,
+                        cargando = subiendoFoto,
+                        contentDescription = "Foto de perfil",
+                    )
+                    // Cambiar la foto: insignia de camara abajo a la derecha, igual que en Mi Perfil del cliente.
                     Box(
                         modifier = Modifier
-                            .size(72.dp)
+                            .align(Alignment.BottomEnd)
+                            .size(26.dp)
                             .clip(CircleShape)
-                            .background(LoginGrisClaro),
+                            .background(LoginPrimarioOscuro)
+                            .clickable(enabled = !subiendoFoto, role = Role.Button) {
+                                onAction(MiPerfilProfesionalAction.CambiarFoto)
+                            },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(Icons.Filled.Person, contentDescription = null, tint = LoginGrisTexto, modifier = Modifier.size(36.dp))
+                        Icon(Icons.Filled.CameraAlt, contentDescription = "Cambiar foto", tint = Color.White, modifier = Modifier.size(14.dp))
                     }
                     if (identidad.credencialesAlDia) {
                         Box(
                             modifier = Modifier
-                                .align(Alignment.BottomEnd)
+                                .align(Alignment.TopEnd)
                                 .size(22.dp)
                                 .clip(CircleShape)
                                 .background(LoginPrimarioOscuro),
@@ -427,6 +452,15 @@ private fun TarjetaIdentidadProfesional(identidad: IdentidadProfesional) {
                         }
                     }
                 }
+            }
+
+            errorFoto?.let { mensaje ->
+                Text(
+                    text = mensaje,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = RojoError40,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
             }
 
             if (identidad.habilitadoIsapreFonasa != null || identidad.credencialesAlDia) {
@@ -1174,7 +1208,11 @@ private fun BotonesAccionPerfil(
 }
 
 @Composable
-private fun BarraNavegacionInferiorPerfil() {
+private fun BarraNavegacionInferiorPerfil(
+    onIrAInicio: () -> Unit,
+    onIrASolicitudes: () -> Unit,
+    onIrAAgenda: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1182,12 +1220,9 @@ private fun BarraNavegacionInferiorPerfil() {
             .padding(vertical = 10.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
     ) {
-        ItemNavegacionInferiorPerfil(texto = "Inicio", icono = Icons.Filled.Dashboard, activo = false)
-        // Solicitudes, Agenda y Pacientes se conectan cuando existan sus
-        // subpantallas (Fase 7).
-        ItemNavegacionInferiorPerfil(texto = "Solicitudes", icono = Icons.Filled.NotificationsActive, activo = false)
-        ItemNavegacionInferiorPerfil(texto = "Agenda", icono = Icons.Filled.CalendarMonth, activo = false)
-        ItemNavegacionInferiorPerfil(texto = "Pacientes", icono = Icons.Filled.HowToReg, activo = false)
+        ItemNavegacionInferiorPerfil(texto = "Inicio", icono = Icons.Filled.Dashboard, activo = false, onClick = onIrAInicio)
+        ItemNavegacionInferiorPerfil(texto = "Solicitudes", icono = Icons.Filled.NotificationsActive, activo = false, onClick = onIrASolicitudes)
+        ItemNavegacionInferiorPerfil(texto = "Agenda", icono = Icons.Filled.CalendarMonth, activo = false, onClick = onIrAAgenda)
         ItemNavegacionInferiorPerfil(texto = "Perfil", icono = Icons.Filled.Badge, activo = true)
     }
 }
@@ -1197,14 +1232,26 @@ private fun ItemNavegacionInferiorPerfil(
     texto: String,
     icono: ImageVector,
     activo: Boolean,
+    onClick: (() -> Unit)? = null,
 ) {
     val color = if (activo) LoginPrimarioOscuro else LoginGrisTexto
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        modifier = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Icon(icono, contentDescription = texto, tint = color, modifier = Modifier.size(22.dp))
         Spacer(modifier = Modifier.height(2.dp))
         Text(text = texto, style = MaterialTheme.typography.labelSmall, color = color, fontWeight = if (activo) FontWeight.Bold else FontWeight.Normal)
     }
 }
+
+private fun inicialesDeNombre(nombre: String): String =
+    nombre.trim()
+        .split(" ")
+        .filter { it.isNotBlank() }
+        .take(2)
+        .mapNotNull { it.firstOrNull()?.uppercaseChar() }
+        .joinToString("")
 
 private fun formatearClp(monto: Long): String {
     val agrupado = monto.toString()

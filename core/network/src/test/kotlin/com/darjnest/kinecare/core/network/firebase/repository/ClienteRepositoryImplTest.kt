@@ -5,6 +5,7 @@ package com.darjnest.kinecare.core.network.firebase.repository
 import com.darjnest.kinecare.core.common.data.error.ClienteError
 import com.darjnest.kinecare.core.common.data.error.UsuarioError
 import com.darjnest.kinecare.core.common.data.repository.UsuarioRepository
+import com.darjnest.kinecare.core.common.domain.model.Direccion
 import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.domain.model.Usuario
 import com.darjnest.kinecare.core.common.result.Result
@@ -15,6 +16,7 @@ import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -125,13 +127,71 @@ class ClienteRepositoryImplTest {
         every { clientesCollection.document("cliente-1") } returns docRef
         val updateTask = mockk<Task<Void>>()
         coEvery { updateTask.await() } returns mockk()
-        every { docRef.update("favoritos", arrayUnion) } returns updateTask
+        mockkStatic(SetOptions::class)
+        every { SetOptions.merge() } returns mockk()
+        every { docRef.set(mapOf("favoritos" to arrayUnion), any()) } returns updateTask
 
         val resultado = repository.agregarFavorito("cliente-1", "prof-1")
 
         assertTrue(resultado is Result.Success)
-        verify { docRef.update("favoritos", arrayUnion) }
+        verify { docRef.set(mapOf("favoritos" to arrayUnion), any()) }
+        unmockkStatic(SetOptions::class)
         unmockkStatic(FieldValue::class)
+    }
+
+    @Test
+    fun `agregarDireccion hace arrayUnion de la direccion sobre el campo direcciones, creando el documento`() = runTest {
+        mockkStatic(FieldValue::class)
+        mockkStatic(SetOptions::class)
+        val direccion = Direccion(
+            calle = "Los Aromos",
+            numero = "123",
+            comuna = "Providencia",
+            ciudad = "Santiago",
+            lat = null,
+            lng = null,
+            indicaciones = "Depto 45",
+        )
+        val esperado = mapOf(
+            "calle" to "Los Aromos",
+            "numero" to "123",
+            "comuna" to "Providencia",
+            "ciudad" to "Santiago",
+            "lat" to null,
+            "lng" to null,
+            "indicaciones" to "Depto 45",
+        )
+        val arrayUnion = mockk<FieldValue>()
+        every { FieldValue.arrayUnion(esperado) } returns arrayUnion
+        every { SetOptions.merge() } returns mockk()
+
+        val clientesCollection = mockk<CollectionReference>()
+        val docRef = mockk<DocumentReference>()
+        every { firestore.collection(COLECCION_CLIENTES) } returns clientesCollection
+        every { clientesCollection.document("cliente-1") } returns docRef
+        val setTask = mockk<Task<Void>>()
+        coEvery { setTask.await() } returns mockk()
+        every { docRef.set(mapOf("direcciones" to arrayUnion), any()) } returns setTask
+
+        val resultado = repository.agregarDireccion("cliente-1", direccion)
+
+        assertTrue(resultado is Result.Success)
+        verify { docRef.set(mapOf("direcciones" to arrayUnion), any()) }
+        unmockkStatic(SetOptions::class)
+        unmockkStatic(FieldValue::class)
+    }
+
+    @Test
+    fun `agregarDireccion devuelve SIN_INTERNET si Firestore no tiene red`() = runTest {
+        val clientesCollection = mockk<CollectionReference>()
+        every { firestore.collection(COLECCION_CLIENTES) } throws FirebaseNetworkException("sin red")
+
+        val resultado = repository.agregarDireccion(
+            "cliente-1",
+            Direccion("a", "1", "b", "c", null, null, null),
+        )
+
+        assertEquals(Result.Error(ClienteError.SIN_INTERNET), resultado)
     }
 
     private fun setUpGet(doc: DocumentSnapshot) {

@@ -1,6 +1,10 @@
 package com.darjnest.kinecare.core.network.di
 
 import com.darjnest.kinecare.core.network.functions.CloudFunctionsApi
+import com.darjnest.kinecare.core.network.security.PinningCallFactory
+import com.darjnest.kinecare.core.network.security.PinningOverrideRemoto
+import com.darjnest.kinecare.core.network.security.PinningPolicy
+import com.darjnest.kinecare.core.network.security.crearCertificatePinnerCloudFunctions
 import com.darjnest.kinecare.core.network.urlBaseCloudFunctions
 import com.google.firebase.FirebaseApp
 import dagger.Module
@@ -39,19 +43,29 @@ object NetworkModule {
         }
         return OkHttpClient.Builder()
             .addInterceptor(loggingInterceptor)
+            // Pinning de las llamadas a las Cloud Functions (pagos, verificacion, reservas): ver
+            // CertificatePins.kt y docs/ARCHITECTURE.md#seguridad.
+            .certificatePinner(crearCertificatePinnerCloudFunctions())
             .build()
     }
 
+    /** Pinning activo salvo un override firmado y vigente de Remote Config (ver `PinningOverride.kt`). */
     @Provides
     @Singleton
-    fun provideRetrofit(okHttpClient: OkHttpClient, json: Json): Retrofit {
+    fun providePinningPolicy(overrideRemoto: PinningOverrideRemoto): PinningPolicy =
+        PinningPolicy(valorOverride = overrideRemoto::valor)
+
+    @Provides
+    @Singleton
+    fun provideRetrofit(okHttpClient: OkHttpClient, pinningPolicy: PinningPolicy, json: Json): Retrofit {
         val contentType = "application/json".toMediaType()
         val projectId = requireNotNull(FirebaseApp.getInstance().options.projectId) {
             "google-services.json no define project_id"
         }
         return Retrofit.Builder()
             .baseUrl(urlBaseCloudFunctions(projectId))
-            .client(okHttpClient)
+            // Elige por llamada entre el cliente con pinning y uno sin el, segun la politica.
+            .callFactory(PinningCallFactory(okHttpClient, pinningPolicy))
             .addConverterFactory(json.asConverterFactory(contentType))
             .build()
     }

@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,11 +30,13 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MyLocation
-import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -45,12 +49,16 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,6 +66,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -84,8 +93,10 @@ import com.darjnest.kinecare.core.designsystem.theme.LoginMenta
 import com.darjnest.kinecare.core.designsystem.theme.LoginMentaSuave
 import com.darjnest.kinecare.core.designsystem.theme.LoginPrimario
 import com.darjnest.kinecare.core.designsystem.theme.LoginPrimarioOscuro
+import com.darjnest.kinecare.core.designsystem.theme.TextoPrincipal
 import com.darjnest.kinecare.feature.search.presentation.viewmodel.CategoriaServicio
 import com.darjnest.kinecare.feature.search.presentation.viewmodel.ModalidadAtencion
+import com.darjnest.kinecare.feature.search.presentation.viewmodel.OrdenBusqueda
 import com.darjnest.kinecare.feature.search.presentation.viewmodel.ProfesionalDestacado
 import com.darjnest.kinecare.feature.search.presentation.viewmodel.SearchAction
 import com.darjnest.kinecare.feature.search.presentation.viewmodel.SearchState
@@ -132,9 +143,17 @@ fun SearchScreen(
     onIrAMiPerfil: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(state.mensaje) {
+        state.mensaje?.let {
+            snackbarHostState.showSnackbar(it)
+            onAction(SearchAction.MensajeMostrado)
+        }
+    }
     Scaffold(
         modifier = modifier,
         containerColor = LoginFondo,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             KineCareBottomNavBar(
                 pestanaActiva = PestanaClienteInferior.EXPLORAR,
@@ -178,20 +197,33 @@ fun SearchScreen(
                 FilaModalidad(modalidad = state.modalidad, onAction = onAction)
 
                 Spacer(modifier = Modifier.height(16.dp))
-                GrillaCategorias(categorias = state.categorias, onAction = onAction)
+                GrillaCategorias(
+                    categorias = state.categorias,
+                    seleccionadaId = state.categoriaSeleccionadaId,
+                    onAction = onAction,
+                )
 
                 Spacer(modifier = Modifier.height(28.dp))
                 FilaDestacadosTitulo()
+
+                Spacer(modifier = Modifier.height(12.dp))
+                FilaOrden(orden = state.orden, onAction = onAction)
 
                 Spacer(modifier = Modifier.height(12.dp))
                 if (state.cargandoProfesionales) {
                     Box(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = LoginPrimarioOscuro)
                     }
+                } else if (state.profesionalesDestacados.isEmpty()) {
+                    MensajeSinProfesionales(hayCargados = state.totalProfesionalesCargados > 0)
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         state.profesionalesDestacados.forEach { profesional ->
-                            TarjetaProfesionalDestacado(profesional = profesional, onAction = onAction)
+                            TarjetaProfesionalDestacado(
+                                profesional = profesional,
+                                esFavorito = profesional.id in state.favoritos,
+                                onAction = onAction,
+                            )
                         }
                     }
                 }
@@ -233,12 +265,6 @@ private fun EncabezadoInicio(onCerrarSesion: () -> Unit) {
             )
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                Icons.Filled.NotificationsNone,
-                contentDescription = "Notificaciones",
-                tint = Color(0xFF16241C),
-            )
-            Spacer(modifier = Modifier.width(12.dp))
             MenuPerfil(onCerrarSesion = onCerrarSesion)
         }
     }
@@ -397,6 +423,19 @@ private fun TarjetaFiltros(
 
             Spacer(modifier = Modifier.height(18.dp))
             Text(
+                text = "NOMBRE O ESPECIALIDAD",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = LoginGrisTexto,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            CampoBusquedaTexto(
+                texto = state.textoBusqueda,
+                onTextoChange = { onAction(SearchAction.CambiarTextoBusqueda(it)) },
+            )
+
+            Spacer(modifier = Modifier.height(18.dp))
+            Text(
                 text = "UBICACIÓN",
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
@@ -500,6 +539,86 @@ private fun TarjetaFiltros(
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
+                )
+            }
+        }
+    }
+}
+
+/** Cuadro de busqueda libre (nombre, especialidad); filtra en vivo la lista de profesionales. */
+@Composable
+private fun CampoBusquedaTexto(texto: String, onTextoChange: (String) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(LoginGrisClaro)
+            .padding(horizontal = 14.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Filled.Search, contentDescription = null, tint = LoginGrisTexto, modifier = Modifier.size(18.dp))
+        Spacer(modifier = Modifier.width(8.dp))
+        Box(modifier = Modifier.weight(1f)) {
+            if (texto.isEmpty()) {
+                Text(
+                    text = "Ej. Ana Soto, deportiva, masaje",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = LoginGrisTexto,
+                )
+            }
+            BasicTextField(
+                value = texto,
+                onValueChange = onTextoChange,
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = TextoPrincipal),
+                cursorBrush = SolidColor(LoginPrimarioOscuro),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        if (texto.isNotEmpty()) {
+            Icon(
+                Icons.Filled.Close,
+                contentDescription = "Borrar búsqueda",
+                tint = LoginGrisTexto,
+                modifier = Modifier
+                    .size(18.dp)
+                    .clickable { onTextoChange("") },
+            )
+        }
+    }
+}
+
+/** "Ordenar por": mejor calificados, menor precio "desde" o mas resenas. */
+@Composable
+private fun FilaOrden(orden: OrdenBusqueda, onAction: (SearchAction) -> Unit) {
+    Column {
+        Text(
+            text = "ORDENAR POR",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = LoginGrisTexto,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            listOf(
+                OrdenBusqueda.MEJOR_CALIFICADOS to "Mejor calificados",
+                OrdenBusqueda.MENOR_PRECIO to "Menor precio",
+                OrdenBusqueda.MAS_RESENAS to "Más reseñas",
+            ).forEach { (opcion, etiqueta) ->
+                val seleccionado = opcion == orden
+                Text(
+                    text = etiqueta,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = if (seleccionado) FontWeight.Bold else FontWeight.Normal,
+                    color = if (seleccionado) Color.White else TextoPrincipal,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(if (seleccionado) LoginPrimarioOscuro else Color.White)
+                        .clickable(role = Role.RadioButton) { onAction(SearchAction.CambiarOrden(opcion)) }
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
                 )
             }
         }
@@ -634,6 +753,7 @@ private fun OpcionModalidad(
 @Composable
 private fun GrillaCategorias(
     categorias: List<CategoriaServicio>,
+    seleccionadaId: String?,
     onAction: (SearchAction) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -645,6 +765,7 @@ private fun GrillaCategorias(
                 fila.forEach { categoria ->
                     TarjetaCategoria(
                         categoria = categoria,
+                        seleccionada = categoria.id == seleccionadaId,
                         onClick = { onAction(SearchAction.SeleccionarCategoria(categoria.id)) },
                         modifier = Modifier.weight(1f),
                     )
@@ -660,6 +781,7 @@ private fun GrillaCategorias(
 @Composable
 private fun TarjetaCategoria(
     categoria: CategoriaServicio,
+    seleccionada: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -668,7 +790,8 @@ private fun TarjetaCategoria(
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = if (seleccionada) LoginMenta else Color.White),
+        border = if (seleccionada) BorderStroke(2.dp, LoginPrimarioOscuro) else null,
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
@@ -686,7 +809,10 @@ private fun TarjetaCategoria(
                 ) {
                     Icon(categoria.icono, contentDescription = null, tint = LoginPrimarioOscuro, modifier = Modifier.size(20.dp))
                 }
-                KineCareBadge(texto = "${categoria.profesionalesActivos} activos", tono = BadgeTono.NEUTRO)
+                // Sin profesionales no hay cifra que mostrar: nada de "0 activos".
+                if (categoria.profesionalesActivos > 0) {
+                    KineCareBadge(texto = "${categoria.profesionalesActivos} activos", tono = BadgeTono.NEUTRO)
+                }
             }
             Spacer(modifier = Modifier.height(10.dp))
             Text(
@@ -712,10 +838,10 @@ private fun TarjetaCategoria(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "Desde ${formatearClp(categoria.precioDesde)}",
+                    text = if (categoria.precioDesde > 0) "Desde ${formatearClp(categoria.precioDesde)}" else "Sin oferta aún",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
-                    color = LoginPrimarioOscuro,
+                    color = if (categoria.precioDesde > 0) LoginPrimarioOscuro else LoginGrisTexto,
                 )
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowForwardIos,
@@ -726,6 +852,22 @@ private fun TarjetaCategoria(
             }
         }
     }
+}
+
+@Composable
+private fun MensajeSinProfesionales(hayCargados: Boolean) {
+    Text(
+        text = if (hayCargados) {
+            "Ningún profesional calza con tu búsqueda. Prueba otro texto, otra modalidad, otra categoría o quita \"Solo verificados\"."
+        } else {
+            "Todavía no hay profesionales disponibles en esta especialidad."
+        },
+        style = MaterialTheme.typography.bodyMedium,
+        color = LoginGrisTexto,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 16.dp),
+    )
 }
 
 @Composable
@@ -751,6 +893,7 @@ private fun FilaDestacadosTitulo() {
 @Composable
 private fun TarjetaProfesionalDestacado(
     profesional: ProfesionalDestacado,
+    esFavorito: Boolean,
     onAction: (SearchAction) -> Unit,
 ) {
     Card(
@@ -843,7 +986,14 @@ private fun TarjetaProfesionalDestacado(
                 }
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            IconButton(onClick = { onAction(SearchAction.AlternarFavorito(profesional.id)) }) {
+                Icon(
+                    imageVector = if (esFavorito) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                    contentDescription = if (esFavorito) "Quitar de favoritos" else "Guardar en favoritos",
+                    tint = if (esFavorito) MaterialTheme.colorScheme.error else LoginGrisTexto,
+                )
+            }
             Box(
                 modifier = Modifier
                     .size(36.dp)

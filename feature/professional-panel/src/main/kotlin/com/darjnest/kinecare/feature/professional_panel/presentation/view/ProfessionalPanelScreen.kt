@@ -1,5 +1,9 @@
 package com.darjnest.kinecare.feature.professional_panel.presentation.view
 
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,17 +29,13 @@ import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Dashboard
-import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.HowToReg
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Navigation
-import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Sell
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.Card
@@ -44,6 +44,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -51,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -93,14 +95,18 @@ fun ProfessionalPanelRoot(
     onAbrirAccesoGestion: (String) -> Unit = {},
     onAbrirSolicitudes: () -> Unit = {},
     onAbrirMiPerfil: () -> Unit = {},
+    onAbrirAgenda: () -> Unit = {},
     onConectarMercadoPago: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
-    // Al volver de vincular Mercado Pago el ViewModel sigue vivo con el estado
-    // viejo: releer. Ignora la lectura si la inicial sigue en curso.
+    val contexto = LocalContext.current
+
+    // Al volver de aceptar una solicitud o de vincular Mercado Pago el
+    // ViewModel sigue vivo con el estado viejo: releer. Ignora la lectura si
+    // la inicial sigue en curso.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-        viewModel.onAction(ProfessionalPanelAction.ActualizarCobros)
+        viewModel.onAction(ProfessionalPanelAction.Actualizar)
     }
 
     ProfessionalPanelScreen(
@@ -113,13 +119,25 @@ fun ProfessionalPanelRoot(
                 is ProfessionalPanelAction.SeleccionarAccesoGestion -> onAbrirAccesoGestion(accion.accesoId)
                 // Vincular Mercado Pago vive en `:feature:payment`: callback resuelto desde `:app`.
                 ProfessionalPanelAction.ConectarMercadoPago -> onConectarMercadoPago()
+                ProfessionalPanelAction.AbrirRuta -> state.proximaCita?.direccionRuta?.let { abrirEnMapas(contexto, it) }
                 else -> viewModel.onAction(accion)
             }
         },
         onAbrirSolicitudes = onAbrirSolicitudes,
         onAbrirMiPerfil = onAbrirMiPerfil,
+        onAbrirAgenda = onAbrirAgenda,
         modifier = modifier,
     )
+}
+
+/** Abre [direccion] en la app de mapas del dispositivo; si no hay ninguna, no hace nada. */
+private fun abrirEnMapas(contexto: Context, direccion: String) {
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=${Uri.encode(direccion)}"))
+    try {
+        contexto.startActivity(intent)
+    } catch (_: ActivityNotFoundException) {
+        // Sin app de mapas instalada: nada que abrir.
+    }
 }
 
 @Composable
@@ -128,6 +146,7 @@ fun ProfessionalPanelScreen(
     onAction: (ProfessionalPanelAction) -> Unit = {},
     onAbrirSolicitudes: () -> Unit = {},
     onAbrirMiPerfil: () -> Unit = {},
+    onAbrirAgenda: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -136,6 +155,7 @@ fun ProfessionalPanelScreen(
         bottomBar = {
             BarraNavegacionInferiorProfesional(
                 onAbrirSolicitudes = onAbrirSolicitudes,
+                onAbrirAgenda = onAbrirAgenda,
                 onAbrirMiPerfil = onAbrirMiPerfil,
             )
         },
@@ -147,15 +167,16 @@ fun ProfessionalPanelScreen(
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState()),
         ) {
-            EncabezadoPanel()
+            EncabezadoPanel(onAbrirMiPerfil = onAbrirMiPerfil)
 
             Column(modifier = Modifier.padding(horizontal = 20.dp)) {
                 Spacer(modifier = Modifier.height(12.dp))
-                FilaSaludoDisponibilidad(
-                    nombreProfesional = state.nombreProfesional,
-                    disponible = state.disponible,
-                    onAction = onAction,
-                )
+                Saludo(nombreProfesional = state.nombreProfesional)
+
+                if (state.errorCarga) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    AvisoErrorCarga(onReintentar = { onAction(ProfessionalPanelAction.Actualizar) })
+                }
 
                 state.verificacion?.let { verificacion ->
                     Spacer(modifier = Modifier.height(16.dp))
@@ -187,9 +208,6 @@ fun ProfessionalPanelScreen(
                     onClick = { onAction(ProfessionalPanelAction.ConectarMercadoPago) },
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
-                TarjetaConfiguracionCuenta(onClick = { onAction(ProfessionalPanelAction.AbrirConfiguracionCuenta) })
-
                 Spacer(modifier = Modifier.height(24.dp))
             }
         }
@@ -197,7 +215,7 @@ fun ProfessionalPanelScreen(
 }
 
 @Composable
-private fun EncabezadoPanel() {
+private fun EncabezadoPanel(onAbrirMiPerfil: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -231,72 +249,57 @@ private fun EncabezadoPanel() {
                 )
             }
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                Icons.Filled.NotificationsNone,
-                contentDescription = "Notificaciones",
-                tint = TextoPrincipal,
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(LoginGrisClaro),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Filled.Person, contentDescription = "Mi perfil", tint = LoginGrisTexto, modifier = Modifier.size(20.dp))
-            }
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(LoginGrisClaro)
+                .clickable(onClick = onAbrirMiPerfil),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Filled.Person, contentDescription = "Mi perfil", tint = LoginGrisTexto, modifier = Modifier.size(20.dp))
         }
     }
 }
 
 @Composable
-private fun FilaSaludoDisponibilidad(
-    nombreProfesional: String,
-    disponible: Boolean,
-    onAction: (ProfessionalPanelAction) -> Unit,
-) {
+private fun Saludo(nombreProfesional: String) {
+    Column {
+        Text(
+            text = if (nombreProfesional.isNotBlank()) "Hola, $nombreProfesional👋" else "Hola👋",
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            color = TextoPrincipal,
+        )
+        Text(
+            text = "Portal Kinesiólogos KineCare",
+            style = MaterialTheme.typography.bodyMedium,
+            color = LoginGrisTexto,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+    }
+}
+
+/** Aviso discreto: la ultima lectura fallo, pero se sigue mostrando lo ultimo conocido. */
+@Composable
+private fun AvisoErrorCarga(onReintentar: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(RojoError90)
+            .padding(start = 14.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.Top,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column {
-            Text(
-                text = if (nombreProfesional.isNotBlank()) "Hola, $nombreProfesional👋" else "Hola👋",
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextoPrincipal,
-            )
-            Text(
-                text = "Portal Kinesiólogos KineCare",
-                style = MaterialTheme.typography.bodyMedium,
-                color = LoginGrisTexto,
-                modifier = Modifier.padding(top = 2.dp),
-            )
-        }
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(50))
-                .background(if (disponible) LoginPrimarioOscuro else LoginGrisClaro)
-                .clickable { onAction(ProfessionalPanelAction.CambiarDisponibilidad(!disponible)) }
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = if (disponible) "Disponible" else "No disponible",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                color = if (disponible) Color.White else LoginGrisTexto,
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Icon(
-                Icons.Filled.CheckCircle,
-                contentDescription = null,
-                tint = if (disponible) Color.White else LoginGrisTexto,
-                modifier = Modifier.size(16.dp),
-            )
+        Text(
+            text = "No pudimos actualizar tu resumen",
+            style = MaterialTheme.typography.bodyMedium,
+            color = RojoError40,
+            modifier = Modifier.weight(1f),
+        )
+        TextButton(onClick = onReintentar) {
+            Text(text = "Reintentar", fontWeight = FontWeight.Bold, color = RojoError40)
         }
     }
 }
@@ -333,7 +336,7 @@ private fun TarjetaVerificacion(verificacion: VerificacionPanel) {
                     color = LoginPrimarioOscuro,
                 )
                 Text(
-                    text = "${verificacion.entidad} • Credenciales al día",
+                    text = listOfNotNull(verificacion.entidad, "Credenciales al día").joinToString(" • "),
                     style = MaterialTheme.typography.labelSmall,
                     color = LoginGrisTexto,
                     modifier = Modifier.padding(top = 2.dp),
@@ -385,9 +388,9 @@ private fun FilaTarjetasResumen(resumenHoy: ResumenHoy) {
             icono = Icons.Filled.Payments,
             colorCirculo = LoginMenta,
             colorIcono = LoginPrimarioOscuro,
-            etiqueta = "POR LIQUIDAR",
-            valor = formatearClp(resumenHoy.porLiquidar),
-            subtitulo = "Liquidación semanal",
+            etiqueta = "COBRADO",
+            valor = formatearClp(resumenHoy.cobrado),
+            subtitulo = "Atenciones completadas",
         )
         TarjetaResumenCalificacion(
             modifier = Modifier.weight(1f),
@@ -531,7 +534,7 @@ private fun TarjetaProximaCita(
                         Icon(Icons.Filled.Alarm, contentDescription = null, tint = RojoError40, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "En ${proximaCita.minutosRestantes} min • ${proximaCita.modalidad}",
+                            text = "${proximaCita.tiempoRestanteTexto} • ${proximaCita.modalidad}",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
                             color = RojoError40,
@@ -568,17 +571,19 @@ private fun TarjetaProximaCita(
                             style = MaterialTheme.typography.bodyMedium,
                             color = LoginPrimario,
                         )
-                        Row(
-                            modifier = Modifier.padding(top = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(Icons.Filled.LocationOn, contentDescription = null, tint = LoginGrisTexto, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "${proximaCita.distanciaKm} km • ${proximaCita.comuna}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = LoginGrisTexto,
-                            )
+                        proximaCita.comuna?.let { comuna ->
+                            Row(
+                                modifier = Modifier.padding(top = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(Icons.Filled.LocationOn, contentDescription = null, tint = LoginGrisTexto, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = comuna,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = LoginGrisTexto,
+                                )
+                            }
                         }
                     }
                 }
@@ -604,33 +609,26 @@ private fun TarjetaProximaCita(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    Text(
-                        text = proximaCita.piso,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = LoginGrisTexto,
-                    )
+                    proximaCita.complemento?.let { complemento ->
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = complemento,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = LoginGrisTexto,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                // Sin direccion (consulta u online) no hay ruta que abrir. "Ver ficha" no
+                // existe aun: no hay pantalla de paciente, asi que no se ofrece.
+                if (proximaCita.direccionRuta != null) {
+                    Spacer(modifier = Modifier.height(14.dp))
                     Row(
                         modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(50))
-                            .background(LoginGrisClaro)
-                            .clickable { onAction(ProfessionalPanelAction.VerFichaPaciente) }
-                            .padding(vertical = 12.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(Icons.Filled.Description, contentDescription = null, tint = TextoPrincipal, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = "Ver Ficha", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = TextoPrincipal)
-                    }
-                    Row(
-                        modifier = Modifier
-                            .weight(1f)
+                            .fillMaxWidth()
                             .clip(RoundedCornerShape(50))
                             .background(LoginPrimarioOscuro)
                             .clickable { onAction(ProfessionalPanelAction.AbrirRuta) }
@@ -640,7 +638,7 @@ private fun TarjetaProximaCita(
                     ) {
                         Icon(Icons.Filled.Navigation, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = "Ruta Waze/Maps", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(text = "Cómo llegar", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 }
             }
@@ -877,58 +875,9 @@ private fun TarjetaCobrosMercadoPago(conectada: Boolean?, onClick: () -> Unit) {
 }
 
 @Composable
-private fun TarjetaConfiguracionCuenta(onClick: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(LoginGrisClaro),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Filled.Settings, contentDescription = null, tint = TextoPrincipal, modifier = Modifier.size(20.dp))
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Configuración de Cuenta",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = TextoPrincipal,
-                )
-                Text(
-                    text = "Seguridad, notificaciones y soporte KineCare",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = LoginGrisTexto,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-            }
-            Icon(
-                Icons.AutoMirrored.Filled.ArrowForwardIos,
-                contentDescription = null,
-                tint = LoginGrisTexto,
-                modifier = Modifier.size(14.dp),
-            )
-        }
-    }
-}
-
-@Composable
 private fun BarraNavegacionInferiorProfesional(
     onAbrirSolicitudes: () -> Unit,
+    onAbrirAgenda: () -> Unit,
     onAbrirMiPerfil: () -> Unit,
 ) {
     Row(
@@ -940,8 +889,7 @@ private fun BarraNavegacionInferiorProfesional(
     ) {
         ItemNavegacionInferior(texto = "Inicio", icono = Icons.Filled.Dashboard, activo = true)
         ItemNavegacionInferior(texto = "Reservas", icono = Icons.Filled.CalendarMonth, activo = false, onClick = onAbrirSolicitudes)
-        // Pacientes todavia no tiene subpantalla (Fase 7).
-        ItemNavegacionInferior(texto = "Pacientes", icono = Icons.Filled.HowToReg, activo = false)
+        ItemNavegacionInferior(texto = "Agenda", icono = Icons.Filled.Schedule, activo = false, onClick = onAbrirAgenda)
         ItemNavegacionInferior(texto = "Perfil", icono = Icons.Filled.Folder, activo = false, onClick = onAbrirMiPerfil)
     }
 }

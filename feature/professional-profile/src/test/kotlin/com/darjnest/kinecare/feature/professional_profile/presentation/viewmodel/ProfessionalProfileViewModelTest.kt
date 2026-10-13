@@ -5,7 +5,11 @@ package com.darjnest.kinecare.feature.professional_profile.presentation.viewmode
 import androidx.lifecycle.SavedStateHandle
 import app.cash.turbine.test
 import com.darjnest.kinecare.core.common.data.error.ProfesionalError
+import com.darjnest.kinecare.core.common.data.error.ClienteError
+import com.darjnest.kinecare.core.common.data.repository.ClienteRepository
 import com.darjnest.kinecare.core.common.data.repository.ProfesionalRepository
+import com.darjnest.kinecare.core.common.data.repository.UsuarioRepository
+import com.darjnest.kinecare.core.common.domain.model.Cliente
 import com.darjnest.kinecare.core.common.domain.model.Disponibilidad
 import com.darjnest.kinecare.core.common.domain.model.EstadoVerificacion
 import com.darjnest.kinecare.core.common.domain.model.Insignia
@@ -20,7 +24,10 @@ import com.darjnest.kinecare.feature.professional_profile.presentation.navigatio
 import com.darjnest.kinecare.feature.professional_profile.presentation.navigation.ProfessionalProfileRoute
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.DayOfWeek
@@ -43,8 +50,33 @@ class ProfessionalProfileViewModelTest {
     }
 
     private val profesionalRepository = mockk<ProfesionalRepository>()
+    private val clienteRepository = mockk<ClienteRepository>()
+    private val usuarioRepository = mockk<UsuarioRepository>()
+    private val firebaseAuth = mockk<FirebaseAuth>()
 
     private val id = "prof-1"
+    private val clienteUid = "cli-1"
+
+    /** Sin sesion por defecto: los tests existentes no tocan favoritos. */
+    init {
+        every { firebaseAuth.currentUser } returns null
+    }
+
+    private fun conSesion(uid: String, rol: RolUsuario = RolUsuario.CLIENTE) {
+        val usuario = mockk<FirebaseUser>()
+        every { usuario.uid } returns uid
+        every { firebaseAuth.currentUser } returns usuario
+        coEvery { usuarioRepository.obtenerPorId(uid) } returns Result.Success(
+            Usuario(uid, "Cata", "11111111-1", "c@k.cl", null, null, rol, null, Instant.fromEpochMilliseconds(0)),
+        )
+    }
+
+    private fun clienteConFavoritos(vararg ids: String) = Cliente(
+        usuario = Usuario(clienteUid, "Cata", "11111111-1", "c@k.cl", null, null, RolUsuario.CLIENTE, null, Instant.fromEpochMilliseconds(0)),
+        direcciones = emptyList(),
+        metodosPago = emptyList(),
+        favoritos = ids.toList(),
+    )
 
     private fun crearViewModel(profesionalId: String? = id): ProfessionalProfileViewModel {
         val handle = if (profesionalId == null) {
@@ -52,7 +84,7 @@ class ProfessionalProfileViewModelTest {
         } else {
             SavedStateHandle(mapOf(ARG_PROFESIONAL_ID to profesionalId))
         }
-        return ProfessionalProfileViewModel(handle, profesionalRepository)
+        return ProfessionalProfileViewModel(handle, profesionalRepository, clienteRepository, usuarioRepository, firebaseAuth)
     }
 
     private fun profesional(
@@ -61,6 +93,7 @@ class ProfessionalProfileViewModelTest {
         disponibilidad: List<Disponibilidad> = emptyList(),
         totalResenas: Int = 12,
         descripcion: String = "  Kinesiologa deportiva  ",
+        fotoUrl: String? = null,
     ) = Profesional(
         usuario = Usuario(
             id = id,
@@ -70,7 +103,7 @@ class ProfessionalProfileViewModelTest {
             correoContacto = null,
             telefono = null,
             rol = RolUsuario.PROFESIONAL,
-            fotoUrl = null,
+            fotoUrl = fotoUrl,
             fechaRegistro = Instant.fromEpochMilliseconds(0),
         ),
         especialidades = listOf("Kinesiología"),
@@ -97,6 +130,26 @@ class ProfessionalProfileViewModelTest {
     private fun <T : Any> requerir(valor: T?): T {
         assertNotNull(valor)
         return valor!!
+    }
+
+    @Test
+    fun `el perfil publico expone la foto del profesional si existe`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId(id) } returns
+            Result.Success(profesional(fotoUrl = "https://dl/ana.jpg?v=1"))
+
+        val perfil = requerir(crearViewModel().state.value.perfil)
+
+        assertEquals("https://dl/ana.jpg?v=1", perfil.fotoUrl)
+    }
+
+    @Test
+    fun `sin foto o con la URL en blanco el perfil cae a las iniciales`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId(id) } returns Result.Success(profesional(fotoUrl = "  "))
+
+        val perfil = requerir(crearViewModel().state.value.perfil)
+
+        assertNull(perfil.fotoUrl)
+        assertEquals("AS", perfil.iniciales)
     }
 
     @Test
@@ -318,5 +371,83 @@ class ProfessionalProfileViewModelTest {
             ARG_PROFESIONAL_ID,
             ProfessionalProfileRoute.serializer().descriptor.getElementName(0),
         )
+    }
+
+    @Test
+    fun `un cliente con sesion puede guardar favoritos y se marca el que ya lo era`() = runTest {
+        conSesion(clienteUid)
+        coEvery { profesionalRepository.obtenerPorId(id) } returns Result.Success(profesional())
+        coEvery { clienteRepository.obtenerPorId(clienteUid) } returns Result.Success(clienteConFavoritos(id))
+
+        val estado = crearViewModel().state.value
+
+        assertTrue(estado.puedeGuardarFavorito)
+        assertTrue(estado.esFavorito)
+    }
+
+    @Test
+    fun `sin sesion, siendo profesional o mirando el propio perfil no se ofrece el corazon`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId(id) } returns Result.Success(profesional())
+
+        assertFalse(crearViewModel().state.value.puedeGuardarFavorito)
+
+        conSesion("pro-9", rol = RolUsuario.PROFESIONAL)
+        assertFalse(crearViewModel().state.value.puedeGuardarFavorito)
+
+        conSesion(id, rol = RolUsuario.PROFESIONAL)
+        assertFalse(crearViewModel().state.value.puedeGuardarFavorito)
+    }
+
+    @Test
+    fun `un cliente antiguo sin documento clientes igual puede guardar`() = runTest {
+        conSesion(clienteUid)
+        coEvery { profesionalRepository.obtenerPorId(id) } returns Result.Success(profesional())
+        coEvery { clienteRepository.obtenerPorId(clienteUid) } returns Result.Error(ClienteError.NO_ENCONTRADO)
+
+        val estado = crearViewModel().state.value
+
+        assertTrue(estado.puedeGuardarFavorito)
+        assertFalse(estado.esFavorito)
+    }
+
+    @Test
+    fun `alternar agrega y quita el favorito`() = runTest {
+        conSesion(clienteUid)
+        coEvery { profesionalRepository.obtenerPorId(id) } returns Result.Success(profesional())
+        coEvery { clienteRepository.obtenerPorId(clienteUid) } returns Result.Success(clienteConFavoritos())
+        coEvery { clienteRepository.agregarFavorito(clienteUid, id) } returns Result.Success(Unit)
+        coEvery { clienteRepository.quitarFavorito(clienteUid, id) } returns Result.Success(Unit)
+        val viewModel = crearViewModel()
+
+        viewModel.onAction(ProfessionalProfileAction.AlternarFavorito)
+        assertTrue(viewModel.state.value.esFavorito)
+        coVerify { clienteRepository.agregarFavorito(clienteUid, id) }
+
+        viewModel.onAction(ProfessionalProfileAction.AlternarFavorito)
+        assertFalse(viewModel.state.value.esFavorito)
+        coVerify { clienteRepository.quitarFavorito(clienteUid, id) }
+    }
+
+    @Test
+    fun `si guardar el favorito falla se revierte y se avisa`() = runTest {
+        conSesion(clienteUid)
+        coEvery { profesionalRepository.obtenerPorId(id) } returns Result.Success(profesional())
+        coEvery { clienteRepository.obtenerPorId(clienteUid) } returns Result.Success(clienteConFavoritos())
+        coEvery { clienteRepository.agregarFavorito(clienteUid, id) } returns Result.Error(ClienteError.SIN_INTERNET)
+        val viewModel = crearViewModel()
+
+        viewModel.onAction(ProfessionalProfileAction.AlternarFavorito)
+
+        assertFalse(viewModel.state.value.esFavorito)
+        assertNotNull(viewModel.state.value.mensaje)
+        viewModel.onAction(ProfessionalProfileAction.MensajeMostrado)
+        assertNull(viewModel.state.value.mensaje)
+    }
+
+    @Test
+    fun `el perfil expone si el profesional tiene Mercado Pago conectado`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId(id) } returns Result.Success(profesional().copy(mercadoPagoConectado = false))
+
+        assertFalse(requireNotNull(crearViewModel().state.value.perfil).mercadoPagoConectado)
     }
 }

@@ -3,8 +3,12 @@
 package com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel
 
 import app.cash.turbine.test
+import com.darjnest.kinecare.core.common.data.error.FotoPerfilError
 import com.darjnest.kinecare.core.common.data.error.ProfesionalError
+import com.darjnest.kinecare.core.common.data.error.UsuarioError
+import com.darjnest.kinecare.core.common.data.repository.FotoPerfilRepository
 import com.darjnest.kinecare.core.common.data.repository.ProfesionalRepository
+import com.darjnest.kinecare.core.common.data.repository.UsuarioRepository
 import com.darjnest.kinecare.core.common.domain.model.EstadoVerificacion
 import com.darjnest.kinecare.core.common.domain.model.Insignia
 import com.darjnest.kinecare.core.common.domain.model.Profesional
@@ -38,6 +42,8 @@ class MiPerfilProfesionalViewModelTest {
     }
 
     private val profesionalRepository = mockk<ProfesionalRepository>()
+    private val usuarioRepository = mockk<UsuarioRepository>()
+    private val fotoPerfilRepository = mockk<FotoPerfilRepository>()
     private val firebaseAuth = mockk<FirebaseAuth>()
 
     private val uid = "prof-1"
@@ -48,12 +54,13 @@ class MiPerfilProfesionalViewModelTest {
         every { firebaseAuth.currentUser } returns firebaseUser
     }
 
-    private fun crearViewModel() = MiPerfilProfesionalViewModel(profesionalRepository, firebaseAuth)
+    private fun crearViewModel() = MiPerfilProfesionalViewModel(profesionalRepository, usuarioRepository, fotoPerfilRepository, firebaseAuth)
 
     private fun profesional(
         descripcion: String = "Kinesiologa deportiva",
         credencialesAprobadas: Boolean = true,
         tiposAtencion: List<TipoAtencion> = listOf(TipoAtencion.KINESIOLOGIA),
+        fotoUrl: String? = null,
     ) = Profesional(
         usuario = Usuario(
             id = uid,
@@ -63,7 +70,7 @@ class MiPerfilProfesionalViewModelTest {
             correoContacto = null,
             telefono = null,
             rol = RolUsuario.PROFESIONAL,
-            fotoUrl = null,
+            fotoUrl = fotoUrl,
             fechaRegistro = Instant.fromEpochMilliseconds(0),
         ),
         especialidades = listOf("Kinesiología", "Masoterapia"),
@@ -132,6 +139,46 @@ class MiPerfilProfesionalViewModelTest {
 
         assertNull(antes.profesionalId)
         assertEquals(antes, viewModel.state.value)
+    }
+
+    @Test
+    fun `si el perfil no carga se marca errorCarga y no queda cargando`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId(uid) } returns Result.Error(ProfesionalError.SIN_INTERNET)
+
+        val estado = crearViewModel().state.value
+
+        assertTrue(estado.errorCarga)
+        assertFalse(estado.cargando)
+        assertNull(estado.identidad)
+    }
+
+    @Test
+    fun `Reintentar tras un fallo carga el perfil y limpia el error`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId(uid) } returns Result.Error(ProfesionalError.SIN_INTERNET)
+        val viewModel = crearViewModel()
+        assertTrue(viewModel.state.value.errorCarga)
+
+        coEvery { profesionalRepository.obtenerPorId(uid) } returns Result.Success(profesional())
+        viewModel.onAction(MiPerfilProfesionalAction.Reintentar)
+
+        val estado = viewModel.state.value
+        assertFalse(estado.errorCarga)
+        assertFalse(estado.cargando)
+        assertEquals("Ana Soto", estado.identidad?.nombre)
+    }
+
+    @Test
+    fun `una carga en curso no se duplica con Reintentar`() = runTest {
+        val respuesta = CompletableDeferred<Result<Profesional, ProfesionalError>>()
+        coEvery { profesionalRepository.obtenerPorId(uid) } coAnswers { respuesta.await() }
+        val viewModel = crearViewModel()
+        assertTrue(viewModel.state.value.cargando)
+
+        viewModel.onAction(MiPerfilProfesionalAction.Reintentar)
+
+        coVerify(exactly = 1) { profesionalRepository.obtenerPorId(uid) }
+        respuesta.complete(Result.Success(profesional()))
+        assertFalse(viewModel.state.value.cargando)
     }
 
     @Test
@@ -310,5 +357,101 @@ class MiPerfilProfesionalViewModelTest {
         assertTrue(estado.editandoTiposAtencion)
         assertEquals(setOf(TipoAtencion.KINESIOLOGIA), estado.tiposAtencion)
         coVerify(exactly = 1) { profesionalRepository.actualizarTiposAtencion(uid, any()) }
+    }
+
+    @Test
+    fun `el estado trae la foto de perfil del profesional`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId(uid) } returns
+            Result.Success(profesional(fotoUrl = "https://dl/prof.jpg"))
+
+        val viewModel = crearViewModel()
+
+        assertEquals("https://dl/prof.jpg", viewModel.state.value.fotoUrl)
+    }
+
+    @Test
+    fun `una foto elegida se sube con el rol profesional y su URL se guarda en el usuario`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId(uid) } returns Result.Success(profesional())
+        coEvery { fotoPerfilRepository.subir(uid, RolUsuario.PROFESIONAL, "content://foto/1") } returns
+            Result.Success("https://dl/nueva.jpg?v=1")
+        coEvery { usuarioRepository.actualizarFotoUrl(uid, "https://dl/nueva.jpg?v=1") } returns Result.Success(Unit)
+        val viewModel = crearViewModel()
+
+        viewModel.onAction(MiPerfilProfesionalAction.FotoElegida("content://foto/1"))
+
+        val estado = viewModel.state.value
+        assertEquals("https://dl/nueva.jpg?v=1", estado.fotoUrl)
+        assertFalse(estado.subiendoFoto)
+        assertNull(estado.errorFoto)
+        coVerify { usuarioRepository.actualizarFotoUrl(uid, "https://dl/nueva.jpg?v=1") }
+    }
+
+    @Test
+    fun `mientras sube la foto marca progreso y no acepta otra subida`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId(uid) } returns Result.Success(profesional())
+        val gate = CompletableDeferred<Result<String, FotoPerfilError>>()
+        coEvery { fotoPerfilRepository.subir(uid, RolUsuario.PROFESIONAL, any()) } coAnswers { gate.await() }
+        coEvery { usuarioRepository.actualizarFotoUrl(any(), any()) } returns Result.Success(Unit)
+        val viewModel = crearViewModel()
+
+        viewModel.onAction(MiPerfilProfesionalAction.FotoElegida("content://foto/1"))
+        assertTrue(viewModel.state.value.subiendoFoto)
+        viewModel.onAction(MiPerfilProfesionalAction.FotoElegida("content://foto/2"))
+        gate.complete(Result.Success("https://dl/a.jpg"))
+
+        assertFalse(viewModel.state.value.subiendoFoto)
+        coVerify(exactly = 1) { fotoPerfilRepository.subir(any(), any(), any()) }
+    }
+
+    @Test
+    fun `si Storage no esta disponible avisa con su mensaje y conserva la foto`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId(uid) } returns
+            Result.Success(profesional(fotoUrl = "https://dl/prof.jpg"))
+        coEvery { fotoPerfilRepository.subir(uid, RolUsuario.PROFESIONAL, any()) } returns
+            Result.Error(FotoPerfilError.ALMACENAMIENTO_NO_DISPONIBLE)
+        val viewModel = crearViewModel()
+
+        viewModel.onAction(MiPerfilProfesionalAction.FotoElegida("content://foto/1"))
+
+        val estado = viewModel.state.value
+        assertEquals("Cambiar la foto de perfil aún no está disponible. Estamos trabajando en ello.", estado.errorFoto)
+        assertEquals("https://dl/prof.jpg", estado.fotoUrl)
+        assertFalse(estado.subiendoFoto)
+        coVerify(exactly = 0) { usuarioRepository.actualizarFotoUrl(any(), any()) }
+    }
+
+    @Test
+    fun `sin conexion o con imagen invalida cada error tiene su mensaje`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId(uid) } returns Result.Success(profesional())
+        val esperados = mapOf(
+            FotoPerfilError.SIN_INTERNET to "Sin conexión. Revisa tu internet e intenta de nuevo.",
+            FotoPerfilError.IMAGEN_INVALIDA to "No pudimos leer esa imagen. Elige otra foto.",
+            FotoPerfilError.IMAGEN_MUY_GRANDE to "La foto es demasiado pesada. Elige otra más liviana.",
+            FotoPerfilError.DESCONOCIDO to "No pudimos subir la foto. Intenta de nuevo.",
+        )
+        esperados.forEach { (error, mensaje) ->
+            coEvery { fotoPerfilRepository.subir(uid, RolUsuario.PROFESIONAL, any()) } returns Result.Error(error)
+            val viewModel = crearViewModel()
+
+            viewModel.onAction(MiPerfilProfesionalAction.FotoElegida("content://foto/1"))
+
+            assertEquals(mensaje, viewModel.state.value.errorFoto, error.name)
+        }
+    }
+
+    @Test
+    fun `si la foto sube pero la URL no se guarda se avisa y la foto no cambia`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId(uid) } returns Result.Success(profesional())
+        coEvery { fotoPerfilRepository.subir(uid, RolUsuario.PROFESIONAL, any()) } returns Result.Success("https://dl/a.jpg")
+        coEvery { usuarioRepository.actualizarFotoUrl(uid, "https://dl/a.jpg") } returns
+            Result.Error(UsuarioError.SIN_INTERNET)
+        val viewModel = crearViewModel()
+
+        viewModel.onAction(MiPerfilProfesionalAction.FotoElegida("content://foto/1"))
+
+        val estado = viewModel.state.value
+        assertEquals("No pudimos guardar la foto en tu perfil. Intenta de nuevo.", estado.errorFoto)
+        assertNull(estado.fotoUrl)
+        assertFalse(estado.subiendoFoto)
     }
 }

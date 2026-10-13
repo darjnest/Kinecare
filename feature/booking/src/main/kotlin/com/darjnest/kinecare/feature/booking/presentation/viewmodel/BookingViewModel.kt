@@ -10,6 +10,7 @@ import com.darjnest.kinecare.core.common.data.error.ProfesionalError
 import com.darjnest.kinecare.core.common.data.repository.ClienteRepository
 import com.darjnest.kinecare.core.common.data.repository.ProfesionalRepository
 import com.darjnest.kinecare.core.common.data.repository.ReservaRepository
+import com.darjnest.kinecare.core.common.domain.model.CupoOcupado
 import com.darjnest.kinecare.core.common.domain.model.Direccion
 import com.darjnest.kinecare.core.common.domain.model.Disponibilidad
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
@@ -17,19 +18,26 @@ import com.darjnest.kinecare.core.common.domain.model.Servicio
 import com.darjnest.kinecare.core.common.domain.model.SolicitudReserva
 import com.darjnest.kinecare.core.common.result.Result
 import com.darjnest.kinecare.core.common.util.ZonaHorariaChile
+import com.darjnest.kinecare.feature.booking.domain.service.DIAS_HORIZONTE
 import com.darjnest.kinecare.feature.booking.domain.service.DiaConHorarios
+import com.darjnest.kinecare.feature.booking.domain.service.descontarCuposOcupados
 import com.darjnest.kinecare.feature.booking.domain.service.generarDiasConHorarios
 import com.darjnest.kinecare.feature.booking.presentation.navigation.ARG_PROFESIONAL_ID
 import com.darjnest.kinecare.feature.booking.presentation.navigation.ARG_SERVICIO_ID
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Instant
+import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.atStartOfDayIn
+import kotlinx.datetime.plus
+import kotlinx.datetime.toLocalDateTime
 import javax.inject.Inject
 import kotlin.time.Clock
 
@@ -76,6 +84,11 @@ data class BookingState(
     val cargando: Boolean = true,
     val errorCarga: ProfesionalError? = null,
     val profesionalNombre: String = "",
+    /**
+     * `true` si el profesional aun no vinculo Mercado Pago: la reserva se puede solicitar, pero el
+     * cliente no podra pagarla hasta que lo haga (`iniciarPago` responde `PROFESIONAL_SIN_CUENTA_MP`).
+     */
+    val profesionalSinPagos: Boolean = false,
     /** Solo servicios con `activo == true`: un servicio pausado no se puede reservar. */
     val servicios: List<Servicio> = emptyList(),
     val paso: PasoReserva = PasoReserva.MODALIDAD,
@@ -84,6 +97,11 @@ data class BookingState(
     val dias: List<DiaConHorarios> = emptyList(),
     val fechaSeleccionada: LocalDate? = null,
     val horarioSeleccionado: Instant? = null,
+    /**
+     * `true` mientras se consultan los cupos ya tomados del profesional al abrir el paso fecha/hora:
+     * la vista no ofrece horarios hasta tenerlos para no mostrar uno que despues desaparece.
+     */
+    val cargandoCupos: Boolean = false,
     val direccionesGuardadas: List<Direccion> = emptyList(),
     val direccion: FormularioDireccion = FormularioDireccion(),
     val enviando: Boolean = false,
@@ -114,7 +132,7 @@ data class BookingState(
     val puedeContinuar: Boolean
         get() = when (paso) {
             PasoReserva.MODALIDAD -> servicioSeleccionado != null
-            PasoReserva.FECHA_HORA -> horarioSeleccionado != null
+            PasoReserva.FECHA_HORA -> horarioSeleccionado != null && !cargandoCupos
             PasoReserva.DIRECCION -> direccion.esValido
             PasoReserva.REVISION -> !enviando && reservaCreadaId == null
         }
@@ -144,6 +162,13 @@ sealed interface BookingAction {
     data object Finalizar : BookingAction
 }
 
+/** Errores de `crearReserva` que descartan el horario elegido. */
+private val ERRORES_DE_HORARIO = setOf(
+    CrearReservaError.HORARIO_OCUPADO,
+    CrearReservaError.FUERA_DE_HORARIO,
+    CrearReservaError.ANTICIPACION_INSUFICIENTE,
+)
+
 @HiltViewModel
 class BookingViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
@@ -159,6 +184,16 @@ class BookingViewModel @Inject constructor(
 
     /** Horario semanal del profesional; no va en el estado porque la vista solo usa los cupos derivados. */
     private var disponibilidad: List<Disponibilidad> = emptyList()
+
+    /**
+     * Tramos ya tomados del profesional (`obtenerCuposOcupados`) de la ultima consulta exitosa. Si la
+     * consulta falla queda vacio: no bloquea la reserva, el choque se detecta al confirmar.
+     */
+    private var cuposOcupados: List<CupoOcupado> = emptyList()
+    private var cuposJob: Job? = null
+
+    /** Horarios que `crearReserva` rechazo: no se vuelven a ofrecer aunque la consulta de cupos no los informe. */
+    private val horariosRechazados = mutableSetOf<Instant>()
 
     private val _state = MutableStateFlow(BookingState())
     val state: StateFlow<BookingState> = _state.asStateFlow()
@@ -177,7 +212,7 @@ class BookingViewModel @Inject constructor(
                 it.copy(fechaSeleccionada = action.fecha, horarioSeleccionado = null, errorEnvio = null)
             }
             is BookingAction.SeleccionarHorario -> _state.update {
-                if (action.horario !in it.horariosDelDia) return
+                if (it.cargandoCupos || action.horario !in it.horariosDelDia) return
                 it.copy(horarioSeleccionado = action.horario, errorEnvio = null)
             }
             is BookingAction.UsarDireccionGuardada -> _state.update {
@@ -218,6 +253,7 @@ class BookingViewModel @Inject constructor(
                         it.copy(
                             cargando = false,
                             profesionalNombre = profesional.usuario.nombre,
+                            profesionalSinPagos = !profesional.mercadoPagoConectado,
                             servicios = activos,
                         )
                     }
@@ -272,31 +308,69 @@ class BookingViewModel @Inject constructor(
         )
     }
 
-    private fun diasPara(servicio: Servicio): List<DiaConHorarios> = generarDiasConHorarios(
-        disponibilidad = disponibilidad,
+    private fun diasPara(servicio: Servicio): List<DiaConHorarios> = descontarCuposOcupados(
+        dias = generarDiasConHorarios(
+            disponibilidad = disponibilidad,
+            duracionMinutos = servicio.duracionMinutos,
+            ahora = clock.now(),
+            zona = ZonaHorariaChile,
+        ).mapNotNull { dia ->
+            dia.copy(horarios = dia.horarios - horariosRechazados)
+                .takeIf { it.horarios.isNotEmpty() }
+        },
         duracionMinutos = servicio.duracionMinutos,
-        ahora = clock.now(),
-        zona = ZonaHorariaChile,
+        ocupados = cuposOcupados,
     )
 
+    /**
+     * Recalcula los dias con la hora actual y los cupos ocupados conocidos: los cupos que ya quedaron
+     * dentro de la anticipacion minima o que se tomaron desaparecen. Se conserva la eleccion de fecha y
+     * hora mientras siga siendo valida.
+     */
+    private fun BookingState.conDiasActualizados(): BookingState {
+        val nuevosDias = servicioSeleccionado?.let { diasPara(it) }.orEmpty()
+        val fecha = fechaSeleccionada?.takeIf { f -> nuevosDias.any { d -> d.fecha == f } }
+            ?: nuevosDias.firstOrNull()?.fecha
+        val horario = horarioSeleccionado
+            ?.takeIf { h -> nuevosDias.firstOrNull { d -> d.fecha == fecha }?.horarios.orEmpty().contains(h) }
+        return copy(dias = nuevosDias, fechaSeleccionada = fecha, horarioSeleccionado = horario)
+    }
+
+    /**
+     * Consulta los cupos ocupados de los proximos [DIAS_HORIZONTE] dias (la ventana maxima del backend
+     * es de 15) y los descuenta de los horarios ofrecidos. Un fallo no bloquea: se siguen ofreciendo
+     * todos los cupos y `crearReserva` responde `HORARIO_OCUPADO` si hay choque.
+     */
+    private fun cargarCuposOcupados() {
+        val id = profesionalId?.takeIf { it.isNotBlank() } ?: return
+        cuposJob?.cancel()
+        _state.update { it.copy(cargandoCupos = true) }
+        cuposJob = viewModelScope.launch {
+            val ahora = clock.now()
+            val hoy = ahora.toLocalDateTime(ZonaHorariaChile).date
+            // Fin del horizonte = medianoche de Chile del dia 14: nunca pasa de ahora + 14 dias.
+            val hasta = hoy.plus(DatePeriod(days = DIAS_HORIZONTE)).atStartOfDayIn(ZonaHorariaChile)
+            when (val resultado = reservaRepository.obtenerCuposOcupados(id, ahora, hasta)) {
+                is Result.Success -> cuposOcupados = resultado.data
+                is Result.Error -> cuposOcupados = emptyList()
+            }
+            _state.update { it.conDiasActualizados().copy(cargandoCupos = false) }
+        }
+    }
+
     private fun continuar() {
+        val pasoAntes = _state.value.paso
         _state.update {
             if (!it.puedeContinuar || it.paso == PasoReserva.REVISION) return
             val siguiente = it.pasos[it.pasos.indexOf(it.paso) + 1]
             if (siguiente == PasoReserva.FECHA_HORA) {
-                // Recalcula con la hora actual: los cupos que ya quedaron dentro
-                // de la anticipacion minima desaparecen. Se conserva la eleccion
-                // si sigue siendo valida.
-                val dias = it.servicioSeleccionado?.let { s -> diasPara(s) }.orEmpty()
-                val fecha = it.fechaSeleccionada?.takeIf { f -> dias.any { d -> d.fecha == f } }
-                    ?: dias.firstOrNull()?.fecha
-                val horario = it.horarioSeleccionado
-                    ?.takeIf { h -> dias.firstOrNull { d -> d.fecha == fecha }?.horarios.orEmpty().contains(h) }
-                it.copy(paso = siguiente, dias = dias, fechaSeleccionada = fecha, horarioSeleccionado = horario)
+                it.copy(paso = siguiente).conDiasActualizados()
             } else {
                 it.copy(paso = siguiente)
             }
         }
+        val paso = _state.value.paso
+        if (paso == PasoReserva.FECHA_HORA && pasoAntes != PasoReserva.FECHA_HORA) cargarCuposOcupados()
     }
 
     private fun confirmar() {
@@ -317,7 +391,12 @@ class BookingViewModel @Inject constructor(
         viewModelScope.launch {
             when (val resultado = reservaRepository.crear(solicitud)) {
                 is Result.Success -> _state.update { it.copy(enviando = false, reservaCreadaId = resultado.data) }
-                is Result.Error -> _state.update { it.conErrorDeEnvio(resultado.error, horario) }
+                is Result.Error -> {
+                    if (resultado.error in ERRORES_DE_HORARIO) horariosRechazados += horario
+                    _state.update { it.conErrorDeEnvio(resultado.error, horario) }
+                    // Volvio a elegir horario: se refrescan los cupos para no ofrecer otro ya tomado.
+                    if (_state.value.paso == PasoReserva.FECHA_HORA) cargarCuposOcupados()
+                }
             }
         }
     }

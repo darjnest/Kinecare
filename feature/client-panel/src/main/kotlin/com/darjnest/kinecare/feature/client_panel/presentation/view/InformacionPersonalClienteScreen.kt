@@ -40,11 +40,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.darjnest.kinecare.core.designsystem.components.avatar.KineCareAvatar
+import com.darjnest.kinecare.core.designsystem.components.avatar.rememberSelectorFoto
+import com.darjnest.kinecare.core.designsystem.theme.KineCareSpacing
 import com.darjnest.kinecare.core.designsystem.theme.KineCareTheme
 import com.darjnest.kinecare.core.designsystem.theme.LoginFondo
 import com.darjnest.kinecare.core.designsystem.theme.LoginGrisClaro
@@ -64,6 +68,9 @@ fun InformacionPersonalClienteRoot(
     onVolver: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val abrirSelectorFoto = rememberSelectorFoto { uri ->
+        viewModel.onAction(InformacionPersonalClienteAction.FotoElegida(uri))
+    }
 
     // Guardar Cambios es asincronico (escribe en `usuarios/{uid}`): solo
     // volvemos atras cuando el ViewModel confirma el guardado exitoso, en
@@ -82,10 +89,11 @@ fun InformacionPersonalClienteRoot(
             // ClientPanelNavGraph). Guardar Cambios si pasa por el
             // ViewModel para escribir sobre el `Usuario` real antes de
             // volver (ver el `LaunchedEffect` de arriba).
-            if (accion == InformacionPersonalClienteAction.VolverAtras) {
-                onVolver()
-            } else {
-                viewModel.onAction(accion)
+            when (accion) {
+                InformacionPersonalClienteAction.VolverAtras -> onVolver()
+                // El selector de fotos necesita el contexto de la Activity: lo abre el Root.
+                InformacionPersonalClienteAction.CambiarFoto -> abrirSelectorFoto()
+                else -> viewModel.onAction(accion)
             }
         },
         modifier = modifier,
@@ -115,22 +123,48 @@ fun InformacionPersonalClienteScreen(
                 modifier = Modifier.padding(horizontal = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                TarjetaFotoPerfil(nombre = state.nombre, onAction = onAction)
+                TarjetaFotoPerfil(state = state, onAction = onAction)
                 TarjetaDatosPersonales(state = state, onAction = onAction)
+
+                state.error?.let { mensaje ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = mensaje,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        if (state.cargaFallida) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Reintentar",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = LoginPrimario,
+                                modifier = Modifier.clickable(role = Role.Button) {
+                                    onAction(InformacionPersonalClienteAction.Reintentar)
+                                },
+                            )
+                        }
+                    }
+                }
 
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(50))
-                        .background(LoginPrimarioOscuro)
-                        .clickable { onAction(InformacionPersonalClienteAction.GuardarCambios) }
+                        // Deshabilitado (cargando, guardando, carga fallida o sin nombre): atenuado.
+                        .background(if (state.puedeGuardar) LoginPrimarioOscuro else LoginPrimarioOscuro.copy(alpha = 0.4f))
+                        .clickable(enabled = state.puedeGuardar, role = Role.Button) {
+                            onAction(InformacionPersonalClienteAction.GuardarCambios)
+                        }
                         .padding(vertical = 14.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = "Guardar Cambios", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(text = if (state.guardando) "Guardando..." else "Guardar Cambios", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color.White)
                 }
                 Spacer(modifier = Modifier.height(8.dp))
             }
@@ -167,7 +201,7 @@ private fun EncabezadoInformacionPersonal(onAction: (InformacionPersonalClienteA
 
 @Composable
 private fun TarjetaFotoPerfil(
-    nombre: String,
+    state: InformacionPersonalClienteState,
     onAction: (InformacionPersonalClienteAction) -> Unit,
 ) {
     Card(
@@ -181,32 +215,22 @@ private fun TarjetaFotoPerfil(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Box {
-                Box(
-                    modifier = Modifier
-                        .size(88.dp)
-                        .clip(CircleShape)
-                        .background(LoginMenta),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    val iniciales = inicialesDeNombre(nombre)
-                    if (iniciales.isNotBlank()) {
-                        Text(
-                            text = iniciales,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = LoginPrimarioOscuro,
-                        )
-                    } else {
-                        Icon(Icons.Filled.Person, contentDescription = null, tint = LoginPrimarioOscuro, modifier = Modifier.size(40.dp))
-                    }
-                }
+                KineCareAvatar(
+                    iniciales = inicialesDeNombre(state.nombre),
+                    fotoUrl = state.fotoUrl,
+                    tamano = KineCareSpacing.avatarPerfil,
+                    colorFondo = LoginMenta,
+                    colorContenido = LoginPrimarioOscuro,
+                    cargando = state.subiendoFoto,
+                    contentDescription = "Foto de perfil",
+                )
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .size(28.dp)
                         .clip(CircleShape)
                         .background(LoginPrimarioOscuro)
-                        .clickable { onAction(InformacionPersonalClienteAction.CambiarFoto) },
+                        .clickable(enabled = !state.subiendoFoto) { onAction(InformacionPersonalClienteAction.CambiarFoto) },
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(Icons.Filled.CameraAlt, contentDescription = "Cambiar foto", tint = Color.White, modifier = Modifier.size(14.dp))
@@ -218,8 +242,18 @@ private fun TarjetaFotoPerfil(
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
                 color = LoginPrimarioOscuro,
-                modifier = Modifier.clickable { onAction(InformacionPersonalClienteAction.CambiarFoto) },
+                modifier = Modifier.clickable(enabled = !state.subiendoFoto) {
+                    onAction(InformacionPersonalClienteAction.CambiarFoto)
+                },
             )
+            state.errorFoto?.let { mensaje ->
+                Text(
+                    text = mensaje,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
         }
     }
 }

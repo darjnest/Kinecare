@@ -87,11 +87,10 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       Fase 6 (fotos de perfil, credenciales de verificación). **Hecho en el
       repo:** `storage.rules` (foto de perfil pública y solo del dueño, JPEG
       < 5 MB; credenciales cerradas a la app; resto denegado) y el bloque
-      `storage` de `firebase.json`; reglas validadas, **sin desplegar**.
-      **Falta, a mano:** crear el bucket de QA desde la consola de Firebase y
-      correr `firebase deploy --only storage -P qa`; después conectar
-      "Cambiar foto" (Cliente y Profesional) y decidir la ruta de la foto del
-      Cliente.
+      `storage` de `firebase.json`; reglas validadas. **Bucket de QA creado y reglas desplegadas el
+      2026-10-09** (verificadas leyendo las reglas activas); producción sigue
+      sin bucket (Spark). **"Cambiar foto" conectado** (ver ítem de fotos de
+      perfil, abajo); ruta del Cliente decidida: `clientes/{uid}/foto-perfil.jpg`.
 - [x] Cliente: al iniciar sesión o registrarse (rol `CLIENTE`), el `NavHost`
       de `:app` navega automáticamente a `SearchRoute` y saca `AuthRoute`
       del back stack (`KineCareNavHost.kt`, callback
@@ -138,8 +137,8 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       y solo navega hacia atrás cuando el `ViewModel` confirma éxito
       (`state.guardadoExitoso` + `LaunchedEffect` en el `Root`, mismo patrón
       que `AuthViewModel.usuarioAutenticado`/`AuthScreen` — no hay
-      `Flow<Event>` separado en el proyecto todavía); `CambiarFoto` sigue
-      no-op (Storage bloqueado, plan Spark). `FavoritosViewModel` resuelve
+      `Flow<Event>` separado en el proyecto todavía); `CambiarFoto` ya sube
+      la foto (ver "Fotos de perfil" en Fase 7). `FavoritosViewModel` resuelve
       `Cliente.favoritos` a `Profesional` real vía
       `ProfesionalRepository.obtenerPorId` por cada id, y `QuitarDeFavoritos`
       actualiza `ClienteRepository.quitarFavorito` con UI optimista
@@ -401,11 +400,24 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
 - [x] Cloud Functions `conectarMercadoPago`, `mercadoPagoOAuthCallback`,
       `iniciarPago`, `estadoPago`, `webhookMercadoPago`, `retornoPago`
       (`functions/`, 147 tests incl. emulador; contrato en DATA_MODEL.md).
-      **Sin desplegar ni probar contra Mercado Pago real.**
-- [ ] Crear la app en el panel de Mercado Pago (Chile), cargar secretos
+      **Desplegadas en QA** (2026-10-07, PR #36); **sin probar de punta a
+      punta contra Mercado Pago real** (ver el ítem siguiente).
+- [x] **QA configurado** (2026-10-07): app "KineCare" (Checkout Pro) creada en
+      el panel de Mercado Pago Chile, Redirect URL de QA registrada, secretos
       (`MP_CLIENT_SECRET`, `MP_WEBHOOK_SECRET`, `MP_TOKEN_ENCRYPTION_KEY`) y
-      `MP_APP_ID`, registrar Redirect URI y webhook, subir QA a Blaze y
-      desplegar. Probar con usuarios de prueba (vendedor + comprador).
+      `MP_APP_ID` cargados, QA en Blaze, funciones y reglas desplegadas, webhook
+      validado (401 sin firma) y dos usuarios de prueba (vendedor + comprador).
+      `MP_CLIENT_SECRET` es el Access Token de prueba y **no se ha verificado
+      que el OAuth lo acepte**.
+- [ ] Probar de punta a punta en QA con un Profesional con login real:
+      "Cobros con Mercado Pago" → Conectar → iniciar sesión con el vendedor de
+      prueba → ver `profesionales/{uid}.mercadoPagoConectado = true`; luego, como
+      Cliente, pagar una reserva `CONFIRMADA` con el comprador de prueba y ver el
+      webhook aplicar el pago. Si el OAuth rechaza el `client_secret`, hay que
+      activar las credenciales de producción de la app (piden una URL de sitio
+      web que KineCare aún no tiene).
+- [ ] Producción (`kinecare-cl`): Redirect URL y webhook productivos, secretos,
+      `MP_APP_ID` y deploy; requiere subir producción a Blaze.
 - [x] `:feature:payment` (UI/navegación Android; **no probado contra Mercado
       Pago real ni con una sesión real, solo en emulador sin sesión**):
       pantalla **Pagar** (`PaymentRoute(reservaId, titulo, montoClp)`: total
@@ -435,7 +447,59 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       `androidx.browser` (Custom Tabs). Componentes nuevos en
       `:core:designsystem`: `KineCareTopBar`, `KineCareStatusMessage`.
       Pendiente: verificar el flujo completo con sesión y Mercado Pago real.
-- [ ] Certificate pinning en llamadas de pago
+- [x] Certificate pinning en las llamadas a las Cloud Functions (pagos,
+      verificación de identidad y reservas comparten el cliente): `CertificatePinner`
+      de OkHttp con las **cuatro raíces de Google Trust Services** (R1..R4), no
+      el hoja ni un intermedio (el hoja es un certificado compartido que se
+      renueva cada ~3 meses y Google rota los intermedios). Hashes tomados del
+      almacén del sistema y contrastados con la cadena real de QA y producción.
+      **Verificado con un handshake real** de OkHttp (JVM, no Android) contra los
+      hosts de QA y producción: acepta con los pins correctos y rechaza con uno
+      erróneo (`Certificate pinning failure`). 9 tests nuevos en `:core:network`
+      con certificados públicos reales como fixtures (los pins son exactamente
+      las 4 raíces; la cadena que sirve Google hoy pasa; otra CA es rechazada; el
+      patrón cubre los hosts que arma `urlBaseCloudFunctions`; otros hosts no se
+      ven afectados), y comprobado que un pin mal copiado los hace fallar.
+      `scripts/verificar-pins.sh` compara los pins del código con lo que sirve
+      Google (falla con salida 1 si ninguno coincide) y
+      `.github/workflows/pins.yml` lo corre cada lunes y en los PRs que tocan los
+      pins. Detalle, alcance y riesgos en
+      [ARCHITECTURE.md](ARCHITECTURE.md#seguridad). **No verificado en un
+      dispositivo Android** (sin emulador): que el limpiador de cadena de
+      Android incluya la raíz de confianza es lo que hace coincidir un pin de
+      raíz cuando el servidor no la envía; hoy el servidor sí envía la raíz R1
+      con firma cruzada, así que no depende de eso.
+- [ ] Probar en un dispositivo/emulador Android con la app QA que las llamadas a
+      las funciones (reservar, estado de pago, verificación) siguen funcionando
+      con el pinning activo. Es la primera prueba del pinning sobre el stack de
+      TLS de Android.
+- [x] Interruptor remoto del pinning con **Firebase Remote Config, firmado**
+      (parámetro `cf_pinning_override`): un override con ventana de hasta 30 días
+      firmada con ECDSA P-256, verificada contra una clave pública embebida;
+      cualquier valor vacío, corrupto, ajeno, alterado, vencido o aún no vigente
+      deja el pinning activo. Un `Call.Factory` elige por llamada entre el
+      cliente con y sin pinning, así que surte efecto sin reiniciar la app.
+      Decisión de diseño: un booleano sin firma habría dejado que quien tenga una
+      CA falsa en el camino apague el pinning (Remote Config no está pineado).
+      `scripts/pinning-override.sh` genera la clave (se niega a escribirla dentro
+      del repo), firma un override y valida los días. 21 tests nuevos (fixture
+      firmado con OpenSSL verificado por la app: script y verificación
+      compatibles; ventanas, firmas ajenas, valores alterados, basura, cache de la
+      política, selección de cliente) y comprobado con mutaciones (anular la firma
+      y ampliar la ventana hacen fallar los tests). Procedimiento y límites en
+      [ARCHITECTURE.md](ARCHITECTURE.md#seguridad). **Inactivo de fábrica**: la
+      clave pública embebida está vacía.
+- [x] **Activar el interruptor**: clave generada con
+      `scripts/pinning-override.sh generar-clave` (2026-10-09) y su parte pública
+      pegada en `CLAVE_PUBLICA_OVERRIDE_PINNING` (tests de `:core:network` en
+      verde). **Pendiente (lo hace una persona):** respaldar la clave privada
+      (`~/.kinecare-secrets/pinning-override-qa.pem`) en la bóveda / gestor de
+      contraseñas y publicar una versión con la clave embebida.
+- [ ] Probar el interruptor de punta a punta con la app QA en un dispositivo o
+      emulador: publicar un override de prueba en Remote Config del proyecto QA y
+      ver que las llamadas siguen funcionando con un pin deliberadamente roto, y
+      que vuelven a bloquearse al retirarlo o vencer. Solo se probó con tests de
+      JVM; **no se ha ejecutado contra Remote Config real ni en Android**.
 
 ## Fase 6 — Verificación de identidad
 - [x] Elegir proveedor: **Didit** (2026-10-08). Comparado con Metamap (la más
@@ -615,6 +679,31 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       una cita confirmada (`CANCELADA_PROFESIONAL`/`CANCELADA_CLIENTE`),
       expirar solicitudes sin respuesta (función programada), notificar al
       cliente (FCM) y el contador de pendientes en el dashboard.
+- [x] `:feature:professional-panel` — **Liquidaciones y finanzas** conectada
+      a datos reales, **sin backend nuevo**: `LiquidacionesYFinanzasViewModel`
+      deriva todo de `ReservaRepository.obtenerPorProfesional` (que ya trae
+      `pagos/{id}` de cada reserva) y del catálogo de servicios. **Ingreso** =
+      reserva con pago `AUTORIZADO`, estado `CONFIRMADA`/`EN_CURSO`/`COMPLETADA`
+      y cita ya iniciada (una cobrada pero cancelada no cuenta; una futura
+      tampoco). "Resumen de <mes>": ingresos brutos y atenciones del mes en
+      hora de Chile, promedio por día transcurrido, variación contra el mes
+      anterior (oculta si ese mes no tuvo ingresos) y comisión leída de la
+      reserva. "Historial de pagos": los 20 más recientes con honorario neto
+      (monto − comisión), estado (exitoso / rechazado / reembolsado / "por
+      cobrar" solo en reservas ya confirmadas), medio de pago y fecha de la
+      cita. Carga con indicador, error con "Reintentar" y Snackbar (11 tests
+      nuevos en `LiquidacionesYFinanzasViewModelTest`). **Decisión:** con
+      Mercado Pago Marketplace el dinero llega directo a la cuenta del
+      profesional, así que **no hay "monto por liquidar", próximo depósito ni
+      cuenta bancaria de KineCare**: esas tarjetas quedan ocultas (el ViewModel
+      las deja en `null`; la cuenta bancaria se gestiona en Mercado Pago).
+      Boletas del SII, "Comprobante" y "Certificado anual" siguen sin
+      backend: la fila de boletas se oculta y los dos botones avisan
+      "Disponible próximamente". **Limitaciones:** la fecha del historial es la
+      de la cita (el pago no guarda fecha propia en el dominio); no se
+      verificó en dispositivo. **A revisar:** la tarjeta de Solicitudes dice
+      "Pago en custodia KineCare… se libera al completar", lo que contradice
+      Checkout Pro (no retiene fondos).
 - [x] Un profesional registrado desde la app no aparece en la búsqueda:
       `:feature:search` filtra `especialidades` por la etiqueta
       `KINESIOLOGIA`/`MASOTERAPIA` (`TipoAtencion`), que hoy solo tienen los
@@ -656,6 +745,185 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       5); pasan `testDebugUnitTest` de `:core:network` y
       `:feature:professional-panel` y `:app:assembleQaDebug`. **No verificado
       visualmente** en dispositivo.
+- [x] `:feature:professional-panel` — **Dashboard** conectado a perfil y
+      reservas reales (`ProfessionalPanelViewModel` ahora inyecta
+      `ReservaRepository`, `UsuarioRepository`, `ServicioRepository` y `Clock`).
+      Saludo con el primer nombre; banner de verificación solo con insignia
+      `CREDENCIALES` aprobada y RNPI informado (antes era un modelo vacío);
+      "Resumen de hoy": próximas = `CONFIRMADA` futuras, hoy en agenda =
+      confirmadas/en curso con fecha de hoy en hora de Chile, calificación y
+      reseñas del perfil, y "Actualizado HH:mm" (hora de la última lectura, no
+      un "hace X min" que quedaría falso); **próxima cita** = la `CONFIRMADA`
+      más cercana, con nombre de paciente y servicio reales (texto genérico si
+      falla la lectura), "En 45 min / 3 h / 2 días", comuna e indicaciones solo
+      si existen; **"Cómo llegar"** abre la dirección en la app de mapas
+      (`geo:`) y solo aparece en atenciones a domicilio con dirección; el
+      acceso "Solicitudes" muestra el contador de solicitudes por responder (las
+      mismas que lista "Solicitudes de atención"). Se refresca en cada
+      `ON_RESUME` (acción `Actualizar`, que reemplaza a `ActualizarCobros`), así
+      que aceptar una solicitud se refleja al volver. Cada lectura falla por
+      separado y conserva lo último conocido; si fallan las reservas se oculta el
+      resumen y la próxima cita pero el perfil sigue visible. Se quitaron la
+      distancia en km y el "piso" (el dominio no los tiene) y el botón "Ver
+      Ficha" (no existe pantalla de paciente). **"Por liquidar"** = honorario
+      neto de las `COMPLETADA` con pago `AUTORIZADO`: aproximación mientras no
+      exista un registro de liquidaciones (Fase 7, "Liquidaciones y finanzas"),
+      hoy casi siempre 0 porque nada pasa reservas a `COMPLETADA` (función de
+      completar sigue fuera de alcance). 14 tests nuevos en
+      `ProfessionalPanelViewModelTest` (22 en total); pasan
+      `:feature:professional-panel:testDebugUnitTest`, `lintDebug` y
+      `:app:assembleQaDebug`. **No verificado visualmente** en dispositivo.
+
+### Cierre de la parte gráfica (2026-10-12)
+- [x] Tema claro fijo + barras del sistema con iconos oscuros (el modo oscuro
+      del sistema dejaba el login ilegible; verificado en emulador). Modo oscuro
+      real queda como diseño pendiente (ver PENDIENTES.md).
+- [x] Login/registro: botón Ayuda con diálogo informativo; placeholders con
+      menos contraste (parecían texto escrito).
+- [x] Cliente — Mi perfil: "Agregar nueva dirección" (diálogo +
+      `ClienteRepository.agregarDireccion`); la tarjeta de direcciones ya no se
+      oculta cuando no hay ninguna. **Bug de fondo corregido:** el registro nunca
+      creaba `clientes/{uid}`, así que `obtenerPorId` daba `NO_ENCONTRADO` y los
+      favoritos fallaban; ahora lo crea vacío y las escrituras usan `set` con merge
+      (cubre clientes antiguos).
+- [x] Panel profesional: crear/editar servicio (`ServicioRepository.guardar`,
+      con límites también en las Security Rules de `servicios`), selector de hora
+      para los turnos, copiar N° SIS y abrir supersalud.gob.cl, "Previsualizar"
+      perfil público. Subir/ver documentos y "Editar credenciales" siguen
+      pendientes (los documentos los maneja el backend, Fase 6).
+- [x] Búsqueda: filtros de modalidad, "Solo verificados" y categoría ahora
+      filtran de verdad sobre los profesionales cargados; los conteos y precios
+      "desde" de la vitrina salen de datos reales (antes eran cifras inventadas).
+      "Solo verificados" parte apagado porque nadie puede verificarse aún.
+      Sin texto libre, orden ni mapa.
+- [x] Backend: Cloud Function `completarReserva` (`CONFIRMADA`/`EN_CURSO` →
+      `COMPLETADA`) + "Marcar como completada" en Solicitudes. **Desplegada en QA**
+      (verificado el 2026-10-12 con el listado de funciones).
+- [x] Lote de revisión de pantallas (2026-10-12): corazón de favoritos en el
+      perfil público y en las tarjetas de búsqueda (antes nada agregaba
+      favoritos y la pestaña quedaba siempre vacía); "Agendar" de Favoritos
+      abre la reserva; aviso (solo en la app) cuando el profesional no activó
+      Mercado Pago, en el perfil y en la revisión de la reserva; el resultado
+      de pago con "atrás" va a Mis Citas; Mis Citas, Favoritos, el dashboard y
+      Mi Perfil profesional muestran error con "Reintentar" en vez de "vacío";
+      textos de "custodia"/"liquidación semanal" reemplazados por el modelo real
+      (Mercado Pago directo al profesional); se ocultó lo que no existe
+      (Google Calendar sí funciona; boleta SII, chat, preparación, reprogramar,
+      switches de perfil público y disponibilidad, notificaciones, tarjeta de
+      insumos y de "KineCare Protect" inventadas); "Verificado" solo con insignia
+      aprobada; barras inferiores del panel profesional navegan.
+- [ ] Sigue sin aviso en el backend a profesionales sin Mercado Pago: `crearReserva`
+      y `responderReserva` los aceptan (decisión: solo aviso en la app).
+- [x] Reglas de `servicios` y `completarReserva` **desplegadas en QA**
+      (verificado el 2026-10-12: las reglas activas incluyen `servicioValido` y la
+      función figura en el listado).
+- [ ] No verificado en pantalla después del login (requiere una sesión real).
+
+### Backend: cancelación, expiración, push y cupos (2026-10-12) — **desplegado en QA**
+- [x] `cancelarReserva` (callable): cliente/profesional dueño cancelan una
+      `SOLICITADA`/`CONFIRMADA` con la cita futura; marca `reembolsoPendiente`
+      en el pago `AUTORIZADO` según la política. Tests unitarios + 21 de
+      integración (emulador).
+- [x] `expirarSolicitudes` (programada, cada 15 min): cierra las `SOLICITADA`
+      cuya hora pasó. **`EstadoReserva` no tiene `EXPIRADA`**: hoy pasan a
+      `RECHAZADA` con `expirada: true`; cuando el enum de dominio lo incorpore
+      basta cambiar `ESTADO_AL_EXPIRAR`. Índice nuevo `reservas(estado, fechaHora)`.
+- [x] Push FCM: `usuarios/{uid}/dispositivos/{token}` (reglas) y trigger
+      `notificarReserva` sobre `reservas/{id}`. Mensajería real sin probar:
+      los tests usan un doble de FCM.
+- [x] `obtenerCuposOcupados` (callable, cliente): tramos ocupados de un
+      profesional sin datos personales.
+- [x] Reglas de `resenas`: el profesional dueño responde una sola vez
+      (`respuestaProfesional`, 1..500 caracteres, solo esa clave). Probadas
+      por REST contra el emulador (`reglas.integration.test.ts`).
+- [x] **Desplegado en QA** (verificado el 2026-10-12 con el MCP de Firebase, solo
+      lectura): `cancelarReserva`, `expirarSolicitudes` (programada),
+      `notificarReserva` y `obtenerCuposOcupados` figuran en el listado de
+      funciones; las reglas activas incluyen `dispositivos` y la respuesta en
+      `resenas`; los 8 índices de `firestore.indexes.json` están `READY`
+      (incluido `reservas(estado, fechaHora)`). El MCP no muestra la versión del
+      código desplegado, solo que la función existe.
+- [ ] **Reembolso real de Mercado Pago**: no hay cliente de reembolso; hoy solo
+      queda `pagos/{id}.reembolsoPendiente` para procesarlo a mano.
+- [x] **Pago tardío tras cancelar**: un pago `PENDIENTE` con la preferencia de
+      Checkout Pro abierta que se aprueba después de cancelar (o de rechazar) la
+      reserva queda `AUTORIZADO` con `reembolsoPendiente: true`, `reembolsoPolitica:
+      "TOTAL"` y `reembolsoMotivo: "PAGO_TARDIO"` (`aplicarPago`, `functions/src/pagos.ts`).
+      La reserva no se reactiva y cancelar vs. webhook se serializan en transacción.
+      8 tests de integración nuevos (incluida una carrera cancelar/webhook) que
+      fallan sin el arreglo; 295 en total con `npm run test:emulator`. **Desplegado
+      en QA el 2026-10-12** desde `QA` en 76cb497 (`firebase deploy --only
+      functions:webhookMercadoPago,functions:estadoPago -P qa`); sin firma el
+      webhook responde 401 y `estadoPago` sin sesión también.
+      Limitación: la preferencia sigue abierta en Mercado Pago (cerrarla exigiría
+      llamar a su API con el token del vendedor) y la app mostrará "pago exitoso"
+      al cliente aunque la cita esté cancelada: el reembolso sigue siendo manual.
+- [x] Cliente Android — **push FCM**: `firebase-messaging` (catálogo, BoM
+      existente); `DispositivoPushRepository` (`:core:common` + `:core:network`)
+      registra `usuarios/{uid}/dispositivos/{token}` al haber sesión
+      (`AuthViewModel`) y en `onNewToken`, y lo borra **antes** de cerrar sesión
+      (3 s máx.; el `NavHost` espera). `KineCareMessagingService` (`:app`) muestra la
+      notificación en primer plano en el canal "Citas" (creado al arrancar, también
+      canal por defecto de FCM); tocarla abre Mis Citas (Cliente) o Solicitudes
+      (Profesional) según `data.tipo` y el rol (`AperturaNotificacion`,
+      `RESERVA_CANCELADA` va a ambos); `POST_NOTIFICATIONS` se pide tras iniciar
+      sesión, sin bloquear. Tests: registro/borrado de token, mapeo tipo→destino,
+      resolución según sesión y `AuthViewModel` (cierre ordenado). **No verificado en
+      dispositivo** (ver pendientes abajo).
+- [ ] Push: verificar en dispositivo con QA y un push real (el emulador fue
+      demasiado lento para la prueba): token en `dispositivos` tras login y borrado
+      al salir, notificación en primer plano, en segundo plano y con la app cerrada,
+      toque → Mis Citas / Solicitudes, permiso en Android 13+.
+- [x] **Fotos de perfil** (Cliente en Información Personal, Profesional en Mi Perfil):
+      `FotoPerfilRepository` (`:core:common` + `:core:network`, Firebase Storage),
+      `UsuarioRepository.actualizarFotoUrl`, selector `PickVisualMedia` (sin permisos),
+      reducción a JPEG ≤ 1280 px en memoria, `KineCareAvatar` (Coil → iniciales) en
+      Mi Perfil / Información Personal del cliente, Mi Perfil del profesional y
+      perfil público. Estados de progreso y error propios; sin bucket
+      (producción) degrada con mensaje. `storage.rules` + ruta del cliente validadas
+      con `scripts/probar-storage-rules.sh` (emuladores). Coil bajado a 3.4.0 en el
+      catálogo (3.5+ exige Kotlin 2.4). **`storage.rules` desplegadas en QA**
+      (verificado el 2026-10-12: las reglas activas incluyen la ruta del cliente).
+      **Pendiente:** probar en dispositivo con QA (subida real, foto en perfil
+      público, reemplazo sin foto cacheada: la URL lleva `&v=`).
+- [x] Cliente Android — **cancelar cita**: `ReservaRepository.cancelar`
+      (`:core:common` + `ReservaRepositoryImpl`, Retrofit `cancelarReserva`,
+      `CancelarReservaError`, `ResultadoCancelacion` con el `reembolso` que
+      informa el backend). Botón "Cancelar cita" en Mis Citas (cliente, citas
+      `SOLICITADA`/`CONFIRMADA` que aún no comienzan) y en Solicitudes de atención
+      (profesional, citas `CONFIRMADA` futuras), con diálogo de confirmación
+      (`KineCareTextInputDialog` de `:core:designsystem`), motivo opcional (300),
+      y aviso de reembolso antes de cancelar: total con ≥ 24 h y pago autorizado,
+      sin reembolso automático con < 24 h, "no hay nada que reembolsar" sin pago
+      cobrado; el profesional siempre reembolsa el total. Errores reintentables
+      (sin conexión, desconocido) quedan dentro del diálogo; los que indican que la
+      cita cambió (`ESTADO_INVALIDO`, `CITA_YA_INICIADA`, ...) cierran el diálogo,
+      avisan y recargan. Tras cancelar se recarga la lista y se avisa (Snackbar).
+      Mis Citas usa `Flow<MisCitasEvent>` para el aviso; Solicitudes mantiene su
+      `mensaje` en el estado (patrón previo de esa pantalla).
+- [x] Cliente Android — **cupos ocupados en la reserva**: al abrir el paso
+      fecha/hora `BookingViewModel` llama `obtenerCuposOcupados` (desde ahora
+      hasta la medianoche de Chile del día 14, < 15 días) y descuenta los cupos
+      solapados (`descontarCuposOcupados`). Mientras consulta no se ofrecen
+      horarios; si falla no bloquea (se detecta al confirmar). Un horario que
+      `crearReserva` rechaza no se vuelve a ofrecer y se refrescan los cupos.
+- [x] Cliente Android — **responder reseñas** (`:feature:reviews`): el profesional
+      dueño ve "Responder" en reseñas sin respuesta; diálogo de hasta 500
+      caracteres → `ResenaRepository.responder` (`update` de
+      `respuestaProfesional`). Se oculta si ya hay respuesta (no se edita).
+- [x] Cliente Android — **búsqueda** (`:feature:search`): texto libre (sin tildes
+      ni mayúsculas; todas las palabras deben calzar) sobre nombre, especialidad y
+      descripción de los profesionales cargados, y orden por mejor calificados /
+      menor precio "desde" / más reseñas. **Comuna:** los profesionales no tienen
+      comuna en Firestore, así que solo calza si la descripción la menciona.
+- [x] Cliente Android — **solicitudes expiradas**: `Reserva.expirada` (campo
+      opcional de Firestore) se muestra como "Solicitud vencida sin respuesta" en
+      Mis Citas y "Vencida sin respuesta" en el historial del profesional.
+- [x] Cliente Android — **Mi perfil**: "Derechos del Paciente" abre un diálogo
+      informativo (Ley 20.584); se quitaron los interruptores "Avisos por WhatsApp"
+      e "Ingreso biométrico" (no tenían backend ni persistencia). Las tarjetas de
+      previsión, tratamiento, método de pago y facturación siguen ocultas mientras
+      no haya datos reales.
 
 ## Fase 8 — QA, pulido y publicación
 - [ ] Cobertura de tests (JUnit5, MockK, Turbine, Compose UI Testing)
@@ -671,10 +939,10 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       encontraba 2 errores que ya estaban en `QA` (falta `@RequiresApi` en el
       `Geocoder` asíncrono de `:feature:search` y un `Locale.getDefault()` no
       observable en `LiquidacionesYFinanzasScreen`); corregidos en el mismo
-      cambio. **Pendiente:** exigir el check `CI` en las rulesets de `QA` y
-      `PRD` (solo se puede elegir tras la primera corrida en GitHub), cuando
-      se sume release firmado (Fase 5 del estándar) y revisar si el tiempo de
-      la corrida justifica separar el job de Android.
+      cambio. El check `CI` ya es obligatorio en las rulesets de `QA` y
+      `PRD` (2026-10-09, sin exigir rama al día con la base). **Pendiente:**
+      sumar release firmado (Fase 5 del estándar) y revisar si el tiempo de la
+      corrida justifica separar el job de Android.
 - [ ] R8/ProGuard, revisión de seguridad
 - [ ] Publicación en Play Store
 

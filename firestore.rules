@@ -6,12 +6,47 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == uid;
     }
 
+    // fotoUrl la carga Coil en el dispositivo de cualquiera que vea el perfil, asi que no puede ser
+    // una URL arbitraria (rastreo de IP). Solo se acepta: nula, la URL de descarga de la propia
+    // foto en Storage (`clientes|profesionales/{uid}/foto-perfil.jpg`) o una foto de Google
+    // (Google Sign-In la copia al registrarse). El bucket no se fija en la regla: es el mismo
+    // archivo para QA y PRD.
+    function fotoUrlValida(uid, data) {
+      return data.get('fotoUrl', null) == null
+        || (data.fotoUrl is string
+            && (data.fotoUrl.matches('https://firebasestorage[.]googleapis[.]com/v0/b/[^/]+/o/(clientes|profesionales)%2F'
+                  + uid + '%2Ffoto-perfil[.]jpg[?].*')
+                || data.fotoUrl.matches('https://lh[0-9][.]googleusercontent[.]com/.*')));
+    }
+
+    // rut, email y fechaRegistro se fijan al registrarse y no se editan: la unicidad del RUT solo
+    // se comprueba en el cliente, y verificacion de identidad compara contra el.
     match /usuarios/{usuarioId} {
       allow read: if request.auth != null;
-      allow create: if esDueno(usuarioId);
+      allow create: if esDueno(usuarioId) && fotoUrlValida(usuarioId, request.resource.data);
       allow update: if esDueno(usuarioId)
-        && request.resource.data.rol == resource.data.rol;
+        && request.resource.data.rol == resource.data.rol
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['rut', 'email', 'fechaRegistro'])
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['fotoUrl'])
+            || fotoUrlValida(usuarioId, request.resource.data));
       allow delete: if false;
+    }
+
+    // Tokens FCM del propio usuario (id del documento = token). Solo el dueno los lee, crea,
+    // refresca (re-registrar el mismo token actualiza actualizadoEn) y borra; claves exactas.
+    // Quien envia los push es una Cloud Function (Admin SDK), que ignora estas reglas.
+    function dispositivoValido(token) {
+      return request.resource.data.keys().hasAll(['plataforma', 'actualizadoEn'])
+        && request.resource.data.keys().hasOnly(['plataforma', 'actualizadoEn'])
+        && request.resource.data.plataforma == 'ANDROID'
+        && request.resource.data.actualizadoEn == request.time
+        && token.size() >= 1 && token.size() <= 4096;
+    }
+
+    match /usuarios/{usuarioId}/dispositivos/{token} {
+      allow read: if esDueno(usuarioId);
+      allow create, update: if esDueno(usuarioId) && dispositivoValido(token);
+      allow delete: if esDueno(usuarioId);
     }
 
     match /clientes/{usuarioId} {
@@ -47,21 +82,40 @@ service cloud.firestore {
         && request.resource.data.estadoVerificacionGeneral == 'NO_SOLICITADO'
         && request.resource.data.insignias == []
         && request.resource.data.disponibilidad is list;
-      // Reputacion (calificacionPromedio/totalResenas) ordena la busqueda: no
-      // la escribe el dueno. mercadoPagoConectado lo escribe solo la Cloud Function
-      // del callback OAuth (el dueno no puede autoproclamarse "cobrable"). tiposAtencion es opcional en perfiles legados,
-      // pero si se toca tiene que quedar valido.
+      // El dueno solo edita lo que el panel profesional expone: tiposAtencion, especialidades,
+      // descripcion y disponibilidad. Todo lo demas lo escriben Cloud Functions (Admin SDK):
+      // reputacion (ordena la busqueda), insignias/estadoVerificacionGeneral, mercadoPagoConectado
+      // (el callback OAuth; el dueno no puede autoproclamarse "cobrable") y rnpi (lo valida la
+      // verificacion, no se autodeclara despues de registrarse). tiposAtencion es opcional en
+      // perfiles legados, pero si se toca tiene que quedar valido.
       allow update: if esDueno(usuarioId)
-        && !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['insignias', 'estadoVerificacionGeneral', 'calificacionPromedio', 'totalResenas',
-                     'mercadoPagoConectado'])
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['tiposAtencion', 'especialidades', 'descripcion', 'disponibilidad'])
         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['tiposAtencion'])
             || tiposAtencionValidos(request.resource.data));
       allow delete: if false;
 
+      // Catalogo del profesional. crearReserva toma de aqui modalidad, duracion y
+      // precio, asi que se acotan para que un valor absurdo no llegue al cobro.
+      // Pausar/activar (solo `activo`) no revalida el resto: hay servicios
+      // sembrados anteriores a estos limites.
+      function servicioValido(d) {
+        return d.keys().hasAll(['nombre', 'descripcion', 'modalidad', 'duracionMinutos', 'precio', 'activo'])
+          && d.nombre is string && d.nombre.size() >= 3 && d.nombre.size() <= 80
+          && d.descripcion is string && d.descripcion.size() <= 300
+          && d.modalidad in ['DOMICILIO', 'CONSULTA', 'ONLINE']
+          && d.duracionMinutos is int && d.duracionMinutos >= 15 && d.duracionMinutos <= 480
+          && d.precio is int && d.precio >= 1000 && d.precio <= 1000000
+          && d.activo is bool;
+      }
+
       match /servicios/{servicioId} {
         allow read: if true;
-        allow write: if esDueno(usuarioId);
+        allow create: if esDueno(usuarioId) && servicioValido(request.resource.data);
+        allow update: if esDueno(usuarioId)
+          && (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['activo'])
+              || servicioValido(request.resource.data));
+        allow delete: if esDueno(usuarioId);
       }
     }
 
@@ -105,9 +159,17 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/reservas/$(request.resource.data.reservaId)).data.estado == 'COMPLETADA'
         && get(/databases/$(database)/documents/reservas/$(request.resource.data.reservaId)).data.clienteId == request.auth.uid
         && get(/databases/$(database)/documents/reservas/$(request.resource.data.reservaId)).data.profesionalId == request.resource.data.profesionalId;
+      // Responder: solo el profesional de la resena (rol leido de usuarios/{uid}), solo la clave
+      // respuestaProfesional, una sola vez (no se edita ni se borra), texto 1..500. No toca
+      // calificacion/profesionalId, asi que recalcularCalificacion no recalcula.
       allow update: if request.auth != null
         && request.auth.uid == resource.data.profesionalId
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['respuestaProfesional']);
+        && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'PROFESIONAL'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['respuestaProfesional'])
+        && (!('respuestaProfesional' in resource.data) || resource.data.respuestaProfesional == null)
+        && request.resource.data.respuestaProfesional is string
+        && request.resource.data.respuestaProfesional.trim().size() >= 1
+        && request.resource.data.respuestaProfesional.size() <= 500;
       allow delete: if false;
     }
 

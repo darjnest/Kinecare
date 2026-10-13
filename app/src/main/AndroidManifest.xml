@@ -2,6 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Android 13+: permiso en tiempo de ejecucion para mostrar notificaciones (se pide tras iniciar
+         sesion y nunca bloquea nada: sin el, la app funciona igual y solo no avisa). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:name=".KineCareApplication"
         android:allowBackup="true"
@@ -66,6 +70,22 @@
                     android:scheme="kinecare" />
             </intent-filter>
         </activity>
+
+        <!-- Notificaciones push (FCM): token nuevo y mensajes con la app en primer plano. Con la app en
+             segundo plano el sistema muestra la notificacion solo, en el canal por defecto de abajo. -->
+        <service
+            android:name=".push.KineCareMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="@string/canal_citas_id" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_notificacion" />
     </application>
 
 </manifest>

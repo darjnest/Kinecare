@@ -28,4 +28,10 @@ interface UsuarioRepository {
         telefono: String?,
         correoContacto: String?,
     ): Result<Unit, UsuarioError>
+
+    /**
+     * Guarda en `usuarios/{id}.fotoUrl` la URL de la foto de perfil recien subida a Storage
+     * (`FotoPerfilRepository.subir`). Un [fotoUrl] nulo la quita.
+     */
+    suspend fun actualizarFotoUrl(id: String, fotoUrl: String?): Result<Unit, UsuarioError>
 }

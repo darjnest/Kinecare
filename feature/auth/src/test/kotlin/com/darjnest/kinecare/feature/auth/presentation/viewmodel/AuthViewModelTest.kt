@@ -2,6 +2,8 @@
 
 package com.darjnest.kinecare.feature.auth.presentation.viewmodel
 
+import com.darjnest.kinecare.core.common.data.error.DispositivoPushError
+import com.darjnest.kinecare.core.common.data.repository.DispositivoPushRepository
 import com.darjnest.kinecare.core.common.domain.model.RolUsuario
 import com.darjnest.kinecare.core.common.domain.model.TipoAtencion
 import com.darjnest.kinecare.core.common.domain.model.Usuario
@@ -12,8 +14,12 @@ import com.darjnest.kinecare.feature.auth.domain.ResultadoGoogle
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
+import io.mockk.coVerifyOrder
 import io.mockk.mockk
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -35,6 +41,10 @@ class AuthViewModelTest {
     private val authRepository = mockk<AuthRepository>(relaxed = true) {
         every { observarUsuarioActual() } returns emptyFlow()
     }
+    private val dispositivoPushRepository = mockk<DispositivoPushRepository> {
+        coEvery { registrarDispositivoActual() } returns Result.Success(Unit)
+        coEvery { eliminarDispositivoActual() } returns Result.Success(Unit)
+    }
     private val loginPreferences = mockk<LoginPreferences> {
         coEvery { recordarCuenta() } returns false
         coEvery { rutRecordado() } returns ""
@@ -52,7 +62,7 @@ class AuthViewModelTest {
         fechaRegistro = Instant.fromEpochMilliseconds(0),
     )
 
-    private fun crearViewModel() = AuthViewModel(authRepository, loginPreferences)
+    private fun crearViewModel() = AuthViewModel(authRepository, loginPreferences, dispositivoPushRepository)
 
     private fun AuthViewModel.completarFormularioRegistro(rol: RolUsuario) {
         onAction(AuthAction.CambiarModo(ModoAuth.REGISTRO))
@@ -167,5 +177,92 @@ class AuthViewModelTest {
             )
         }
         assertEquals(usuario, viewModel.state.value.usuarioAutenticado)
+    }
+
+    @Test
+    fun `al haber sesion registra el dispositivo para las notificaciones push`() = runTest {
+        val sesion = MutableSharedFlow<Usuario?>()
+        every { authRepository.observarUsuarioActual() } returns sesion
+        crearViewModel()
+
+        sesion.emit(null)
+        coVerify(exactly = 0) { dispositivoPushRepository.registrarDispositivoActual() }
+
+        sesion.emit(usuario)
+        coVerify(exactly = 1) { dispositivoPushRepository.registrarDispositivoActual() }
+    }
+
+    @Test
+    fun `no vuelve a registrar el dispositivo si la misma sesion se emite otra vez`() = runTest {
+        val sesion = MutableSharedFlow<Usuario?>()
+        every { authRepository.observarUsuarioActual() } returns sesion
+        crearViewModel()
+
+        sesion.emit(usuario)
+        sesion.emit(usuario.copy(nombre = "Ana Soto Rojas"))
+
+        coVerify(exactly = 1) { dispositivoPushRepository.registrarDispositivoActual() }
+    }
+
+    @Test
+    fun `un fallo al registrar el dispositivo no afecta a la sesion`() = runTest {
+        coEvery { dispositivoPushRepository.registrarDispositivoActual() } returns
+            Result.Error(DispositivoPushError.SIN_INTERNET)
+        val sesion = MutableSharedFlow<Usuario?>()
+        every { authRepository.observarUsuarioActual() } returns sesion
+        val viewModel = crearViewModel()
+
+        sesion.emit(usuario)
+
+        assertEquals(usuario, viewModel.state.value.usuarioAutenticado)
+    }
+
+    @Test
+    fun `cerrar sesion borra primero el token push y despues cierra la sesion`() = runTest {
+        val viewModel = crearViewModel()
+
+        viewModel.cerrarSesion()
+
+        coVerifyOrder {
+            dispositivoPushRepository.eliminarDispositivoActual()
+            authRepository.cerrarSesion()
+        }
+    }
+
+    @Test
+    fun `la accion CerrarSesion tambien borra el token antes de cerrar`() = runTest {
+        val viewModel = crearViewModel()
+
+        viewModel.onAction(AuthAction.CerrarSesion)
+
+        coVerifyOrder {
+            dispositivoPushRepository.eliminarDispositivoActual()
+            authRepository.cerrarSesion()
+        }
+    }
+
+    @Test
+    fun `si borrar el token falla igual se cierra la sesion`() = runTest {
+        coEvery { dispositivoPushRepository.eliminarDispositivoActual() } returns
+            Result.Error(DispositivoPushError.SIN_INTERNET)
+        val viewModel = crearViewModel()
+
+        viewModel.cerrarSesion()
+
+        coVerify(exactly = 1) { authRepository.cerrarSesion() }
+    }
+
+    @Test
+    fun `si borrar el token se cuelga cerrar sesion no espera mas del limite`() = runTest {
+        coEvery { dispositivoPushRepository.eliminarDispositivoActual() } coAnswers {
+            delay(60_000)
+            Result.Success(Unit)
+        }
+        val viewModel = crearViewModel()
+
+        viewModel.cerrarSesion()
+
+        assertTrue(currentTime <= TIEMPO_MAXIMO_BORRAR_TOKEN_MS)
+        coVerify(exactly = 1) { authRepository.cerrarSesion() }
     }
 }

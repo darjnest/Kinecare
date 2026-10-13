@@ -32,5 +32,9 @@ dependencies {
     implementation(libs.androidx.compose.material.icons.extended)
     // Custom Tabs compartido (`abrirEnCustomTab`): pago, OAuth y verificacion de identidad.
     implementation(libs.androidx.browser)
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.coil.compose)
+    // Sin un fetcher de red Coil no carga URLs http(s) (las fotos de perfil son de Firebase Storage).
+    implementation(libs.coil.network.okhttp)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }

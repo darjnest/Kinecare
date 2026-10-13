@@ -77,6 +77,8 @@ class FavoritosViewModelTest {
         nombre: String,
         identidadVerificada: Boolean = true,
         precios: List<Long> = listOf(18000L),
+        credencialesVerificadas: Boolean = false,
+        verificacionGeneral: EstadoVerificacion = EstadoVerificacion.APROBADO,
     ): Profesional = Profesional(
         usuario = Usuario(
             id = id,
@@ -108,12 +110,18 @@ class FavoritosViewModelTest {
                 detalle = null,
                 fechaActualizacion = Instant.fromEpochMilliseconds(0),
             ),
+            Insignia(
+                tipo = TipoInsignia.CREDENCIALES,
+                estado = if (credencialesVerificadas) EstadoVerificacion.APROBADO else EstadoVerificacion.PENDIENTE,
+                detalle = null,
+                fechaActualizacion = Instant.fromEpochMilliseconds(0),
+            ),
         ),
         disponibilidad = emptyList(),
         calificacionPromedio = 4.8,
         totalResenas = 20,
         descripcion = "desc",
-        estadoVerificacionGeneral = EstadoVerificacion.APROBADO,
+        estadoVerificacionGeneral = verificacionGeneral,
     )
 
     @Test
@@ -155,7 +163,71 @@ class FavoritosViewModelTest {
             val estado = awaitItem()
             assertFalse(estado.cargando)
             assertTrue(estado.favoritos.isEmpty())
+            // Error de carga distinguible del estado vacio: la vista ofrece "Reintentar".
+            assertTrue(estado.errorCarga)
         }
+    }
+
+    @Test
+    fun `Reintentar vuelve a cargar los favoritos y limpia el error`() = runTest {
+        coEvery { clienteRepository.obtenerPorId(uid) } returns Result.Error(ClienteError.SIN_INTERNET)
+        val viewModel = crearViewModel()
+        assertTrue(viewModel.state.value.errorCarga)
+
+        coEvery { clienteRepository.obtenerPorId(uid) } returns Result.Success(clienteDePrueba(listOf("prof-1")))
+        coEvery { profesionalRepository.obtenerPorId("prof-1") } returns
+            Result.Success(profesionalDePrueba("prof-1", "Bruno Diaz"))
+        viewModel.onAction(FavoritosAction.Reintentar)
+
+        val estado = viewModel.state.value
+        assertFalse(estado.errorCarga)
+        assertFalse(estado.cargando)
+        assertEquals(listOf("prof-1"), estado.favoritos.map { it.id })
+        coVerify(exactly = 2) { clienteRepository.obtenerPorId(uid) }
+    }
+
+    @Test
+    fun `Reintentar mientras ya se esta cargando no dispara una segunda carga`() = runTest {
+        val gate = CompletableDeferred<Result<Cliente, ClienteError>>()
+        coEvery { clienteRepository.obtenerPorId(uid) } coAnswers { gate.await() }
+        val viewModel = crearViewModel()
+        assertTrue(viewModel.state.value.cargando)
+
+        viewModel.onAction(FavoritosAction.Reintentar)
+
+        coVerify(exactly = 1) { clienteRepository.obtenerPorId(uid) }
+        gate.complete(Result.Success(clienteDePrueba(emptyList())))
+    }
+
+    @Test
+    fun `la insignia Verificado solo se marca con verificacion general y credenciales aprobadas`() = runTest {
+        coEvery { clienteRepository.obtenerPorId(uid) } returns Result.Success(clienteDePrueba(listOf("prof-1", "prof-2")))
+        coEvery { profesionalRepository.obtenerPorId("prof-1") } returns Result.Success(
+            profesionalDePrueba("prof-1", "Bruno Diaz", credencialesVerificadas = true),
+        )
+        coEvery { profesionalRepository.obtenerPorId("prof-2") } returns Result.Success(
+            profesionalDePrueba("prof-2", "Carla Reyes", verificacionGeneral = EstadoVerificacion.PENDIENTE),
+        )
+
+        val favoritos = crearViewModel().state.value.favoritos
+
+        assertTrue(favoritos[0].verificado)
+        assertTrue(favoritos[0].credencialesVerificadas)
+        assertFalse(favoritos[1].verificado)
+        assertFalse(favoritos[1].credencialesVerificadas)
+    }
+
+    @Test
+    fun `AgendarConProfesional es navegacion y no cambia el estado`() = runTest {
+        coEvery { clienteRepository.obtenerPorId(uid) } returns Result.Success(clienteDePrueba(listOf("prof-1")))
+        coEvery { profesionalRepository.obtenerPorId("prof-1") } returns
+            Result.Success(profesionalDePrueba("prof-1", "Bruno Diaz"))
+        val viewModel = crearViewModel()
+        val antes = viewModel.state.value
+
+        viewModel.onAction(FavoritosAction.AgendarConProfesional("prof-1"))
+
+        assertEquals(antes, viewModel.state.value)
     }
 
     @Test

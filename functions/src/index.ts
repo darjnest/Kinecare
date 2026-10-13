@@ -3,10 +3,17 @@ import { getFirestore } from "firebase-admin/firestore";
 import { defineSecret, defineString } from "firebase-functions/params";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { onCall, onRequest } from "firebase-functions/v2/https";
+import { onSchedule } from "firebase-functions/v2/scheduler";
+import { cancelarReservaHandler } from "./cancelarReserva.js";
 import { calificacionTriggerHandler } from "./calificacion.js";
 import { conectarMercadoPagoHandler, oauthCallbackHandler, type RespuestaHttp } from "./conectarMercadoPago.js";
+import { completarReservaHandler } from "./completarReserva.js";
 import { crearReservaHandler } from "./crearReserva.js";
+import { obtenerCuposOcupadosHandler } from "./cupos.js";
+import { expirarSolicitudesHandler } from "./expirarSolicitudes.js";
 import { iniciarPagoHandler, type DepsPago } from "./iniciarPago.js";
+import { crearMensajeriaAdmin } from "./mensajeria.js";
+import { notificarCambioReserva } from "./notificaciones.js";
 import { parseClave } from "./mercadopago/cifrado.js";
 import { crearPasarelaMP } from "./mercadopago/pasarela.js";
 import { estadoPagoHandler, retornoPagoHandler, webhookHandler } from "./pagos.js";
@@ -25,6 +32,38 @@ export const crearReserva = onCall({ region: "us-central1" }, (request) =>
 
 export const responderReserva = onCall({ region: "us-central1" }, (request) =>
   responderReservaHandler(getFirestore(), request.auth?.uid, request.data, new Date()),
+);
+
+export const completarReserva = onCall({ region: "us-central1" }, (request) =>
+  completarReservaHandler(getFirestore(), request.auth?.uid, request.data, new Date()),
+);
+
+export const cancelarReserva = onCall({ region: "us-central1" }, (request) =>
+  cancelarReservaHandler(getFirestore(), request.auth?.uid, request.data, new Date()),
+);
+
+export const obtenerCuposOcupados = onCall({ region: "us-central1" }, (request) =>
+  obtenerCuposOcupadosHandler(getFirestore(), request.auth?.uid, request.data),
+);
+
+// Solicitudes sin respuesta cuya hora ya paso: se cierran solas (ver expirarSolicitudes.ts).
+export const expirarSolicitudes = onSchedule({ schedule: "every 15 minutes", region: "us-central1" }, async () => {
+  await expirarSolicitudesHandler(getFirestore(), new Date());
+});
+
+// Push (FCM) a la contraparte cuando cambia el estado de una reserva. Sin `retry`: reintentar
+// duplicaria avisos (ver notificaciones.ts).
+export const notificarReserva = onDocumentWritten(
+  { document: "reservas/{reservaId}", region: "us-central1" },
+  async (event) => {
+    await notificarCambioReserva(
+      getFirestore(),
+      crearMensajeriaAdmin(),
+      event.params.reservaId,
+      event.data?.before.data(),
+      event.data?.after.data(),
+    );
+  },
 );
 
 // Mantiene `profesionales.calificacionPromedio`/`totalResenas` al día cuando cambia una reseña (el

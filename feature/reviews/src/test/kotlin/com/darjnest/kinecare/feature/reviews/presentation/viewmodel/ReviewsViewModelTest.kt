@@ -14,7 +14,10 @@ import com.darjnest.kinecare.core.common.domain.model.Usuario
 import com.darjnest.kinecare.core.common.result.Result
 import com.darjnest.kinecare.feature.reviews.presentation.navigation.ARG_PROFESIONAL_ID
 import io.mockk.coEvery
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseUser
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.runTest
@@ -37,12 +40,21 @@ class ReviewsViewModelTest {
 
     private val resenaRepository = mockk<ResenaRepository>()
     private val usuarioRepository = mockk<UsuarioRepository>()
+    private val firebaseAuth = mockk<FirebaseAuth>()
 
     private val profesionalId = "prof-1"
 
-    private fun crearViewModel(id: String? = profesionalId): ReviewsViewModel {
+    /** Por defecto mira un cliente cualquiera; [uid] = `profesionalId` simula al profesional dueño. */
+    private fun crearViewModel(id: String? = profesionalId, uid: String? = "cli-visitante"): ReviewsViewModel {
+        if (uid == null) {
+            every { firebaseAuth.currentUser } returns null
+        } else {
+            val usuario = mockk<FirebaseUser>()
+            every { usuario.uid } returns uid
+            every { firebaseAuth.currentUser } returns usuario
+        }
         val handle = if (id == null) SavedStateHandle() else SavedStateHandle(mapOf(ARG_PROFESIONAL_ID to id))
-        return ReviewsViewModel(handle, resenaRepository, usuarioRepository)
+        return ReviewsViewModel(handle, resenaRepository, usuarioRepository, firebaseAuth)
     }
 
     private fun resena(
@@ -276,5 +288,152 @@ class ReviewsViewModelTest {
         viewModel.onAction(ReviewsAction.Reintentar)
 
         assertEquals("Ana S.", viewModel.state.value.resenas.single().autor)
+    }
+
+    // --- responder (profesional dueño) ---
+
+    private fun cargarComoProfesional(vararg resenas: Resena): ReviewsViewModel {
+        coEvery { resenaRepository.obtenerPorProfesional(profesionalId) } returns Result.Success(resenas.toList())
+        stubUsuario("cli-1", "María Pérez Soto")
+        return crearViewModel(uid = profesionalId)
+    }
+
+    @Test
+    fun `solo el profesional dueño puede responder y solo a resenas sin respuesta`() = runTest {
+        val resenas = arrayOf(resena("r1"), resena("r2", respuesta = "Gracias"))
+
+        val comoProfesional = cargarComoProfesional(*resenas)
+        assertEquals(
+            mapOf("r1" to true, "r2" to false),
+            comoProfesional.state.value.resenas.associate { it.id to it.puedeResponder },
+        )
+
+        val comoCliente = crearViewModel(uid = "cli-1")
+        assertTrue(comoCliente.state.value.resenas.none { it.puedeResponder })
+
+        val sinSesion = crearViewModel(uid = null)
+        assertTrue(sinSesion.state.value.resenas.none { it.puedeResponder })
+    }
+
+    @Test
+    fun `Responder abre el dialogo con el autor y una resena que no se puede responder no`() = runTest {
+        val viewModel = cargarComoProfesional(resena("r1"), resena("r2", respuesta = "Gracias"))
+
+        viewModel.onAction(ReviewsAction.Responder("r2"))
+        assertNull(viewModel.state.value.respuesta)
+
+        viewModel.onAction(ReviewsAction.Responder("r1"))
+        val respuesta = requireNotNull(viewModel.state.value.respuesta)
+        assertEquals("r1", respuesta.resenaId)
+        assertEquals("María S.", respuesta.autor)
+        assertFalse(respuesta.puedeEnviar)
+    }
+
+    @Test
+    fun `un cliente no puede abrir el dialogo de respuesta`() = runTest {
+        coEvery { resenaRepository.obtenerPorProfesional(profesionalId) } returns Result.Success(listOf(resena("r1")))
+        stubUsuario("cli-1", "María Pérez Soto")
+        val viewModel = crearViewModel(uid = "cli-1")
+
+        viewModel.onAction(ReviewsAction.Responder("r1"))
+
+        assertNull(viewModel.state.value.respuesta)
+    }
+
+    @Test
+    fun `el texto se limita a 500 caracteres y un texto en blanco no se puede enviar`() = runTest {
+        val viewModel = cargarComoProfesional(resena("r1"))
+        viewModel.onAction(ReviewsAction.Responder("r1"))
+
+        viewModel.onAction(ReviewsAction.CambiarRespuesta("   "))
+        assertFalse(requireNotNull(viewModel.state.value.respuesta).puedeEnviar)
+
+        viewModel.onAction(ReviewsAction.CambiarRespuesta("a".repeat(600)))
+        val respuesta = requireNotNull(viewModel.state.value.respuesta)
+        assertEquals(500, respuesta.texto.length)
+        assertTrue(respuesta.puedeEnviar)
+    }
+
+    @Test
+    fun `DescartarRespuesta cierra el dialogo sin escribir`() = runTest {
+        val viewModel = cargarComoProfesional(resena("r1"))
+        viewModel.onAction(ReviewsAction.Responder("r1"))
+
+        viewModel.onAction(ReviewsAction.DescartarRespuesta)
+
+        assertNull(viewModel.state.value.respuesta)
+        coVerify(exactly = 0) { resenaRepository.responder(any(), any()) }
+    }
+
+    @Test
+    fun `EnviarRespuesta publica el texto recortado, muestra la respuesta y avisa`() = runTest {
+        val viewModel = cargarComoProfesional(resena("r1"))
+        coEvery { resenaRepository.responder("r1", "Gracias por venir") } returns Result.Success(Unit)
+        viewModel.onAction(ReviewsAction.Responder("r1"))
+        viewModel.onAction(ReviewsAction.CambiarRespuesta("  Gracias por venir "))
+
+        viewModel.eventos.test {
+            viewModel.onAction(ReviewsAction.EnviarRespuesta)
+
+            assertEquals(ReviewsEvent.MostrarMensaje("Respuesta publicada."), awaitItem())
+        }
+
+        val state = viewModel.state.value
+        assertNull(state.respuesta)
+        val item = state.resenas.single()
+        assertEquals("Gracias por venir", item.respuestaProfesional)
+        assertFalse(item.puedeResponder)
+    }
+
+    @Test
+    fun `mientras envia el dialogo queda bloqueado y no se envia dos veces`() = runTest {
+        val viewModel = cargarComoProfesional(resena("r1"))
+        val gate = CompletableDeferred<Result<Unit, ResenaError>>()
+        coEvery { resenaRepository.responder(any(), any()) } coAnswers { gate.await() }
+        viewModel.onAction(ReviewsAction.Responder("r1"))
+        viewModel.onAction(ReviewsAction.CambiarRespuesta("Gracias"))
+
+        viewModel.onAction(ReviewsAction.EnviarRespuesta)
+        viewModel.onAction(ReviewsAction.EnviarRespuesta)
+        viewModel.onAction(ReviewsAction.CambiarRespuesta("otro texto"))
+        viewModel.onAction(ReviewsAction.DescartarRespuesta)
+
+        val respuesta = requireNotNull(viewModel.state.value.respuesta)
+        assertTrue(respuesta.enviando)
+        assertEquals("Gracias", respuesta.texto)
+        coVerify(exactly = 1) { resenaRepository.responder(any(), any()) }
+        gate.complete(Result.Success(Unit))
+    }
+
+    @Test
+    fun `un error deja el dialogo abierto con el mensaje y la resena sin respuesta`() = runTest {
+        val viewModel = cargarComoProfesional(resena("r1"))
+        coEvery { resenaRepository.responder(any(), any()) } returns Result.Error(ResenaError.SIN_INTERNET)
+        viewModel.onAction(ReviewsAction.Responder("r1"))
+        viewModel.onAction(ReviewsAction.CambiarRespuesta("Gracias"))
+
+        viewModel.onAction(ReviewsAction.EnviarRespuesta)
+
+        val state = viewModel.state.value
+        val respuesta = requireNotNull(state.respuesta)
+        assertFalse(respuesta.enviando)
+        assertEquals("Sin conexión. Revisa tu internet e inténtalo de nuevo.", respuesta.error)
+        assertEquals("Gracias", respuesta.texto)
+        assertNull(state.resenas.single().respuestaProfesional)
+
+        viewModel.onAction(ReviewsAction.CambiarRespuesta("Gracias de nuevo"))
+        assertNull(viewModel.state.value.respuesta?.error)
+    }
+
+    @Test
+    fun `SIN_PERMISO se explica en el dialogo`() = runTest {
+        val viewModel = cargarComoProfesional(resena("r1"))
+        coEvery { resenaRepository.responder(any(), any()) } returns Result.Error(ResenaError.SIN_PERMISO)
+        viewModel.onAction(ReviewsAction.Responder("r1"))
+        viewModel.onAction(ReviewsAction.CambiarRespuesta("Gracias"))
+
+        viewModel.onAction(ReviewsAction.EnviarRespuesta)
+
+        assertTrue(requireNotNull(viewModel.state.value.respuesta?.error).contains("no es de tu perfil"))
     }
 }
