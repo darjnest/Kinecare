@@ -28,7 +28,7 @@ import com.darjnest.kinecare.core.designsystem.components.card.KineCareCard
 import com.darjnest.kinecare.core.designsystem.theme.KineCareSpacing
 import com.darjnest.kinecare.core.designsystem.theme.KineCareTheme
 import com.darjnest.kinecare.feature.payment.presentation.util.MENSAJE_SIN_NAVEGADOR
-import com.darjnest.kinecare.feature.payment.presentation.util.abrirEnCustomTab
+import com.darjnest.kinecare.core.designsystem.util.abrirEnCustomTab
 import com.darjnest.kinecare.feature.payment.presentation.util.mensajeErrorConexion
 import com.darjnest.kinecare.feature.payment.presentation.viewmodel.ConectarMercadoPagoAction
 import com.darjnest.kinecare.feature.payment.presentation.viewmodel.ConectarMercadoPagoEvent

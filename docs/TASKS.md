@@ -502,9 +502,64 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       JVM; **no se ha ejecutado contra Remote Config real ni en Android**.
 
 ## Fase 6 — Verificación de identidad
-- [ ] Elegir proveedor (Truora / Metamap / Didit)
-- [ ] `:feature:verification`
-- [ ] Cloud Functions `solicitarVerificacion`, `estadoVerificacion`
+- [x] Elegir proveedor: **Didit** (2026-10-08). Comparado con Metamap (la más
+      fuerte para Chile: verificación contra el Registro Civil, pero exige
+      ventas) y Truora (documentación pública sin cédula chilena ni webhooks
+      confirmados). Se eligió Didit por API de autoservicio, flujo alojado,
+      webhooks con firma HMAC, soporte declarado de cédula chilena y KYC básico
+      gratis; **ningún proveedor publica precios para Chile**, así que el costo
+      real es una incógnita hasta abrir la cuenta. El backend queda detrás de
+      `ProveedorVerificacion`: cambiar de proveedor es un adaptador.
+- [x] Cloud Functions de verificación de identidad (`functions/src/verificacion/`):
+      `solicitarVerificacion`, `estadoVerificacion`, `webhookDidit` y
+      `retornoVerificacion`. Compara el RUN de la cédula con el RUT de la
+      cuenta, nunca persiste PII ni biometría, relee la decisión a Didit en vez
+      de confiar en el payload, protege la insignia pública frente a eventos
+      desordenados y a varias solicitudes, y devuelve a `NO_SOLICITADO` (no a
+      rechazada) a quien solo abandona o expira. Contrato, firma, mapeo de
+      estados y riesgos en [DATA_MODEL.md](DATA_MODEL.md#verificación-de-identidad-con-didit--sin-desplegar).
+      114 tests nuevos (301 con `npm run test:emulator`). **Sin desplegar y sin
+      probar contra Didit real.**
+- [x] `:feature:verification` (Android): pantalla **Verificar identidad** (estado
+      actual por `estadoVerificacion`; según `NO_SOLICITADO`/`PENDIENTE`/
+      `APROBADO`/`RECHAZADO` con mensaje por motivo; abre la URL de Didit en un
+      Custom Tab solo si es `https` de `didit.me`; refresca al volver a la
+      pantalla) y **Resultado** (`VerificacionResultadoRoute(solicitudId?)`,
+      deep link `kinecare://verificacion/resultado`, consulta siempre
+      `estadoVerificacion` con reintentos mientras siga `PENDIENTE`, nunca confía
+      en el deep link). Entrada: tarjeta "Verificación de identidad" en
+      "Documentos y validación" del panel profesional, por callback
+      `onVerificarIdentidad` resuelto en `:app`. El banner de verificación del
+      dashboard es un mock sin datos y no se conectó. Para no duplicar entre
+      pago y verificación se extrajo código compartido: validación de URL por
+      dominios en `:core:common` (`esUrlHttpsDeDominios`), `abrirEnCustomTab` en
+      `:core:designsystem` y `aErrorDe` público en `:core:network`;
+      `:feature:payment` migrado sin cambiar su comportamiento. Tests nuevos en
+      `:feature:verification` y `:core:common`. **No verificado visualmente ni
+      contra el backend real** (sin emulador ni dispositivo y sin backend
+      desplegado).
+- [ ] **Abrir la cuenta de Didit y configurar QA** (lo hace una persona):
+      crear la app y un workflow de documento + prueba de vida (idealmente solo
+      cédula chilena), crear el destino de webhook v3
+      (`.../webhookDidit`, evento `status.updated`), cargar los secretos
+      `DIDIT_API_KEY` y `DIDIT_WEBHOOK_SECRET`, poner `DIDIT_WORKFLOW_ID` en
+      `functions/.env.qa` y desplegar por nombre
+      (`firebase deploy --only functions:solicitarVerificacion,functions:estadoVerificacion,functions:webhookDidit,functions:retornoVerificacion -P qa`).
+- [ ] **Probar de punta a punta en QA con una cédula real**: lo crítico es ver
+      qué trae `personal_number` en una cédula chilena y qué queda en
+      `rutCoincide` (riesgo de rechazar a profesionales legítimos o de aprobar
+      sin comparar, ver DATA_MODEL.md). También: que `req.rawBody` valide la
+      firma en el runtime real, que el webhook responda en < 5 s, y que el
+      redirect HTTPS → `kinecare://verificacion/resultado` llegue a la app
+      (`onNewIntent`).
+- [ ] Decidir y construir qué pasa con las demás insignias (`CREDENCIALES`,
+      `AUTENTICIDAD`, `HISTORIAL`): hoy solo se soporta `IDENTIDAD`. Las
+      credenciales dependen de Storage (bucket de QA sin crear) y de una
+      revisión manual o contra el RNPI que no tiene herramienta.
+- [ ] Límite de frecuencia por profesional al pedir verificaciones (cada sesión
+      nueva tras un rechazo gasta créditos de Didit) y revisión manual cuando
+      Didit deja una sesión en `In Review` (hoy queda `PENDIENTE` sin que
+      nadie la resuelva desde KineCare).
 
 ## Fase 7 — Panel profesional
 - [x] `:feature:professional-panel`: dashboard/home fiel al mockup; resumen

@@ -66,7 +66,10 @@ import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.darjnest.kinecare.core.designsystem.components.button.KineCarePrimaryButton
+import com.darjnest.kinecare.core.designsystem.components.card.KineCareCard
 import com.darjnest.kinecare.core.designsystem.theme.AzulPetroleo30
+import com.darjnest.kinecare.core.designsystem.theme.KineCareSpacing
 import com.darjnest.kinecare.core.designsystem.theme.KineCareTheme
 import com.darjnest.kinecare.core.designsystem.theme.LoginAzulSuave
 import com.darjnest.kinecare.core.designsystem.theme.LoginFondo
@@ -89,15 +92,18 @@ fun DocumentosYValidacionRoot(
     modifier: Modifier = Modifier,
     viewModel: DocumentosYValidacionViewModel = hiltViewModel(),
     onVolver: () -> Unit = {},
+    onVerificarIdentidad: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     DocumentosYValidacionScreen(
         state = state,
         onAction = { accion ->
+            // Verificar identidad es navegacion a otra feature: el Root la resuelve por callback.
             // Copiar al portapapeles y abrir el sitio de la Superintendencia necesitan un
-            // Context: las resuelve el Root. El resto sigue en el ViewModel.
+            // Context: tambien las resuelve el Root. El resto sigue en el ViewModel.
             when (accion) {
+                DocumentosYValidacionAction.VerificarIdentidad -> onVerificarIdentidad()
                 DocumentosYValidacionAction.CopiarNumeroSis ->
                     state.acreditacion?.numeroSis?.let { copiarAlPortapapeles(context, "N° SIS", it) }
                 DocumentosYValidacionAction.ConsultarEnSuperSalud -> abrirSuperSalud(context)
@@ -150,6 +156,9 @@ fun DocumentosYValidacionScreen(
                 TarjetaAcreditacionOficial(acreditacion = acreditacion, onAction = onAction)
                 Spacer(modifier = Modifier.height(12.dp))
             }
+
+            TarjetaVerificarIdentidad(onClick = { onAction(DocumentosYValidacionAction.VerificarIdentidad) })
+            Spacer(modifier = Modifier.height(12.dp))
 
             state.resumen?.let { resumen ->
                 FilaMetricasResumen(resumen = resumen)
@@ -573,6 +582,25 @@ private fun iconoAccion(accionTexto: String): ImageVector = when {
     accionTexto.contains("Póliza", ignoreCase = true) -> Icons.Filled.Security
     accionTexto.contains("Constancia", ignoreCase = true) -> Icons.Filled.Description
     else -> Icons.Filled.Visibility
+}
+
+/** Entrada a `:feature:verification`: verificar la identidad (cedula y selfie con prueba de vida) con Didit. */
+@Composable
+private fun TarjetaVerificarIdentidad(onClick: () -> Unit) {
+    KineCareCard {
+        Column(verticalArrangement = Arrangement.spacedBy(KineCareSpacing.s)) {
+            Text(
+                text = "Verificación de identidad",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = "Valida tu cédula y una selfie con prueba de vida para mostrar la insignia de identidad verificada.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            KineCarePrimaryButton(text = "Verificar mi identidad", onClick = onClick)
+        }
+    }
 }
 
 @Composable

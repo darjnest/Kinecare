@@ -62,6 +62,9 @@ sealed interface DocumentosYValidacionAction {
     data class VerDocumento(val documentoId: String) : DocumentosYValidacionAction
     data object SubirNuevaCertificacion : DocumentosYValidacionAction
     data object ContactarMesaLegal : DocumentosYValidacionAction
+
+    /** Navegacion a `:feature:verification`: la resuelve el `Root` por callback, no el ViewModel. */
+    data object VerificarIdentidad : DocumentosYValidacionAction
 }
 
 @HiltViewModel
@@ -81,6 +84,8 @@ class DocumentosYValidacionViewModel @Inject constructor() : ViewModel() {
             is DocumentosYValidacionAction.VerDocumento,
             DocumentosYValidacionAction.SubirNuevaCertificacion,
             DocumentosYValidacionAction.ContactarMesaLegal,
+            // Verificar identidad es navegacion: el Root la resuelve contra el NavGraph.
+            DocumentosYValidacionAction.VerificarIdentidad,
             -> Unit
         }
     }

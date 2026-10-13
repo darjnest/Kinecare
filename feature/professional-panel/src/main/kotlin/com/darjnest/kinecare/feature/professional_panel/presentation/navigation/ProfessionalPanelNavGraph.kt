@@ -18,6 +18,7 @@ fun NavGraphBuilder.professional_panelGraph(
     onVerResenas: (String) -> Unit = {},
     onPrevisualizarPerfil: (String) -> Unit = {},
     onConectarMercadoPago: () -> Unit = {},
+    onVerificarIdentidad: () -> Unit = {},
 ) {
     composable<ProfessionalPanelRoute> {
         ProfessionalPanelRoot(
@@ -57,7 +58,10 @@ fun NavGraphBuilder.professional_panelGraph(
         )
     }
     composable<DocumentosYValidacionRoute> {
-        DocumentosYValidacionRoot(onVolver = navController::popBackStack)
+        DocumentosYValidacionRoot(
+            onVolver = navController::popBackStack,
+            onVerificarIdentidad = onVerificarIdentidad,
+        )
     }
     composable<LiquidacionesYFinanzasRoute> {
         LiquidacionesYFinanzasRoot(onVolver = navController::popBackStack)

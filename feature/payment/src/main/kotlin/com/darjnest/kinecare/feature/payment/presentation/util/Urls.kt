@@ -1,6 +1,6 @@
 package com.darjnest.kinecare.feature.payment.presentation.util
 
-import java.net.URI
+import com.darjnest.kinecare.core.common.util.esUrlHttpsDeDominios
 
 /**
  * Dominios (y sus subdominios) desde los que Mercado Pago sirve el Checkout
@@ -15,25 +15,9 @@ private val DOMINIOS_MERCADO_PAGO = listOf(
 
 /**
  * Las URLs de pago y de OAuth llegan del backend; igual se abren solo si son
- * `https` y su host es de Mercado Pago, para que una respuesta inesperada no
- * lance otro esquema (`intent:`, `file:`...) ni lleve al usuario a un sitio de
- * terceros desde el Custom Tab.
- *
- * El host se obtiene parseando la URL (no con `contains`/`startsWith` sobre el
- * texto), asi que `https://mercadopago.cl.evil.com`, `https://evil.com/?x=mercadopago.cl`
- * y `https://mercadopago.cl@evil.com` (userinfo) no pasan. Una URL mal formada
- * (incluida la que usa `\` como separador, que los navegadores interpretan
- * distinto que `java.net.URI`) retorna `false` en vez de lanzar.
+ * `https` y su host es de Mercado Pago (la validacion de host, userinfo y
+ * puerto es la compartida de `:core:common`, [esUrlHttpsDeDominios]), para que
+ * una respuesta inesperada no lance otro esquema ni lleve al usuario a un sitio
+ * de terceros desde el Custom Tab. Una URL mal formada retorna `false`.
  */
-fun esUrlDeMercadoPago(url: String): Boolean {
-    val uri = try {
-        URI(url)
-    } catch (e: Exception) {
-        return false
-    }
-    if (!uri.scheme.equals("https", ignoreCase = true)) return false
-    if (uri.userInfo != null) return false
-    if (uri.port != -1 && uri.port != 443) return false
-    val host = uri.host?.lowercase() ?: return false
-    return DOMINIOS_MERCADO_PAGO.any { dominio -> host == dominio || host.endsWith(".$dominio") }
-}
+fun esUrlDeMercadoPago(url: String): Boolean = esUrlHttpsDeDominios(url, DOMINIOS_MERCADO_PAGO)

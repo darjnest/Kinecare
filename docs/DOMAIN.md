@@ -173,7 +173,7 @@ feature lo usa.
 - `profesionalId: String`
 - `tipo: TipoInsignia`
 - `estado: EstadoVerificacion`
-- `proveedorExterno: String?` (ej. "Truora")
+- `proveedorExterno: String?` (hoy "Didit")
 - `fechaSolicitud: Instant`
 - `fechaResolucion: Instant?`
 

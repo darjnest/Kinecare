@@ -8,8 +8,8 @@ import com.darjnest.kinecare.core.common.domain.model.EstadoPago
 import com.darjnest.kinecare.feature.payment.domain.IntentoPago
 import com.darjnest.kinecare.core.common.result.Result
 import com.darjnest.kinecare.core.network.functions.CloudFunctionsApi
+import com.darjnest.kinecare.core.network.functions.aErrorDe
 import com.darjnest.kinecare.core.network.functions.llamarCallable
-import com.darjnest.kinecare.core.network.functions.dto.CallableErrorDto
 import com.darjnest.kinecare.core.network.functions.dto.CallableRequest
 import com.darjnest.kinecare.core.network.functions.dto.ConectarMercadoPagoRequestDto
 import com.darjnest.kinecare.core.network.functions.dto.EstadoPagoRequestDto
@@ -91,17 +91,6 @@ class PagoRepositoryImpl @Inject constructor(
             is Result.Success -> Result.Success(resultado.data.authorizationUrl)
             is Result.Error -> resultado
         }
-    }
-
-    /** Prioriza `details.motivo` (1:1 con el enum); si no viene, cae al `status` canonico de [aCanonico]. */
-    private fun <E : Enum<E>> CallableErrorDto?.aErrorDe(
-        valores: List<E>,
-        desconocido: E,
-        aCanonico: (String?) -> E?,
-    ): E {
-        if (this == null) return desconocido
-        val porMotivo = details?.motivo?.let { motivo -> valores.firstOrNull { it.name == motivo } }
-        return porMotivo ?: aCanonico(status) ?: desconocido
     }
 
     private fun estadoCanonicoIniciar(status: String?): IniciarPagoError? = when (status) {
