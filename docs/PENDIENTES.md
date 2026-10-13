@@ -15,7 +15,9 @@ Comprobado con el MCP de Firebase (solo lectura):
   `recalcularCalificacion` (trigger de `resenas`) y las 6 de Mercado Pago
   (`conectarMercadoPago`, `mercadoPagoOAuthCallback`, `iniciarPago`,
   `estadoPago`, `webhookMercadoPago`, `retornoPago`). Node 22, `us-central1`.
-  **No existe `solicitarVerificacion`** (Fase 6 / PR #41).
+  **Las 4 de verificación (`solicitarVerificacion`, `estadoVerificacion`,
+  `webhookDidit`, `retornoVerificacion`) están en el código de `QA` desde el PR #41
+  (2026-10-13) pero no están desplegadas.**
 - **Reglas de Firestore:** el texto desplegado contiene todo lo reciente:
   `dispositivos` (push), `servicioValido` (límites de servicios), respuesta
   del profesional en `resenas`, `reportesProblema`, `bloqueosAgenda`,
@@ -34,21 +36,17 @@ Comprobado con el MCP de Firebase (solo lectura):
 
 ## 0. Primero mañana
 
-- [ ] **PR #41 (verificación de identidad con Didit), único PR abierto, con el
-      CI en rojo desde el 2026-10-08.** Job *Cloud Functions*: 292 pasan, 0
-      fallan, **9 "cancelled"**; el primero es `didit.test.ts:87` "timeout (la
-      petición no responde) → TIMEOUT" con `Promise resolution is still pending
-      but the event loop has already resolved` (los otros 8 son sus hermanos).
-      Causa probable: el test espera un timer `unref`-eado y en el runner
-      (Node 24 forzado) el event loop se vacía antes. Localmente pasa. Arreglar
-      el test (mantener el handle vivo o usar timers falsos). El job Android sí
-      pasa. Además, la rama está atrás de `QA` (varias funciones y reglas nuevas
-      desde entonces): hay que actualizarla antes de mergear.
-- [ ] **Decidir qué hacer con el PR #41.** +4.861 líneas, sin probar contra
-      Didit real (no hay cuenta ni sandbox). Riesgo principal documentado en el
-      PR: `personal_number` ≠ RUN en cédulas chilenas reales (aprueba sin
-      comparar, o rechaza a un profesional legítimo). Opciones: mergear a `QA`
-      tras arreglar el CI (queda inerte sin secretos) o esperar a tener cuenta.
+- [x] **PR #41 (verificación de identidad con Didit) mergeado a `QA` el
+      2026-10-13.** Se arregló el test `didit.test.ts` "timeout → TIMEOUT"
+      (`AbortSignal.timeout` usa un timer `unref` y, sin otro handle vivo, Node 22
+      vaciaba el event loop y cancelaba 9 pruebas; ahora el test mantiene un
+      `setInterval` temporal) y se actualizó la rama con `QA` (4 conflictos). El
+      CI no se re-ejecutó antes de mergear (estaba bloqueado); verificado en
+      local: `tsc`, 189 tests de functions con Node 22 y compilación Android.
+      Queda inerte sin secretos de Didit y **sin probar contra Didit real**.
+      Riesgo principal: `personal_number` ≠ RUN en cédulas chilenas reales
+      (aprueba sin comparar, o rechaza a un profesional legítimo); revisar con
+      una cédula real antes de confiar en la comparación.
 - [ ] **Limpiar ramas remotas.** `origin/claude/revision-tareas-6fe105` es una
       versión anterior de Mercado Pago/Storage superada por el PR #36: **no
       mergear**, revisar que no traiga nada y borrarla. Hay más ramas `claude/*`
@@ -73,9 +71,10 @@ Ordenadas por lo que más bloquea.
       (`~/.kinecare-secrets/pinning-override-qa.pem`) en la bóveda/gestor de
       contraseñas y publicar una versión con la clave pública embebida (ya está
       en el código). Después, probar el interruptor con Remote Config real.
-- [ ] **Didit** (si se sigue con el PR #41): abrir cuenta, workflow documento +
+- [ ] **Didit** (código ya en `QA`, PR #41): abrir cuenta, workflow documento +
       prueba de vida, webhook a `webhookDidit`, secretos `DIDIT_API_KEY` /
-      `DIDIT_WEBHOOK_SECRET`, `DIDIT_WORKFLOW_ID` en `functions/.env.qa`.
+      `DIDIT_WEBHOOK_SECRET`, `DIDIT_WORKFLOW_ID` en `functions/.env.qa`; después
+      desplegar las 4 funciones de verificación en QA.
 - [ ] Registrar SHA-1/SHA-256 del keystore de **release** en Firebase.
 - [ ] Producción (`kinecare-cl`) sigue en Spark y sin funciones: al promover
       QA → PRD hay que subirla a Blaze y desplegar reglas, índices, Storage
@@ -131,9 +130,9 @@ casi todo esto:
 - [ ] **Documentos y validación** (`:feature:professional-panel`): sin
       conexión a nada y sin tests (los documentos los maneja el backend, Fase 6).
       Liquidaciones ya está conectada y probada.
-- [ ] **Fase 6 completa** (verificación): `VerificationScreen` en `QA` es un
-      placeholder "próximamente" y `solicitarVerificacion` no existe en `QA`.
-      El PR #41 cubre solo `IDENTIDAD`; `CREDENCIALES`, `AUTENTICIDAD` y
+- [ ] **Fase 6 completa** (verificación): `VerificationScreen` y las funciones de
+      verificación ya están en `QA` (PR #41, sin desplegar ni probar con Didit).
+      Cubre solo `IDENTIDAD`; `CREDENCIALES`, `AUTENTICIDAD` y
       `HISTORIAL` no tienen flujo.
 - [ ] Reservas inmediatas, traslado, radio y comunas de atención del
       profesional, y "perfil público" on/off: sin campos en Firestore (se quitaron
@@ -197,6 +196,7 @@ casi todo esto:
 1. Crear la cuenta de profesional de prueba (5 min) y hacer **una sesión de
    emulador** con las verificaciones de la sección 2.
 2. Redesplegar `webhookMercadoPago` y `estadoPago` (arreglo del pago tardío).
-3. Arreglar el test de Didit y dejar el PR #41 en verde; decidir si se mergea.
+3. ~~Arreglar el test de Didit y mergear el PR #41~~ (hecho el 2026-10-13);
+   falta cuenta de Didit para probarlo.
 4. Probar Mercado Pago de punta a punta con los usuarios de prueba.
 5. Decidir recuperar contraseña y Room; luego R8/firma y revisión de seguridad.
