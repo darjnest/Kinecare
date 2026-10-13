@@ -144,7 +144,14 @@ casi todo esto:
       pantalla.
 - [ ] Cliente — "Mi perfil": previsión, tratamiento, método de pago y
       facturación siguen ocultos (sin datos en Firestore).
-- [ ] Búsqueda: sin mapa ni comuna del profesional en Firestore (el texto solo la
+- [ ] **Mapa de búsqueda: claves de release, producción y CI.** La clave de QA/debug ya existe
+      (restringida a `com.darjnest.kinecare.qa` + SHA-1 de debug, en `local.properties` de cada
+      desarrollador, `MAPS_API_KEY=...`). Falta una por entorno: producción (`com.darjnest.kinecare`) y
+      el SHA-1 del keystore de **release**, más la variable `MAPS_API_KEY` en el CI si algún job debe
+      tener mapa; sin ella el mapa muestra un aviso en vez de fallar.
+      Además: "fijar mi zona y radio" del profesional (hoy un recuadro gris en Disponibilidad)
+      y guardar la ubicación pública solo aproximada (ver DATA_MODEL.md).
+- [ ] Búsqueda: sin comuna del profesional en Firestore (el texto solo la
       encuentra si está en la descripción); la vitrina de categorías
       (`categoriasPara()`) es mock local.
 - [ ] Reseñas: editar/borrar la respuesta del profesional, paginar más de 100.

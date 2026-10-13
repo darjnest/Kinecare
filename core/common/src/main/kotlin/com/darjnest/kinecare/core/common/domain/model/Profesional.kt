@@ -23,4 +23,10 @@ data class Profesional(
      * escribe solo el backend al terminar el OAuth; el cliente nunca lo cambia.
      */
     val mercadoPagoConectado: Boolean = false,
+    /**
+     * Zona (centro de una celda de ~1 km) donde atiende, para el mapa de la busqueda. Nunca es la
+     * ubicacion exacta: `ProfesionalRepositoryImpl` la aproxima al leer `profesionales/{id}.ubicacion`,
+     * asi que la ubicacion exacta no llega al dominio ni a la UI. `null` si el profesional no tiene.
+     */
+    val zonaAproximada: Coordenada? = null,
 )

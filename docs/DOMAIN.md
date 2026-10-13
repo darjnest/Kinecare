@@ -67,6 +67,9 @@ y el teléfono de un profesional son privados y un cliente no debe poder leerlos
 - `insignias: List<Insignia>`
 - `disponibilidad: List<Disponibilidad>`
 - `calificacionPromedio: Double`
+- `zonaAproximada: Coordenada?`: dónde atiende, como centro de una celda de ~1 km
+  (`Coordenada.aproximada()`); es lo único que ve el cliente en el mapa de la
+  búsqueda, nunca la ubicación exacta (muchos atienden a domicilio)
 - `totalResenas: Int`
 - `descripcion: String`
 - `estadoVerificacionGeneral: EstadoVerificacion`

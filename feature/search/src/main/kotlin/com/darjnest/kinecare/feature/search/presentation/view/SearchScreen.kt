@@ -48,10 +48,14 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
@@ -102,6 +106,7 @@ import com.darjnest.kinecare.feature.search.presentation.viewmodel.SearchAction
 import com.darjnest.kinecare.feature.search.presentation.viewmodel.SearchState
 import com.darjnest.kinecare.feature.search.presentation.viewmodel.SearchViewModel
 import com.darjnest.kinecare.core.common.domain.model.TipoAtencion
+import com.darjnest.kinecare.feature.search.presentation.viewmodel.VistaBusqueda
 
 @Composable
 fun SearchRoot(
@@ -164,6 +169,17 @@ fun SearchScreen(
             )
         },
     ) { innerPadding ->
+        if (state.vista == VistaBusqueda.MAPA) {
+            ContenidoMapa(
+                state = state,
+                onAction = onAction,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(LoginFondo)
+                    .padding(innerPadding),
+            )
+            return@Scaffold
+        }
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -189,6 +205,9 @@ fun SearchScreen(
 
                 Spacer(modifier = Modifier.height(20.dp))
                 TarjetaFiltros(state = state, onAction = onAction)
+
+                Spacer(modifier = Modifier.height(16.dp))
+                SelectorVista(vista = state.vista, onAction = onAction)
 
                 Spacer(modifier = Modifier.height(28.dp))
                 FilaServiciosCercaDeTi(ubicacion = state.ubicacion, onAction = onAction)
@@ -235,6 +254,85 @@ fun SearchScreen(
             }
         }
     }
+}
+
+/** Alterna entre la lista de tarjetas y el mapa con pines. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SelectorVista(vista: VistaBusqueda, onAction: (SearchAction) -> Unit) {
+    val opciones = listOf(VistaBusqueda.LISTA to "Lista", VistaBusqueda.MAPA to "Mapa")
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        opciones.forEachIndexed { indice, (opcion, texto) ->
+            SegmentedButton(
+                selected = vista == opcion,
+                onClick = { onAction(SearchAction.CambiarVista(opcion)) },
+                shape = SegmentedButtonDefaults.itemShape(index = indice, count = opciones.size),
+            ) {
+                Text(texto)
+            }
+        }
+    }
+}
+
+/**
+ * Vista de mapa: en vez de la pagina que se desplaza se ocupa toda la altura disponible (un mapa
+ * dentro de un `verticalScroll` pelea con el gesto de arrastrar). Conserva el cuadro de busqueda y
+ * la modalidad; el resto de los filtros se cambian desde la lista. Los pines son los mismos
+ * profesionales que muestra la lista, en su zona aproximada.
+ */
+@Composable
+private fun ContenidoMapa(state: SearchState, onAction: (SearchAction) -> Unit, modifier: Modifier = Modifier) {
+    val profesionales = state.profesionalesDestacados
+    val conPin = profesionales.count { it.zona != null }
+    val seleccionado = profesionales.firstOrNull { it.id == state.pinSeleccionadoId }
+    Column(modifier = modifier) {
+        Column(
+            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            SelectorVista(vista = state.vista, onAction = onAction)
+            CampoBusquedaTexto(texto = state.textoBusqueda, onTextoChange = { onAction(SearchAction.CambiarTextoBusqueda(it)) })
+            FilaModalidad(modalidad = state.modalidad, onAction = onAction)
+        }
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            MapaProfesionales(
+                pines = profesionales,
+                seleccionadoId = state.pinSeleccionadoId,
+                onPinClick = { onAction(SearchAction.SeleccionarPin(it)) },
+                onMapaClick = { onAction(SearchAction.SeleccionarPin(null)) },
+                modifier = Modifier.fillMaxSize(),
+            )
+            if (state.cargandoProfesionales) {
+                CircularProgressIndicator(color = LoginPrimarioOscuro, modifier = Modifier.align(Alignment.Center))
+            } else {
+                Text(
+                    text = resumenDelMapa(conPin = conPin, sinPin = profesionales.size - conPin),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = TextoPrincipal,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(12.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(Color.White.copy(alpha = 0.92f))
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
+            if (seleccionado != null) {
+                Box(modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp)) {
+                    TarjetaProfesionalDestacado(
+                        profesional = seleccionado,
+                        esFavorito = seleccionado.id in state.favoritos,
+                        onAction = onAction,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun resumenDelMapa(conPin: Int, sinPin: Int): String {
+    val base = if (conPin == 1) "1 profesional en el mapa" else "$conPin profesionales en el mapa"
+    return if (sinPin > 0) "$base · $sinPin sin ubicación" else base
 }
 
 @Composable

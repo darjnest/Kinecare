@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -6,6 +8,11 @@ plugins {
     id("com.google.dagger.hilt.android")
     id("com.google.gms.google-services")
 }
+
+val mapsApiKey: String = Properties().apply {
+    val archivo = rootProject.file("local.properties")
+    if (archivo.exists()) archivo.inputStream().use { load(it) }
+}.getProperty("MAPS_API_KEY") ?: System.getenv("MAPS_API_KEY") ?: ""
 
 android {
     namespace = "com.darjnest.kinecare"
@@ -21,6 +28,10 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Clave del SDK de Google Maps: no se versiona. Sale de `MAPS_API_KEY` en local.properties o
+        // del entorno (CI). Vacia, la app compila y la busqueda avisa que el mapa no esta disponible.
+        manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
     }
 
     flavorDimensions += "environment"

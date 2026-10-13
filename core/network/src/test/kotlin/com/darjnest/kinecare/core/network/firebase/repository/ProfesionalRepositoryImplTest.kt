@@ -5,6 +5,7 @@ package com.darjnest.kinecare.core.network.firebase.repository
 import com.darjnest.kinecare.core.common.data.error.ProfesionalError
 import com.darjnest.kinecare.core.common.data.error.UsuarioError
 import com.darjnest.kinecare.core.common.data.repository.UsuarioRepository
+import com.darjnest.kinecare.core.common.domain.model.Coordenada
 import com.darjnest.kinecare.core.common.domain.model.Disponibilidad
 import com.darjnest.kinecare.core.common.domain.model.PerfilPublico
 import com.darjnest.kinecare.core.common.domain.model.Profesional
@@ -17,6 +18,7 @@ import com.google.firebase.firestore.CollectionReference
 import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.GeoPoint
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.QuerySnapshot
 import io.mockk.coEvery
@@ -293,6 +295,17 @@ class ProfesionalRepositoryImplTest {
     }
 
     @Test
+    fun `obtenerPorId expone solo la zona aproximada de ubicacion, nunca la exacta`() = runTest {
+        coEvery { usuarioRepository.obtenerPerfilPublico("prof-1") } returns Result.Success(perfil)
+        coEvery { usuarioRepository.obtenerPerfilPublico("prof-2") } returns Result.Success(perfil.copy(id = "prof-2"))
+        val conUbicacion = obtenerPorIdConDocumento("prof-1", mapOf("ubicacion" to GeoPoint(-33.4569, -70.598)))
+        val sinUbicacion = obtenerPorIdConDocumento("prof-2", mapOf("rnpi" to "RNPI-1"))
+
+        assertEquals(Coordenada(-33.455, -70.595), (conUbicacion as Result.Success).data.zonaAproximada)
+        assertEquals(null, (sinUbicacion as Result.Success).data.zonaAproximada)
+    }
+
+    @Test
     fun `obtenerPorId lee mercadoPagoConectado y lo deja en false si el campo falta`() = runTest {
         coEvery { usuarioRepository.obtenerPerfilPublico("prof-1") } returns Result.Success(perfil)
         coEvery { usuarioRepository.obtenerPerfilPublico("prof-2") } returns Result.Success(perfil.copy(id = "prof-2"))
@@ -511,6 +524,7 @@ class ProfesionalRepositoryImplTest {
         every { doc.getLong(any()) } answers { data[firstArg()] as? Long }
         every { doc.getBoolean(any()) } answers { data[firstArg()] as? Boolean }
         every { doc.getTimestamp(any()) } answers { data[firstArg()] as? Timestamp }
+        every { doc.getGeoPoint(any()) } answers { data[firstArg()] as? GeoPoint }
         return doc
     }
 }

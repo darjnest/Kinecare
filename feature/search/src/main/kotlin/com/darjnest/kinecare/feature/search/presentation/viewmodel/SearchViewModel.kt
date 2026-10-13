@@ -14,6 +14,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.darjnest.kinecare.core.common.data.repository.ClienteRepository
 import com.darjnest.kinecare.core.common.data.repository.ProfesionalRepository
+import com.darjnest.kinecare.core.common.domain.model.Coordenada
 import com.darjnest.kinecare.core.common.domain.model.EstadoVerificacion
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
 import com.darjnest.kinecare.core.common.domain.model.Profesional
@@ -37,6 +38,9 @@ import javax.inject.Inject
 
 /** Orden de la lista de profesionales. */
 enum class OrdenBusqueda { MEJOR_CALIFICADOS, MENOR_PRECIO, MAS_RESENAS }
+
+/** Como se muestran los profesionales: tarjetas en una lista o pines en un mapa. */
+enum class VistaBusqueda { LISTA, MAPA }
 
 /** Modalidad de entrega del servicio (pestanas de la seccion "Servicios cerca de ti"). */
 enum class ModalidadAtencion { A_DOMICILIO, EN_CONSULTA }
@@ -81,6 +85,8 @@ data class ProfesionalDestacado(
      * comuna solo calza si la descripcion la menciona.
      */
     val indiceBusqueda: String = "",
+    /** Zona aproximada (celda de ~1 km) donde atiende; `null` = no aparece en el mapa. */
+    val zona: Coordenada? = null,
 )
 
 data class SearchState(
@@ -108,6 +114,9 @@ data class SearchState(
     val favoritos: Set<String> = emptySet(),
     /** Aviso puntual para un Snackbar; se consume con [SearchAction.MensajeMostrado]. */
     val mensaje: String? = null,
+    val vista: VistaBusqueda = VistaBusqueda.LISTA,
+    /** Pin tocado en el mapa; su tarjeta aparece sobre el mapa. Siempre es uno de [profesionalesDestacados]. */
+    val pinSeleccionadoId: String? = null,
 )
 
 sealed interface SearchAction {
@@ -124,6 +133,9 @@ sealed interface SearchAction {
     data class SeleccionarProfesional(val profesionalId: String) : SearchAction
     data class AlternarFavorito(val profesionalId: String) : SearchAction
     data object MensajeMostrado : SearchAction
+    data class CambiarVista(val vista: VistaBusqueda) : SearchAction
+    /** `null` quita la seleccion (se toco el mapa fuera de un pin). */
+    data class SeleccionarPin(val profesionalId: String?) : SearchAction
 }
 
 /**
@@ -241,6 +253,7 @@ private fun Profesional.aProfesionalDestacado(): ProfesionalDestacado {
         verificado = estadoVerificacionGeneral == EstadoVerificacion.APROBADO,
         modalidades = activos.map { it.modalidad }.toSet(),
         categoriaIds = especialidades.toSet(),
+        zona = zonaAproximada,
     )
 }
 
@@ -359,6 +372,10 @@ class SearchViewModel @Inject constructor(
             is SearchAction.SeleccionarProfesional -> Unit
             is SearchAction.AlternarFavorito -> alternarFavorito(action.profesionalId)
             SearchAction.MensajeMostrado -> _state.update { it.copy(mensaje = null) }
+            is SearchAction.CambiarVista -> _state.update { it.copy(vista = action.vista, pinSeleccionadoId = null) }
+            is SearchAction.SeleccionarPin -> _state.update { estado ->
+                estado.copy(pinSeleccionadoId = action.profesionalId?.takeIf { id -> estado.profesionalesDestacados.any { it.id == id } })
+            }
         }
     }
 
@@ -402,15 +419,18 @@ class SearchViewModel @Inject constructor(
             categoriaId = null,
             texto = estado.textoBusqueda,
         )
+        val visibles = cargados.filtrarPor(
+            estado.modalidad,
+            estado.soloVerificados,
+            estado.categoriaSeleccionadaId,
+            estado.textoBusqueda,
+        ).ordenarPor(estado.orden)
         return estado.copy(
             categorias = categoriasPara(estado.tipoAtencion).conConteos(sinCategoria),
-            profesionalesDestacados = cargados.filtrarPor(
-                estado.modalidad,
-                estado.soloVerificados,
-                estado.categoriaSeleccionadaId,
-                estado.textoBusqueda,
-            ).ordenarPor(estado.orden),
+            profesionalesDestacados = visibles,
             totalProfesionalesCargados = cargados.size,
+            // Un filtro puede sacar de la lista al profesional cuyo pin estaba seleccionado.
+            pinSeleccionadoId = estado.pinSeleccionadoId?.takeIf { id -> visibles.any { it.id == id } },
         )
     }
 
