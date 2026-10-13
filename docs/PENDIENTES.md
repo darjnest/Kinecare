@@ -144,10 +144,11 @@ casi todo esto:
       pantalla.
 - [ ] Cliente — "Mi perfil": previsión, tratamiento, método de pago y
       facturación siguen ocultos (sin datos en Firestore).
-- [ ] **Mapa de búsqueda: falta la clave de Google Maps** para ver los pines (el código está;
-      sin clave la pantalla avisa que el mapa no está disponible). Crear una clave en Google
-      Cloud (API "Maps SDK for Android"), restringirla por paquete (`com.darjnest.kinecare[.qa]`)
-      y SHA-1, y ponerla como `MAPS_API_KEY=...` en `local.properties` o en el entorno del CI.
+- [ ] **Mapa de búsqueda: claves de release, producción y CI.** La clave de QA/debug ya existe
+      (restringida a `com.darjnest.kinecare.qa` + SHA-1 de debug, en `local.properties` de cada
+      desarrollador, `MAPS_API_KEY=...`). Falta una por entorno: producción (`com.darjnest.kinecare`) y
+      el SHA-1 del keystore de **release**, más la variable `MAPS_API_KEY` en el CI si algún job debe
+      tener mapa; sin ella el mapa muestra un aviso en vez de fallar.
       Además: "fijar mi zona y radio" del profesional (hoy un recuadro gris en Disponibilidad)
       y guardar la ubicación pública solo aproximada (ver DATA_MODEL.md).
 - [ ] Búsqueda: sin comuna del profesional en Firestore (el texto solo la

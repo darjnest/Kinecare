@@ -3,6 +3,7 @@ package com.darjnest.kinecare.feature.search.presentation.view
 import android.content.Context
 import android.content.pm.PackageManager
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -19,6 +20,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.darjnest.kinecare.core.designsystem.theme.LoginGrisTexto
+import com.darjnest.kinecare.feature.search.presentation.util.puntosParaEncuadrar
 import com.darjnest.kinecare.feature.search.presentation.viewmodel.ProfesionalDestacado
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
@@ -36,6 +38,7 @@ private val SANTIAGO = LatLng(-33.4489, -70.6693)
 private const val ZOOM_CIUDAD = 11f
 private const val ZOOM_UN_PIN = 13f
 private const val MARGEN_ENCUADRE_PX = 120
+private val ALTO_TARJETA_PIN = 124.dp
 private const val META_CLAVE_MAPS = "com.google.android.geo.API_KEY"
 
 /**
@@ -67,6 +70,9 @@ internal fun MapaProfesionales(
     GoogleMap(
         modifier = modifier,
         cameraPositionState = camara,
+        // La tarjeta del pin seleccionado cubre el borde de abajo: se sube el logo de Google y el
+        // area de gestos del mapa para que el logo siga visible.
+        contentPadding = PaddingValues(bottom = if (seleccionadoId != null) ALTO_TARJETA_PIN else 0.dp),
         uiSettings = MapUiSettings(zoomControlsEnabled = false, mapToolbarEnabled = false),
         onMapLoaded = { mapaCargado = true },
         onMapClick = { onMapaClick() },
@@ -90,7 +96,7 @@ internal fun MapaProfesionales(
 }
 
 private suspend fun encuadrar(camara: CameraPositionState, pines: List<ProfesionalDestacado>) {
-    val puntos = pines.mapNotNull { p -> p.zona?.let { LatLng(it.latitud, it.longitud) } }.distinct()
+    val puntos = puntosParaEncuadrar(pines.mapNotNull { it.zona }.distinct()).map { LatLng(it.latitud, it.longitud) }
     when (puntos.size) {
         0 -> camara.animate(CameraUpdateFactory.newLatLngZoom(SANTIAGO, ZOOM_CIUDAD))
         1 -> camara.animate(CameraUpdateFactory.newLatLngZoom(puntos.first(), ZOOM_UN_PIN))

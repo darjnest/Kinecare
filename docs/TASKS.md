@@ -979,8 +979,12 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       llega al dominio ni a la UI), tarjeta del pin tocado y los mismos filtros que la lista.
       `maps-compose` 8.2.1 (la 8.4+ y la 9.x están compiladas con Kotlin 2.4 y el proyecto usa
       2.2). La clave del SDK se inyecta desde `MAPS_API_KEY` (local.properties o entorno) vía
-      manifest placeholder; **sin clave la app compila y el mapa muestra un aviso**. **Pendiente:**
-      la clave, ver los pines en un dispositivo y la mitad del profesional (fijar zona y radio).
+      manifest placeholder; **sin clave la app compila y el mapa muestra un aviso**. **Verificado en
+      emulador (2026-10-13)** con una clave de QA restringida por paquete (`com.darjnest.kinecare.qa`)
+      y SHA-1 de debug: carga el mapa, 7 pines de zona aproximada, la tarjeta del pin tocado, y el
+      encuadre ignora a un profesional lejano (grupo principal por mediana, `puntosParaEncuadrar`)
+      y deja visible el logo de Google bajo la tarjeta. **Pendiente:** claves de release/producción y
+      del CI, y la mitad del profesional (fijar zona y radio).
 - [ ] R8/ProGuard, revisión de seguridad
 - [ ] Publicación en Play Store
 
