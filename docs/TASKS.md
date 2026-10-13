@@ -968,9 +968,7 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       hacían). Las tres copias de la barra del profesional pasan a un único
       `KineCareProfessionalBottomNavBar` en `:core:designsystem` (Inicio · Solicitudes ·
       Agenda · Perfil, antes "Reservas" vs "Solicitudes" y ícono carpeta vs credencial).
-      Pendientes de esa revisión, sin arreglar: controles de Disponibilidad sin campo en
-      Firestore (reservas inmediatas, traslado, mapa y radio), botones sin flujo en
-      Documentos, enlaces de Términos/Privacidad que no abren nada, ícono de la app por
+      Pendientes de esa revisión, sin arreglar: botones sin flujo en Documentos, enlaces de Términos/Privacidad que no abren nada, ícono de la app por
       defecto y pluralización ("1 servicios").
 - [x] Mapa en la búsqueda del cliente (2026-10-13): alternancia Lista/Mapa en
       `:feature:search` con un pin por profesional en su **zona aproximada** (celda de ~1 km,
@@ -999,6 +997,13 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       "Derechos del Paciente (Ley N° 20.584)" de Mi Perfil (describe derechos, no afirma
       cumplimiento). Las pantallas ocultas de previsión/facturación aún mencionan el SII y la
       ley; hay que revisarlas antes de mostrarlas.
+- [x] Disponibilidad y horarios sin controles falsos (2026-10-13, versión mínima): se ocultan
+      "Reservas inmediatas", "Traslado entre sesiones" y "Cobertura a domicilio" (mapa, radio,
+      recargo): solo cambiaban estado local y "Guardar disponibilidad" nunca los persistía,
+      así que el profesional creía configurar algo que no existía. Quedan los días laborales
+      y los turnos, que sí se guardan. El código se conserva detrás de
+      `MOSTRAR_CONTROLES_SIN_PERSISTENCIA`; reactivarlo requiere campos en `profesionales/{id}`
+      y reglas que dejen al dueño escribirlos (junto con "fijar mi zona y radio").
 - [ ] R8/ProGuard, revisión de seguridad
 - [ ] Publicación en Play Store
 

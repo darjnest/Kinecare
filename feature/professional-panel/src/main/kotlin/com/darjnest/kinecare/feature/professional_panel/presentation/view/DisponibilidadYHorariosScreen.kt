@@ -99,6 +99,15 @@ fun DisponibilidadYHorariosRoot(
     DisponibilidadYHorariosScreen(state = state, onAction = viewModel::onAction, onVolver = onVolver, modifier = modifier)
 }
 
+/**
+ * "Reservas inmediatas", "Traslado entre sesiones" y "Cobertura a domicilio" (mapa, radio, recargo)
+ * solo cambian estado local: `GuardarDisponibilidad` no los persiste porque `profesionales/{id}`
+ * no tiene esos campos (y las reglas no dejan al dueno escribirlos). Mostrarlos hacia creer al
+ * profesional que configuraba algo, asi que se ocultan hasta que tengan respaldo, junto con
+ * "fijar mi zona y radio" (docs/PENDIENTES.md). Se conserva el codigo para ese trabajo.
+ */
+private const val MOSTRAR_CONTROLES_SIN_PERSISTENCIA = false
+
 @Composable
 fun DisponibilidadYHorariosScreen(
     state: DisponibilidadYHorariosState,
@@ -140,10 +149,12 @@ fun DisponibilidadYHorariosScreen(
 
             Column(modifier = Modifier.padding(horizontal = 20.dp)) {
                 Spacer(modifier = Modifier.height(12.dp))
-                TarjetaReservasInmediatas(activas = state.reservasInmediatasActivas, onAction = onAction)
+                if (MOSTRAR_CONTROLES_SIN_PERSISTENCIA) {
+                    TarjetaReservasInmediatas(activas = state.reservasInmediatasActivas, onAction = onAction)
+                    Spacer(modifier = Modifier.height(20.dp))
+                }
 
                 if (state.diasLaborales.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(20.dp))
                     SeccionDiasLaborales(dias = state.diasLaborales, onAction = onAction)
                 }
 
@@ -152,15 +163,19 @@ fun DisponibilidadYHorariosScreen(
                     val diaSeleccionado = state.diasLaborales.firstOrNull { it.seleccionado }
                     SeccionHorarios(diaSeleccionado = diaSeleccionado, turnos = state.turnos, onAction = onAction)
 
-                    Spacer(modifier = Modifier.height(16.dp))
-                    TarjetaTrasladoEntreSesiones(
-                        minutosSeleccionado = state.minutosTrasladoSeleccionado,
-                        onAction = onAction,
-                    )
+                    if (MOSTRAR_CONTROLES_SIN_PERSISTENCIA) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        TarjetaTrasladoEntreSesiones(
+                            minutosSeleccionado = state.minutosTrasladoSeleccionado,
+                            onAction = onAction,
+                        )
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
-                SeccionCoberturaDomicilio(state = state, onAction = onAction)
+                if (MOSTRAR_CONTROLES_SIN_PERSISTENCIA) {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    SeccionCoberturaDomicilio(state = state, onAction = onAction)
+                }
 
                 Spacer(modifier = Modifier.height(24.dp))
             }
