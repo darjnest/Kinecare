@@ -75,12 +75,20 @@ function igualesSeguro(esperadoHex: string, recibido: string | undefined): boole
 
 const hmac = (secreto: string, datos: Buffer | string) => createHmac("sha256", secreto).update(datos).digest("hex");
 
+export type ResultadoFirmaDidit =
+  | "VALIDA"
+  | "SIN_SECRETO_O_CUERPO"
+  | "TIMESTAMP_INVALIDO"
+  | "TIMESTAMP_FUERA_DE_VENTANA"
+  | "FIRMA_NO_COINCIDE";
+
 /**
  * Valida un webhook de Didit. Rechaza si el `X-Timestamp` esta fuera de ventana (anti-replay); luego
  * acepta si coincide `X-Signature` (sobre los bytes crudos) O `X-Signature-V2` (sobre el JSON
  * canonico). `X-Signature-Simple` esta obsoleta y no se mira. Cualquier dato ausente invalida.
+ * Devuelve el motivo del rechazo (solo para el log; nunca contiene el secreto ni las firmas).
  */
-export function firmaDiditValida({
+export function evaluarFirmaDidit({
   rawBody,
   xSignature,
   xSignatureV2,
@@ -88,21 +96,23 @@ export function firmaDiditValida({
   secreto,
   ahora,
   toleranciaSegundos = TOLERANCIA_FIRMA_DIDIT_SEGUNDOS,
-}: DatosFirmaDidit): boolean {
-  if (secreto === "" || rawBody === undefined) return false;
-  if (xTimestamp === undefined || !/^\d{1,12}$/.test(xTimestamp.trim())) return false;
-  if (Math.abs(ahora.getTime() / 1000 - Number(xTimestamp.trim())) > toleranciaSegundos) return false;
+}: DatosFirmaDidit): ResultadoFirmaDidit {
+  if (secreto === "" || rawBody === undefined) return "SIN_SECRETO_O_CUERPO";
+  if (xTimestamp === undefined || !/^\d{1,12}$/.test(xTimestamp.trim())) return "TIMESTAMP_INVALIDO";
+  if (Math.abs(ahora.getTime() / 1000 - Number(xTimestamp.trim())) > toleranciaSegundos) return "TIMESTAMP_FUERA_DE_VENTANA";
 
-  if (igualesSeguro(hmac(secreto, rawBody), xSignature)) return true;
+  if (igualesSeguro(hmac(secreto, rawBody), xSignature)) return "VALIDA";
 
   if (xSignatureV2 !== undefined) {
     let parseado: unknown;
     try {
       parseado = JSON.parse(typeof rawBody === "string" ? rawBody : rawBody.toString("utf8"));
     } catch {
-      return false;
+      return "FIRMA_NO_COINCIDE";
     }
-    return igualesSeguro(hmac(secreto, canonizarJson(parseado)), xSignatureV2);
+    if (igualesSeguro(hmac(secreto, canonizarJson(parseado)), xSignatureV2)) return "VALIDA";
   }
-  return false;
+  return "FIRMA_NO_COINCIDE";
 }
+
+export const firmaDiditValida = (datos: DatosFirmaDidit): boolean => evaluarFirmaDidit(datos) === "VALIDA";

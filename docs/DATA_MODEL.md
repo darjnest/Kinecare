@@ -816,6 +816,14 @@ débil, no rechaza a nadie). **Probar con una cédula real en QA y revisar
 `rutCoincide` en las solicitudes antes de producción.** `document_number` no se
 usa como respaldo justamente por eso.
 
+**Cuidado con los dos secretos de Didit.** En la consola hay *claves API*
+(pestaña Claves API) y un *secreto por destino de webhook* (pestaña Webhooks, columna
+de secreto de cada destino). `DIDIT_API_KEY` es la primera y `DIDIT_WEBHOOK_SECRET`
+el segundo; confundirlos produce `firma de webhook invalida` en cada entrega
+(pasó en QA el 2026-10-13: se cargó una API key como secreto de webhook). Rotar la
+API key la deja "en rotación" y la anterior deja de servir. Para depurar la firma sin
+exponer el secreto, compara `shasum -a 256` (primeros 8 hex) con un log temporal.
+
 **Configuración antes de desplegar.** Secretos:
 `firebase functions:secrets:set DIDIT_API_KEY` y `DIDIT_WEBHOOK_SECRET` (el
 `secret_shared_key` del destino de webhook v3 en la consola de Didit). Variable
