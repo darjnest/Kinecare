@@ -20,17 +20,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Apartment
-import androidx.compose.material.icons.filled.Badge
-import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.FactCheck
 import androidx.compose.material.icons.filled.HowToReg
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MedicalServices
-import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PinDrop
@@ -67,6 +63,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.darjnest.kinecare.core.designsystem.components.bar.KineCareProfessionalBottomNavBar
+import com.darjnest.kinecare.core.designsystem.components.bar.PestanaProfesionalInferior
 import com.darjnest.kinecare.core.designsystem.components.dialog.KineCareConfirmDialog
 import com.darjnest.kinecare.core.designsystem.components.dialog.KineCareTextInputDialog
 import com.darjnest.kinecare.core.designsystem.theme.AzulPetroleo30
@@ -174,10 +172,12 @@ fun SolicitudesDeAtencionScreen(
         containerColor = LoginFondo,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
-            BarraNavegacionInferiorSolicitudes(
-                onIrAInicio = onIrAInicio,
-                onIrAAgenda = onIrAAgenda,
-                onIrAPerfil = onIrAPerfil,
+            KineCareProfessionalBottomNavBar(
+                pestanaActiva = PestanaProfesionalInferior.SOLICITUDES,
+                onInicio = onIrAInicio,
+                onSolicitudes = {},
+                onAgenda = onIrAAgenda,
+                onPerfil = onIrAPerfil,
             )
         },
     ) { innerPadding ->
@@ -926,44 +926,6 @@ private fun BadgeModalidad(modalidad: ModalidadSolicitud, texto: String) {
         Icon(icono, contentDescription = null, tint = color, modifier = Modifier.size(14.dp))
         Spacer(modifier = Modifier.width(4.dp))
         Text(text = texto, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = color)
-    }
-}
-
-@Composable
-private fun BarraNavegacionInferiorSolicitudes(
-    onIrAInicio: () -> Unit,
-    onIrAAgenda: () -> Unit,
-    onIrAPerfil: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color.White)
-            .padding(vertical = 10.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-    ) {
-        ItemNavegacionInferiorSolicitudes(texto = "Inicio", icono = Icons.Filled.Dashboard, activo = false, onClick = onIrAInicio)
-        ItemNavegacionInferiorSolicitudes(texto = "Solicitudes", icono = Icons.Filled.NotificationsActive, activo = true)
-        ItemNavegacionInferiorSolicitudes(texto = "Agenda", icono = Icons.Filled.CalendarMonth, activo = false, onClick = onIrAAgenda)
-        ItemNavegacionInferiorSolicitudes(texto = "Perfil", icono = Icons.Filled.Badge, activo = false, onClick = onIrAPerfil)
-    }
-}
-
-@Composable
-private fun ItemNavegacionInferiorSolicitudes(
-    texto: String,
-    icono: ImageVector,
-    activo: Boolean,
-    onClick: (() -> Unit)? = null,
-) {
-    val color = if (activo) LoginPrimarioOscuro else LoginGrisTexto
-    Column(
-        modifier = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Icon(icono, contentDescription = texto, tint = color, modifier = Modifier.size(22.dp))
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(text = texto, style = MaterialTheme.typography.labelSmall, color = color, fontWeight = if (activo) FontWeight.Bold else FontWeight.Normal)
     }
 }
 

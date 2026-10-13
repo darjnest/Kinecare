@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
@@ -541,7 +542,7 @@ private fun FilaResumen(etiqueta: String, valor: String) {
 @Composable
 private fun BarraAccion(state: BookingState, onAction: (BookingAction) -> Unit) {
     Surface(tonalElevation = KineCareSpacing.xs) {
-        Box(modifier = Modifier.padding(KineCareSpacing.l)) {
+        Box(modifier = Modifier.navigationBarsPadding().padding(KineCareSpacing.l)) {
             if (state.paso == PasoReserva.REVISION) {
                 KineCarePrimaryButton(
                     text = if (state.enviando) "Enviando…" else "Confirmar reserva",

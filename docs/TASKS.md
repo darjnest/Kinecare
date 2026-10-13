@@ -959,6 +959,20 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       (`scripts/migrar-perfiles-publicos-qa.mjs --aplicar`, ver
       [PENDIENTES.md](PENDIENTES.md)); una app anterior a este cambio deja de ver
       nombres ajenos.
+- [x] Revisión visual en emulador (2026-10-13, cuenta de profesional de prueba):
+      con `enableEdgeToEdge` ninguna barra propia respetaba los insets del sistema.
+      Corregido: las barras de navegación inferiores (cliente y profesional), los
+      botones fijos de "Guardar disponibilidad", "Reservar" y "Continuar/Confirmar"
+      llevan `navigationBarsPadding()`, y los encabezados propios de Liquidaciones y
+      Documentos llevan `statusBarsPadding()` (los `TopAppBar` de Material ya lo
+      hacían). Las tres copias de la barra del profesional pasan a un único
+      `KineCareProfessionalBottomNavBar` en `:core:designsystem` (Inicio · Solicitudes ·
+      Agenda · Perfil, antes "Reservas" vs "Solicitudes" y ícono carpeta vs credencial).
+      Pendientes de esa revisión, sin arreglar: controles de Disponibilidad sin campo en
+      Firestore (reservas inmediatas, traslado, mapa y radio), textos que prometen
+      boletas del SII y "cumplimiento estricto" de la Ley 20.584, botones sin flujo en
+      Documentos, enlaces de Términos/Privacidad que no abren nada, ícono de la app por
+      defecto y pluralización ("1 servicios").
 - [ ] R8/ProGuard, revisión de seguridad
 - [ ] Publicación en Play Store
 

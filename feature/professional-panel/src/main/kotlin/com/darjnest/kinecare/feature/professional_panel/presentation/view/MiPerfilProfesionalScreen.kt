@@ -23,16 +23,12 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Badge
-import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.HomeWork
 import androidx.compose.material.icons.filled.HowToReg
-import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PinDrop
 import androidx.compose.material.icons.filled.Psychology
@@ -64,7 +60,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -73,6 +68,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.darjnest.kinecare.core.designsystem.components.bar.KineCareProfessionalBottomNavBar
+import com.darjnest.kinecare.core.designsystem.components.bar.PestanaProfesionalInferior
 import com.darjnest.kinecare.core.designsystem.components.avatar.KineCareAvatar
 import com.darjnest.kinecare.core.designsystem.components.avatar.rememberSelectorFoto
 import com.darjnest.kinecare.core.designsystem.theme.AzulPetroleo30
@@ -162,10 +159,12 @@ fun MiPerfilProfesionalScreen(
         modifier = modifier,
         containerColor = LoginFondo,
         bottomBar = {
-            BarraNavegacionInferiorPerfil(
-                onIrAInicio = onIrAInicio,
-                onIrASolicitudes = onIrASolicitudes,
-                onIrAAgenda = onIrAAgenda,
+            KineCareProfessionalBottomNavBar(
+                pestanaActiva = PestanaProfesionalInferior.PERFIL,
+                onInicio = onIrAInicio,
+                onSolicitudes = onIrASolicitudes,
+                onAgenda = onIrAAgenda,
+                onPerfil = {},
             )
         },
     ) { innerPadding ->
@@ -1204,44 +1203,6 @@ private fun BotonesAccionPerfil(
             Spacer(modifier = Modifier.width(8.dp))
             Text(text = "Cerrar Sesión", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = RojoError40)
         }
-    }
-}
-
-@Composable
-private fun BarraNavegacionInferiorPerfil(
-    onIrAInicio: () -> Unit,
-    onIrASolicitudes: () -> Unit,
-    onIrAAgenda: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color.White)
-            .padding(vertical = 10.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-    ) {
-        ItemNavegacionInferiorPerfil(texto = "Inicio", icono = Icons.Filled.Dashboard, activo = false, onClick = onIrAInicio)
-        ItemNavegacionInferiorPerfil(texto = "Solicitudes", icono = Icons.Filled.NotificationsActive, activo = false, onClick = onIrASolicitudes)
-        ItemNavegacionInferiorPerfil(texto = "Agenda", icono = Icons.Filled.CalendarMonth, activo = false, onClick = onIrAAgenda)
-        ItemNavegacionInferiorPerfil(texto = "Perfil", icono = Icons.Filled.Badge, activo = true)
-    }
-}
-
-@Composable
-private fun ItemNavegacionInferiorPerfil(
-    texto: String,
-    icono: ImageVector,
-    activo: Boolean,
-    onClick: (() -> Unit)? = null,
-) {
-    val color = if (activo) LoginPrimarioOscuro else LoginGrisTexto
-    Column(
-        modifier = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Icon(icono, contentDescription = texto, tint = color, modifier = Modifier.size(22.dp))
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(text = texto, style = MaterialTheme.typography.labelSmall, color = color, fontWeight = if (activo) FontWeight.Bold else FontWeight.Normal)
     }
 }
 
