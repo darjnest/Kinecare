@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import kotlinx.datetime.Instant
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import kotlin.time.Clock
 
@@ -39,6 +40,14 @@ class AuthRepositoryImpl @Inject constructor(
     private val firebaseAuth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
 ) : AuthRepository {
+
+    /**
+     * `true` mientras [registrar] crea la cuenta. `createUserWithEmailAndPassword` deja la sesion
+     * iniciada un instante (luego se cierra para que el usuario inicie sesion a proposito), y el
+     * listener de [observarUsuarioActual] la veia como un inicio de sesion real: la app navegaba a
+     * Explorar y se quedaba alli sin sesion (Firestore rechazaba todo con PERMISSION_DENIED).
+     */
+    private val registrando = AtomicBoolean(false)
 
     override suspend fun iniciarSesion(rut: String, password: String): Result<Usuario, AuthError> {
         return try {
@@ -65,6 +74,7 @@ class AuthRepositoryImpl @Inject constructor(
         correoContacto: String,
         tiposAtencion: Set<TipoAtencion>,
     ): Result<Usuario, AuthError> {
+        registrando.set(true)
         return try {
             val rutNormalizado = RutUtils.normalizar(rut)
             val resultado = firebaseAuth.createUserWithEmailAndPassword(RutUtils.emailFirebase(rutNormalizado), password).await()
@@ -104,6 +114,8 @@ class AuthRepositoryImpl @Inject constructor(
             Result.Error(AuthError.SIN_INTERNET)
         } catch (e: Exception) {
             Result.Error(AuthError.DESCONOCIDO)
+        } finally {
+            registrando.set(false)
         }
     }
 
@@ -175,12 +187,19 @@ class AuthRepositoryImpl @Inject constructor(
 
     override fun observarUsuarioActual(): Flow<Usuario?> = callbackFlow {
         val listener = FirebaseAuth.AuthStateListener { auth ->
+            // La sesion transitoria del registro no es un inicio de sesion (ver [registrando]).
+            if (registrando.get()) return@AuthStateListener
             val uid = auth.currentUser?.uid
             if (uid == null) {
                 trySend(null)
             } else {
                 firestore.collection(COLECCION_USUARIOS).document(uid).get()
-                    .addOnSuccessListener { doc -> trySend(doc.aUsuarioONull(uid)) }
+                    .addOnSuccessListener { doc ->
+                        // La lectura es asincrona: si la sesion ya se cerro o cambio (el registro la
+                        // cierra enseguida), emitir este usuario dejaria a la app "autenticada" sin sesion.
+                        if (registrando.get() || auth.currentUser?.uid != uid) return@addOnSuccessListener
+                        trySend(doc.aUsuarioONull(uid))
+                    }
                     .addOnFailureListener { trySend(null) }
             }
         }
