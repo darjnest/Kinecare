@@ -29,7 +29,6 @@ import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -320,23 +319,6 @@ private fun TarjetaResumenPortal(region: String, resumen: ResumenCatalogoServici
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(50))
-                    .background(LoginMenta)
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.Filled.ReceiptLong, contentDescription = null, tint = LoginPrimarioOscuro, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Boletas exentas electrónicas automatizadas con el SII al confirmar cada atención.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = LoginPrimarioOscuro,
-                )
-            }
         }
     }
 }

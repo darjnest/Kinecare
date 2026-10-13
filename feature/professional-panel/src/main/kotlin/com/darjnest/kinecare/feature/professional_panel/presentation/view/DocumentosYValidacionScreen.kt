@@ -183,9 +183,6 @@ fun DocumentosYValidacionScreen(
             TarjetaNuevaCertificacion(onClick = { onAction(DocumentosYValidacionAction.SubirNuevaCertificacion) })
 
             Spacer(modifier = Modifier.height(16.dp))
-            TarjetaMarcoJuridico()
-
-            Spacer(modifier = Modifier.height(16.dp))
             FilaMesaLegal(onClick = { onAction(DocumentosYValidacionAction.ContactarMesaLegal) })
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -654,35 +651,6 @@ private fun TarjetaNuevaCertificacion(onClick: () -> Unit) {
                 Icon(Icons.Filled.CloudUpload, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(text = "Subir Nueva Certificación", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color.White)
-            }
-        }
-    }
-}
-
-@Composable
-private fun TarjetaMarcoJuridico() {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = LoginAzulSuave),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    ) {
-        Row(modifier = Modifier.padding(16.dp)) {
-            Icon(Icons.Filled.Gavel, contentDescription = null, tint = AzulPetroleo30, modifier = Modifier.size(24.dp))
-            Spacer(modifier = Modifier.width(12.dp))
-            Column {
-                Text(
-                    text = "MARCO JURÍDICO DE SALUD",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = AzulPetroleo30,
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Cumplimiento estricto con la Ley N° 20.584 de Derechos y Deberes de las Personas en Salud, normativa de ficha clínica electrónica confidencial y resguardo de datos sensibles en Chile.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = LoginGrisTexto,
-                )
             }
         }
     }

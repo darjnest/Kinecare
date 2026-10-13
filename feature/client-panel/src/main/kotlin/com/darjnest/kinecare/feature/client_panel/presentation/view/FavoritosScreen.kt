@@ -195,8 +195,6 @@ fun FavoritosScreen(
                     }
                 }
 
-                TarjetaEquipoHabitual()
-
                 Spacer(modifier = Modifier.height(8.dp))
             }
         }
@@ -750,43 +748,6 @@ private fun TarjetaFavoritoSecundario(
                     Text(text = "Agendar Cita", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = TextoPrincipal)
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun TarjetaEquipoHabitual() {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(LoginGrisClaro)
-            .padding(16.dp),
-        verticalAlignment = Alignment.Top,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(Color.White),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(Icons.Filled.Shield, contentDescription = null, tint = LoginPrimarioOscuro, modifier = Modifier.size(20.dp))
-        }
-        Spacer(modifier = Modifier.width(12.dp))
-        Column {
-            Text(
-                text = "Tu equipo de salud habitual",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
-                color = TextoPrincipal,
-            )
-            Text(
-                text = "Tus datos de salud y preferencias terapéuticas están protegidos conforme a la Ley 20.584 de Deberes y Derechos de los Pacientes en Chile.",
-                style = MaterialTheme.typography.labelSmall,
-                color = LoginGrisTexto,
-                modifier = Modifier.padding(top = 4.dp),
-            )
         }
     }
 }

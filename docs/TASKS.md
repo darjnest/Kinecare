@@ -969,8 +969,7 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       `KineCareProfessionalBottomNavBar` en `:core:designsystem` (Inicio · Solicitudes ·
       Agenda · Perfil, antes "Reservas" vs "Solicitudes" y ícono carpeta vs credencial).
       Pendientes de esa revisión, sin arreglar: controles de Disponibilidad sin campo en
-      Firestore (reservas inmediatas, traslado, mapa y radio), textos que prometen
-      boletas del SII y "cumplimiento estricto" de la Ley 20.584, botones sin flujo en
+      Firestore (reservas inmediatas, traslado, mapa y radio), botones sin flujo en
       Documentos, enlaces de Términos/Privacidad que no abren nada, ícono de la app por
       defecto y pluralización ("1 servicios").
 - [x] Mapa en la búsqueda del cliente (2026-10-13): alternancia Lista/Mapa en
@@ -992,6 +991,14 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       `PERMISSION_DENIED`, "Mi Perfil" mostraba el nombre genérico). Ahora el listener ignora la
       sesión transitoria del registro y descarta una lectura de `usuarios/{uid}` que termina
       después de cerrar la sesión. 2 tests de regresión (fallan sin el arreglo).
+- [x] Textos que prometían lo que no existe (2026-10-13): se quitaron el aviso "Boletas exentas
+      electrónicas automatizadas con el SII" (Servicios y tarifas), la tarjeta "Marco jurídico de
+      salud / Cumplimiento estricto con la Ley N° 20.584" (Documentos), el aviso "Datos clínicos
+      protegidos bajo Ley 20.584" (login y registro) y la tarjeta "Tu equipo de salud habitual"
+      de Favoritos, que repetía la misma afirmación. Se conserva el diálogo informativo
+      "Derechos del Paciente (Ley N° 20.584)" de Mi Perfil (describe derechos, no afirma
+      cumplimiento). Las pantallas ocultas de previsión/facturación aún mencionan el SII y la
+      ley; hay que revisarlas antes de mostrarlas.
 - [ ] R8/ProGuard, revisión de seguridad
 - [ ] Publicación en Play Store
 
