@@ -30,6 +30,19 @@ service firebase.storage {
       allow delete: if false;
     }
 
+    // Certificaciones, diplomas y postitulos que sube el profesional (PDF, JPEG o PNG, < 10 MB).
+    // Solo el dueno CREA el archivo: no lo lee, no lo reemplaza ni lo borra desde la app (documentos
+    // sensibles; los revisa soporte con Admin SDK, que ignora estas reglas). El registro que ve la app
+    // es `profesionales/{uid}/certificaciones/{id}` en Firestore.
+    match /profesionales/{usuarioId}/certificaciones/{archivo} {
+      allow create: if resource == null
+        && request.auth != null
+        && request.auth.uid == usuarioId
+        && request.resource.contentType in ['application/pdf', 'image/jpeg', 'image/png']
+        && request.resource.size < 10 * 1024 * 1024;
+      allow read, update, delete: if false;
+    }
+
     // Documentos de credenciales: contienen datos de identidad/titulos. No los
     // lee ni los escribe la app; los maneja el backend / proveedor de
     // verificacion (Admin SDK ignora estas reglas). Fase 6 define el flujo.

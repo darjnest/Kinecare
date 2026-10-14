@@ -457,3 +457,104 @@ describe("reglas: profesionales/{uid} (campos que edita el dueno)", () => {
     denegado(await patch(null, ruta, { descripcion: str("Anonimo") }));
   });
 });
+
+describe("reglas: profesionales/{uid}/certificaciones/{id}", () => {
+  const ruta = (uid: string, id = "c1") => `profesionales/${uid}/certificaciones/${id}`;
+  const entero = (n: number): Valor => ({ integerValue: String(n) });
+  const valido = (uid: string): Record<string, Valor> => ({
+    nombre: str("Diplomado en kinesiologia deportiva"),
+    archivoPath: str(`profesionales/${uid}/certificaciones/c1.pdf`),
+    tipoContenido: str("application/pdf"),
+    tamanoBytes: entero(1_300_000),
+    estado: str("EN_REVISION"),
+  });
+
+  /** Crea el registro; `creadoEn` lo fija el servidor (REQUEST_TIME), como `FieldValue.serverTimestamp()`. */
+  async function crear(
+    uid: string | null,
+    duenoRuta: string,
+    campos: Record<string, Valor>,
+    conServerTimestamp = true,
+    id = "c1",
+  ): Promise<number> {
+    const name = `projects/${PROJECT_ID}/databases/(default)/documents/${ruta(duenoRuta, id)}`;
+    const r = await fetch(`${BASE.replace(/\/documents$/, "")}/documents:commit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(uid === null ? {} : { Authorization: `Bearer ${jwt(uid)}` }) },
+      body: JSON.stringify({
+        writes: [
+          {
+            update: { name, fields: campos },
+            ...(conServerTimestamp
+              ? { updateTransforms: [{ fieldPath: "creadoEn", setToServerValue: "REQUEST_TIME" }] }
+              : {}),
+          },
+        ],
+      }),
+    });
+    await r.text();
+    return r.status;
+  }
+
+  it("el dueno crea su certificacion EN_REVISION con serverTimestamp y la lee", async () => {
+    ok(await crear(PRO, PRO, valido(PRO)));
+    const doc = await db.collection("profesionales").doc(PRO).collection("certificaciones").doc("c1").get();
+    assert.equal(doc.get("estado"), "EN_REVISION");
+    assert.ok(doc.get("creadoEn") instanceof Timestamp);
+    ok(await llamar(PRO, "GET", ruta(PRO)));
+    ok(await llamar(PRO, "GET", `profesionales/${PRO}/certificaciones`));
+  });
+
+  it("nadie crea ni lee las certificaciones de otro profesional (ni anonimo)", async () => {
+    denegado(await crear(OTRO_PRO, PRO, valido(PRO)));
+    denegado(await crear(CLIENTE, PRO, valido(PRO)));
+    denegado(await crear(null, PRO, valido(PRO)));
+    ok(await crear(PRO, PRO, valido(PRO)));
+    denegado(await llamar(OTRO_PRO, "GET", ruta(PRO)));
+    denegado(await llamar(OTRO_PRO, "GET", `profesionales/${PRO}/certificaciones`));
+    denegado(await llamar(null, "GET", ruta(PRO)));
+  });
+
+  it("exige el estado EN_REVISION: un profesional no se autoaprueba", async () => {
+    denegado(await crear(PRO, PRO, { ...valido(PRO), estado: str("APROBADA") }));
+    denegado(await crear(PRO, PRO, { ...valido(PRO), estado: str("RECHAZADA") }));
+  });
+
+  it("exige claves exactas: sin una requerida o con una extra (motivoRechazo) se rechaza", async () => {
+    const { nombre: _nombre, ...sinNombre } = valido(PRO);
+    denegado(await crear(PRO, PRO, sinNombre));
+    denegado(await crear(PRO, PRO, { ...valido(PRO), motivoRechazo: str("x") }));
+    denegado(await crear(PRO, PRO, { ...valido(PRO), verificada: { booleanValue: true } as never }));
+  });
+
+  it("creadoEn debe ser el instante del servidor, no uno elegido por el cliente", async () => {
+    denegado(await crear(PRO, PRO, valido(PRO), false));
+    denegado(await crear(PRO, PRO, { ...valido(PRO), creadoEn: { timestampValue: "2020-01-01T00:00:00Z" } as never }, false));
+  });
+
+  it("acota el nombre (1 a 120), el tipo (PDF, JPEG o PNG) y el tamano (< 10 MB)", async () => {
+    denegado(await crear(PRO, PRO, { ...valido(PRO), nombre: str("") }));
+    denegado(await crear(PRO, PRO, { ...valido(PRO), nombre: str("a".repeat(121)) }));
+    ok(await crear(PRO, PRO, { ...valido(PRO), nombre: str("a".repeat(120)) }, true, "c2"));
+    denegado(await crear(PRO, PRO, { ...valido(PRO), tipoContenido: str("application/zip") }));
+    denegado(await crear(PRO, PRO, { ...valido(PRO), tamanoBytes: entero(0) }));
+    denegado(await crear(PRO, PRO, { ...valido(PRO), tamanoBytes: entero(10 * 1024 * 1024) }));
+    ok(await crear(PRO, PRO, { ...valido(PRO), tamanoBytes: entero(10 * 1024 * 1024 - 1) }, true, "c3"));
+  });
+
+  it("archivoPath debe apuntar a la carpeta de certificaciones del propio profesional", async () => {
+    denegado(await crear(PRO, PRO, { ...valido(PRO), archivoPath: str(`profesionales/${OTRO_PRO}/certificaciones/c1.pdf`) }));
+    denegado(await crear(PRO, PRO, { ...valido(PRO), archivoPath: str(`profesionales/${PRO}/credenciales/c1.pdf`) }));
+    denegado(await crear(PRO, PRO, { ...valido(PRO), archivoPath: str(`profesionales/${PRO}/certificaciones/a/b.pdf`) }));
+  });
+
+  it("la app no edita ni borra una certificacion (la resuelve soporte con Admin SDK)", async () => {
+    ok(await crear(PRO, PRO, valido(PRO)));
+    denegado(await llamar(PRO, "PATCH", `${ruta(PRO)}?updateMask.fieldPaths=estado`, { fields: { estado: str("APROBADA") } }));
+    denegado(await llamar(PRO, "DELETE", ruta(PRO)));
+    // crear otra vez el mismo id equivale a un update: tambien denegado
+    denegado(await crear(PRO, PRO, valido(PRO)));
+    const doc = await db.collection("profesionales").doc(PRO).collection("certificaciones").doc("c1").get();
+    assert.equal(doc.get("estado"), "EN_REVISION");
+  });
+});

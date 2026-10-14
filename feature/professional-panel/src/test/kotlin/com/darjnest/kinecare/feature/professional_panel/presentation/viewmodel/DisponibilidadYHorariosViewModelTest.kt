@@ -258,4 +258,42 @@ class DisponibilidadYHorariosViewModelTest {
         assertNull(viewModel.state.value.turnoEnEdicion)
         assertEquals("09:00", viewModel.state.value.turnos.first().horaInicio)
     }
+
+    @Test
+    fun `un profesional sin horarios puede habilitar un dia agregando un turno`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId(uid) } returns Result.Success(profesional(emptyList()))
+        val viewModel = crearViewModel()
+        assertTrue(viewModel.state.value.turnos.isEmpty())
+
+        viewModel.onAction(DisponibilidadYHorariosAction.AgregarTurno)
+
+        val estado = viewModel.state.value
+        assertEquals(listOf("09:00" to "13:00"), estado.turnos.map { it.horaInicio to it.horaFin })
+        assertTrue(estado.diasLaborales.single { it.id == "MONDAY" }.habilitado)
+    }
+
+    @Test
+    fun `agregar un segundo turno usa el tramo de la tarde y un tercero se rechaza`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId(uid) } returns Result.Success(profesional(emptyList()))
+        val viewModel = crearViewModel()
+
+        viewModel.onAction(DisponibilidadYHorariosAction.AgregarTurno)
+        viewModel.onAction(DisponibilidadYHorariosAction.AgregarTurno)
+        assertEquals(listOf("09:00" to "13:00", "14:00" to "18:00"), viewModel.state.value.turnos.map { it.horaInicio to it.horaFin })
+
+        viewModel.onAction(DisponibilidadYHorariosAction.AgregarTurno)
+        assertEquals(2, viewModel.state.value.turnos.size)
+        assertEquals("No queda espacio para otro turno ese día. Edita uno existente.", viewModel.state.value.mensaje)
+    }
+
+    @Test
+    fun `quitar el ultimo turno de un dia lo deja sin atender`() = runTest {
+        coEvery { profesionalRepository.obtenerPorId(uid) } returns Result.Success(profesional(listOf(horario(DayOfWeek.MONDAY, 9, 13))))
+        val viewModel = crearViewModel()
+
+        viewModel.onAction(DisponibilidadYHorariosAction.QuitarTurno("MONDAY-0"))
+
+        assertTrue(viewModel.state.value.turnos.isEmpty())
+        assertFalse(viewModel.state.value.diasLaborales.single { it.id == "MONDAY" }.habilitado)
+    }
 }

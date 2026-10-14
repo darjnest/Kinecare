@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Prueba storage.rules contra los emuladores de Auth y Storage: quien puede subir, leer y borrar la
-# foto de perfil del cliente y del profesional (solo el dueno, solo JPEG, < 5 MB, sin deletes).
+# foto de perfil del cliente y del profesional (solo el dueno, solo JPEG, < 5 MB, sin deletes) y las certificaciones del profesional.
 #
 # Uso:  scripts/probar-storage-rules.sh
 # Requiere: node, java, curl, python3 y `npm ci` hecho en functions/ (trae firebase-tools). La
@@ -52,6 +52,8 @@ A="$(registrar dueno)"; UA="$(echo "$A" | campo localId)"; TA="$(echo "$A" | cam
 B="$(registrar ajeno)"; TB="$(echo "$B" | campo idToken)"
 head -c 1000 /dev/urandom > chica.jpg
 head -c 5300000 /dev/urandom > grande.jpg
+head -c 3000 /dev/urandom > cert.pdf
+head -c 10500000 /dev/urandom > cert-grande.pdf
 
 for carpeta in clientes profesionales; do
   F="$carpeta/$UA/foto-perfil.jpg"
@@ -68,6 +70,21 @@ verificar "clientes: la lee su dueno" "$(leer "$TA" "clientes/$UA/foto-perfil.jp
 verificar "clientes: no la lee otro usuario" "$(leer "$TB" "clientes/$UA/foto-perfil.jpg")" 403
 verificar "clientes: no la lee un anonimo" "$(leer "" "clientes/$UA/foto-perfil.jpg")" 403
 verificar "profesionales: la lectura es publica" "$(leer "" "profesionales/$UA/foto-perfil.jpg")" 200
+
+# Certificaciones del profesional: el dueno solo CREA (PDF, JPEG o PNG, < 10 MB); no lee, reemplaza ni borra.
+C="profesionales/$UA/certificaciones/c1.pdf"
+verificar "certificaciones: el dueno sube un PDF" "$(subir "$TA" "$C" cert.pdf application/pdf)" 200
+verificar "certificaciones: el dueno sube un JPEG" "$(subir "$TA" "profesionales/$UA/certificaciones/c2.jpg" chica.jpg image/jpeg)" 200
+verificar "certificaciones: el dueno sube un PNG" "$(subir "$TA" "profesionales/$UA/certificaciones/c3.png" chica.jpg image/png)" 200
+verificar "certificaciones: no se reemplaza un archivo existente" "$(subir "$TA" "$C" cert.pdf application/pdf)" 403
+verificar "certificaciones: otro usuario no sube" "$(subir "$TB" "profesionales/$UA/certificaciones/c4.pdf" cert.pdf application/pdf)" 403
+verificar "certificaciones: sin sesion no se sube" "$(subir "" "profesionales/$UA/certificaciones/c5.pdf" cert.pdf application/pdf)" 403
+verificar "certificaciones: un tipo no permitido se rechaza" "$(subir "$TA" "profesionales/$UA/certificaciones/c6.zip" cert.pdf application/zip)" 403
+verificar "certificaciones: 10 MB o mas se rechaza" "$(subir "$TA" "profesionales/$UA/certificaciones/c7.pdf" cert-grande.pdf application/pdf)" 403
+verificar "certificaciones: el dueno no las lee" "$(leer "$TA" "$C")" 403
+verificar "certificaciones: nadie las lee" "$(leer "" "$C")" 403
+verificar "certificaciones: el dueno no las borra" "$(borrar "$TA" "$C")" 403
+verificar "credenciales: la app sigue sin poder escribir" "$(subir "$TA" "profesionales/$UA/credenciales/c.pdf" cert.pdf application/pdf)" 403
 
 [ "$FALLAS" -eq 0 ] || { echo "$FALLAS prueba(s) fallaron" >&2; exit 1; }
 PRUEBAS

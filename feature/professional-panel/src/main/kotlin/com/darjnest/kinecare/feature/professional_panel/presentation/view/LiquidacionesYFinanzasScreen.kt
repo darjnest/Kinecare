@@ -526,6 +526,45 @@ private fun SeccionResumenMensual(resumenMensual: ResumenMensual) {
                         style = MaterialTheme.typography.labelSmall,
                         color = LoginGrisTexto,
                     )
+                    if (resumenMensual.citasPorAtender > 0) {
+                        Text(
+                            text = "+${resumenMensual.citasPorAtender} por atender",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = LoginPrimarioOscuro,
+                        )
+                    }
+                }
+            }
+        }
+
+        // El ingreso solo cuenta cuando la atencion empieza; esto muestra lo que el cliente ya pago y falta atender.
+        if (resumenMensual.citasPorAtender > 0) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = LoginMenta),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "COBRADO, POR ATENDER", style = MaterialTheme.typography.labelSmall, color = LoginPrimarioOscuro)
+                        Text(
+                            text = if (resumenMensual.citasPorAtender == 1) "1 cita ya pagada" else "${resumenMensual.citasPorAtender} citas ya pagadas",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = LoginGrisTexto,
+                        )
+                    }
+                    Text(
+                        text = formatearClp(resumenMensual.cobradoPorAtender),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = TextoPrincipal,
+                    )
                 }
             }
         }

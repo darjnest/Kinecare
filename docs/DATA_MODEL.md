@@ -167,6 +167,22 @@ precio: number
 activo: boolean
 ```
 
+#### Subcolección `profesionales/{id}/certificaciones/{certificacionId}`
+Certificaciones, diplomas y postítulos que sube el profesional (el archivo va a Storage,
+`profesionales/{uid}/certificaciones/{certificacionId}.{pdf|jpg|png}`).
+```
+nombre: string                // 1..120; por defecto el nombre del archivo sin extensión
+archivoPath: string           // ruta en Storage; debe ser de la carpeta certificaciones del propio uid
+tipoContenido: "application/pdf" | "image/jpeg" | "image/png"
+tamanoBytes: number           // > 0 y < 10 MB
+estado: "EN_REVISION" | "APROBADA" | "RECHAZADA"
+creadoEn: timestamp           // serverTimestamp, exigido por las reglas
+motivoRechazo: string?        // lo escribe soporte al rechazar
+```
+Reglas: el dueño **crea** (siempre `EN_REVISION`, claves exactas) y **lee**; no edita ni borra.
+Aprobar o rechazar lo hace soporte desde la consola (Admin SDK). Probado en
+`functions/test/integration/reglas.integration.test.ts`.
+
 ### `reservas/{reservaId}`
 ```
 clienteId: string
@@ -938,6 +954,7 @@ Reglas de detalle:
 ```
 /profesionales/{usuarioId}/foto-perfil.jpg
 /clientes/{usuarioId}/foto-perfil.jpg
+/profesionales/{usuarioId}/certificaciones/{archivo}  // el dueño solo crea; PDF/JPEG/PNG < 10 MB
 /profesionales/{usuarioId}/credenciales/{archivo}     // acceso restringido, solo backend/proveedor
 ```
 
@@ -952,11 +969,16 @@ producción no tiene bucket (plan Spark).
   **lectura es solo del dueño** (no es pública). Los demás ven la foto por la URL
   de descarga con token que queda en `usuarios/{uid}.fotoUrl`, que no pasa por las
   reglas.
+- `certificaciones/{archivo}`: solo el dueño **crea** (no reemplaza), con `application/pdf`,
+  `image/jpeg` o `image/png` y < 10 MB; ni lectura ni borrado desde la app (documentos
+  sensibles; los revisa soporte con Admin SDK). La app ve el registro de Firestore, no el archivo.
+  Subida con `CertificacionRepository` (`LectorDocumentoAndroid` lee el `content://` del
+  selector `OpenDocument`, todo en memoria y cortando al pasar el límite).
 - `credenciales/**`: nada desde la app (lo maneja el backend/proveedor con Admin
   SDK, que ignora las reglas). Todo lo demás, denegado.
 
 Validadas con `scripts/probar-storage-rules.sh` (emuladores de Auth y Storage,
-20 casos: dueño, ajeno, anónimo, PNG, >= 5 MB, borrado, otro nombre de archivo).
+32 casos: dueño, ajeno, anónimo, PNG, >= 5 MB, borrado, otro nombre de archivo y las certificaciones).
 
 Subida desde la app (`FotoPerfilRepository`, `:core:common` + `:core:network`):
 el selector del sistema (`PickVisualMedia`, sin permisos) entrega un `content://`;
