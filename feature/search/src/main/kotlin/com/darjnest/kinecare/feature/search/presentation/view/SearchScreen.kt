@@ -11,6 +11,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -66,6 +68,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -107,6 +110,7 @@ import com.darjnest.kinecare.feature.search.presentation.viewmodel.SearchState
 import com.darjnest.kinecare.feature.search.presentation.viewmodel.SearchViewModel
 import com.darjnest.kinecare.core.common.domain.model.TipoAtencion
 import com.darjnest.kinecare.feature.search.presentation.viewmodel.VistaBusqueda
+import kotlinx.coroutines.launch
 
 @Composable
 fun SearchRoot(
@@ -154,6 +158,14 @@ fun SearchScreen(
             snackbarHostState.showSnackbar(it)
             onAction(SearchAction.MensajeMostrado)
         }
+    }
+    // Los resultados estan varias pantallas mas abajo que el boton: sin bajar hasta ellos, "Buscar"
+    // parecia no hacer nada.
+    val resultadosRequester = remember { BringIntoViewRequester() }
+    val scope = rememberCoroutineScope()
+    val accionConScroll: (SearchAction) -> Unit = { accion ->
+        onAction(accion)
+        if (accion == SearchAction.Buscar) scope.launch { resultadosRequester.bringIntoView() }
     }
     Scaffold(
         modifier = modifier,
@@ -204,7 +216,7 @@ fun SearchScreen(
                 )
 
                 Spacer(modifier = Modifier.height(20.dp))
-                TarjetaFiltros(state = state, onAction = onAction)
+                TarjetaFiltros(state = state, onAction = accionConScroll)
 
                 Spacer(modifier = Modifier.height(16.dp))
                 SelectorVista(vista = state.vista, onAction = onAction)
@@ -223,26 +235,28 @@ fun SearchScreen(
                 )
 
                 Spacer(modifier = Modifier.height(28.dp))
-                FilaDestacadosTitulo()
+                Column(modifier = Modifier.bringIntoViewRequester(resultadosRequester)) {
+                    FilaDestacadosTitulo()
 
-                Spacer(modifier = Modifier.height(12.dp))
-                FilaOrden(orden = state.orden, onAction = onAction)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    FilaOrden(orden = state.orden, onAction = onAction)
 
-                Spacer(modifier = Modifier.height(12.dp))
-                if (state.cargandoProfesionales) {
-                    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = LoginPrimarioOscuro)
-                    }
-                } else if (state.profesionalesDestacados.isEmpty()) {
-                    MensajeSinProfesionales(hayCargados = state.totalProfesionalesCargados > 0)
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        state.profesionalesDestacados.forEach { profesional ->
-                            TarjetaProfesionalDestacado(
-                                profesional = profesional,
-                                esFavorito = profesional.id in state.favoritos,
-                                onAction = onAction,
-                            )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    if (state.cargandoProfesionales) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = LoginPrimarioOscuro)
+                        }
+                    } else if (state.profesionalesDestacados.isEmpty()) {
+                        MensajeSinProfesionales(hayCargados = state.totalProfesionalesCargados > 0)
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            state.profesionalesDestacados.forEach { profesional ->
+                                TarjetaProfesionalDestacado(
+                                    profesional = profesional,
+                                    esFavorito = profesional.id in state.favoritos,
+                                    onAction = onAction,
+                                )
+                            }
                         }
                     }
                 }

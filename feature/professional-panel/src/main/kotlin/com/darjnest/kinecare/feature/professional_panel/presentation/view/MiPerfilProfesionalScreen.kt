@@ -363,7 +363,12 @@ private fun TarjetaIdentidadProfesional(
                 .padding(16.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box {
+                // Toda el area del avatar abre el selector: la insignia de camara sola (26 dp) era muy chica para tocarla.
+                Box(
+                    modifier = Modifier.clickable(enabled = !subiendoFoto, role = Role.Button) {
+                        onAction(MiPerfilProfesionalAction.CambiarFoto)
+                    },
+                ) {
                     KineCareAvatar(
                         iniciales = inicialesDeNombre(identidad.nombre),
                         fotoUrl = fotoUrl,
@@ -379,10 +384,7 @@ private fun TarjetaIdentidadProfesional(
                             .align(Alignment.BottomEnd)
                             .size(26.dp)
                             .clip(CircleShape)
-                            .background(LoginPrimarioOscuro)
-                            .clickable(enabled = !subiendoFoto, role = Role.Button) {
-                                onAction(MiPerfilProfesionalAction.CambiarFoto)
-                            },
+                            .background(LoginPrimarioOscuro),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(Icons.Filled.CameraAlt, contentDescription = "Cambiar foto", tint = Color.White, modifier = Modifier.size(14.dp))

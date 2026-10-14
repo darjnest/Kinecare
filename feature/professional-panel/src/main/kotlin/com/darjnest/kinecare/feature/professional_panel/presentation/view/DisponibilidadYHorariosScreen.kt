@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MoreVert
@@ -158,7 +159,7 @@ fun DisponibilidadYHorariosScreen(
                     SeccionDiasLaborales(dias = state.diasLaborales, onAction = onAction)
                 }
 
-                if (state.turnos.isNotEmpty()) {
+                if (state.diasLaborales.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(20.dp))
                     val diaSeleccionado = state.diasLaborales.firstOrNull { it.seleccionado }
                     SeccionHorarios(diaSeleccionado = diaSeleccionado, turnos = state.turnos, onAction = onAction)
@@ -437,7 +438,28 @@ private fun SeccionHorarios(
         }
         Spacer(modifier = Modifier.height(12.dp))
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (turnos.isEmpty()) {
+                Text(
+                    text = "No atiendes este día. Agrega un turno para habilitarlo.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = LoginGrisTexto,
+                )
+            }
             turnos.forEach { turno -> TarjetaTurno(turno = turno, onAction = onAction) }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(50))
+                    .background(LoginAzulSuave)
+                    .clickable { onAction(DisponibilidadYHorariosAction.AgregarTurno) }
+                    .padding(vertical = 12.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = null, tint = AzulPetroleo30, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(text = "Agregar turno", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = AzulPetroleo30)
+            }
         }
     }
 }
@@ -484,15 +506,27 @@ private fun TarjetaTurno(
                         }
                     }
                 }
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(LoginGrisClaro)
-                        .clickable { onAction(DisponibilidadYHorariosAction.EditarTurno(turno.id)) },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.Filled.Tune, contentDescription = "Editar turno", tint = AzulPetroleo30, modifier = Modifier.size(16.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(LoginGrisClaro)
+                            .clickable { onAction(DisponibilidadYHorariosAction.EditarTurno(turno.id)) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Filled.Tune, contentDescription = "Editar turno", tint = AzulPetroleo30, modifier = Modifier.size(16.dp))
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(RojoError90)
+                            .clickable { onAction(DisponibilidadYHorariosAction.QuitarTurno(turno.id)) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Filled.Delete, contentDescription = "Quitar turno", tint = RojoError40, modifier = Modifier.size(16.dp))
+                    }
                 }
             }
             Spacer(modifier = Modifier.height(10.dp))

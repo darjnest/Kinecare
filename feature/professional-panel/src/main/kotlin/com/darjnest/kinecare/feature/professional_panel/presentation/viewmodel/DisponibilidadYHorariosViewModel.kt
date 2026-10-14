@@ -88,6 +88,9 @@ sealed interface DisponibilidadYHorariosAction {
         val horaFin: LocalTime,
     ) : DisponibilidadYHorariosAction
     data object CancelarEdicionTurno : DisponibilidadYHorariosAction
+    /** Agrega un turno al dia seleccionado (con eso el dia queda habilitado). */
+    data object AgregarTurno : DisponibilidadYHorariosAction
+    data class QuitarTurno(val turnoId: String) : DisponibilidadYHorariosAction
     data object Replicar : DisponibilidadYHorariosAction
     data class SeleccionarMinutosTraslado(val minutos: Int) : DisponibilidadYHorariosAction
     data class CambiarRadioKm(val km: Int) : DisponibilidadYHorariosAction
@@ -114,6 +117,12 @@ internal fun numeroDiaDeLaSemana(hoy: LocalDate, dia: DayOfWeek): Int {
 }
 
 private const val DURACION_MINIMA_TURNO_SEGUNDOS = 30 * 60
+
+/** Tramos que se ofrecen, en este orden, al agregar un turno; se usa el primero que no se pise con otro. */
+private val TRAMOS_POR_DEFECTO = listOf(
+    LocalTime(9, 0) to LocalTime(13, 0),
+    LocalTime(14, 0) to LocalTime(18, 0),
+)
 
 private fun LocalTime.aTexto(): String = "%02d:%02d".format(hour, minute)
 
@@ -175,6 +184,8 @@ class DisponibilidadYHorariosViewModel @Inject constructor(
                 _state.update { it.copy(recargoZonaLejanaActivo = action.activo) }
 
             DisponibilidadYHorariosAction.Replicar -> replicarDiaSeleccionado()
+            DisponibilidadYHorariosAction.AgregarTurno -> agregarTurno()
+            is DisponibilidadYHorariosAction.QuitarTurno -> quitarTurno(action.turnoId)
             DisponibilidadYHorariosAction.GuardarDisponibilidad -> guardar()
             DisponibilidadYHorariosAction.MensajeMostrado -> _state.update { it.copy(mensaje = null) }
 
@@ -221,6 +232,34 @@ class DisponibilidadYHorariosViewModel @Inject constructor(
         if (destinos.isEmpty()) return
         horarios = horarios.filter { it.diaSemana !in destinos } +
             destinos.flatMap { destino -> origen.map { it.copy(diaSemana = destino) } }
+        refrescarHorarios()
+    }
+
+    /**
+     * Agrega un turno al dia seleccionado con el primer tramo por defecto que no se pise con los
+     * existentes. Sin esto un profesional sin horarios (perfil nuevo) no podria crear ninguno.
+     * Solo cambia el estado local: persiste con Guardar.
+     */
+    private fun agregarTurno() {
+        if (!horariosCargados) return
+        val delDia = horarios.filter { it.diaSemana == diaSeleccionado && it.activo }
+        val tramo = TRAMOS_POR_DEFECTO.firstOrNull { (inicio, fin) ->
+            delDia.none { inicio < it.horaFin && fin > it.horaInicio }
+        }
+        if (tramo == null) {
+            _state.update { it.copy(mensaje = "No queda espacio para otro turno ese día. Edita uno existente.") }
+            return
+        }
+        horarios = horarios + Disponibilidad(diaSeleccionado, tramo.first, tramo.second, activo = true)
+        refrescarHorarios()
+    }
+
+    /** Quita el turno `turnoId` (`DIA-indice`); si era el ultimo del dia, el dia deja de atender. */
+    private fun quitarTurno(turnoId: String) {
+        val indice = turnoId.substringAfterLast('-').toIntOrNull() ?: return
+        val original = horarios.filter { it.diaSemana == diaSeleccionado }.sortedBy { it.horaInicio }
+            .getOrNull(indice) ?: return
+        horarios = horarios - original
         refrescarHorarios()
     }
 

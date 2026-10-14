@@ -1,5 +1,6 @@
 package com.darjnest.kinecare.core.network.firebase.repository
 
+import android.util.Log
 import com.darjnest.kinecare.core.common.data.error.FotoPerfilError
 import com.darjnest.kinecare.core.common.data.repository.FotoPerfilRepository
 import com.darjnest.kinecare.core.common.domain.model.RolUsuario
@@ -18,6 +19,7 @@ import javax.inject.Inject
 import javax.inject.Provider
 
 private const val TIPO_CONTENIDO_JPEG = "image/jpeg"
+private const val ETIQUETA = "FotoPerfil"
 
 /**
  * Sube la foto de perfil a Firebase Storage con el tipo `image/jpeg` que exige `storage.rules`.
@@ -50,7 +52,9 @@ class FotoPerfilRepositoryImpl @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Result.Error(e.aFotoPerfilError())
+            val error = e.aFotoPerfilError()
+            Log.w(ETIQUETA, "Fallo al subir la foto de perfil ($error)", e)
+            Result.Error(error)
         }
     }
 }

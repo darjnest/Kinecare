@@ -8,6 +8,7 @@ import android.graphics.Color
 import android.graphics.Matrix
 import android.media.ExifInterface
 import android.net.Uri
+import android.util.Log
 import com.darjnest.kinecare.core.common.data.error.FotoPerfilError
 import com.darjnest.kinecare.core.common.result.Result
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -15,6 +16,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import javax.inject.Inject
+
+private const val ETIQUETA = "LectorImagen"
 
 /**
  * Decodifica la imagen del selector de fotos, la gira segun su orientacion EXIF, la reduce a
@@ -30,8 +33,10 @@ class LectorImagenAndroid @Inject constructor(
             try {
                 procesar(Uri.parse(uri))
             } catch (e: OutOfMemoryError) {
+                Log.w(ETIQUETA, "Imagen demasiado grande para decodificar", e)
                 Result.Error(FotoPerfilError.IMAGEN_INVALIDA)
             } catch (e: Exception) {
+                Log.w(ETIQUETA, "No se pudo leer la imagen elegida", e)
                 Result.Error(FotoPerfilError.IMAGEN_INVALIDA)
             }
         }
@@ -50,9 +55,12 @@ class LectorImagenAndroid @Inject constructor(
         val decodificada = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opciones) }
             ?: return Result.Error(FotoPerfilError.IMAGEN_INVALIDA)
 
-        val orientacion = resolver.openInputStream(uri)?.use {
-            ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
-        } ?: ExifInterface.ORIENTATION_NORMAL
+        // La orientacion es opcional: un EXIF ilegible (PNG, HEIC, capturas) no debe descartar la foto.
+        val orientacion = runCatching {
+            resolver.openInputStream(uri)?.use {
+                ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+            }
+        }.getOrNull() ?: ExifInterface.ORIENTATION_NORMAL
 
         val (anchoFinal, altoFinal) = dimensionesReducidas(decodificada.width, decodificada.height)
         val reducida = if (anchoFinal != decodificada.width || altoFinal != decodificada.height) {
