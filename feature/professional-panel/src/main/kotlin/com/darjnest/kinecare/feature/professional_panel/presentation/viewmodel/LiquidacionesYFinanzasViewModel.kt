@@ -63,6 +63,9 @@ data class ResumenMensual(
     val promedioDiario: Double,
     val comisionPlataformaPorcentaje: Int,
     val boletasEmitidas: Int? = null,
+    /** Honorario neto ya cobrado de citas futuras (el pago esta autorizado pero la atencion aun no ocurre). */
+    val cobradoPorAtender: Long = 0,
+    val citasPorAtender: Int = 0,
 )
 
 /** Estado de un pago ya procesado, mostrado en el historial. */
@@ -119,6 +122,12 @@ internal fun Reserva.esIngreso(ahora: Instant): Boolean =
         estado in ESTADOS_ATENDIDOS &&
         fechaHora <= ahora
 
+/** Complemento de [esIngreso]: cobrada y confirmada, pero la cita aun no empieza. */
+internal fun Reserva.esCobradoPorAtender(ahora: Instant): Boolean =
+    pago.estado == EstadoPagoDominio.AUTORIZADO &&
+        estado in ESTADOS_ATENDIDOS &&
+        fechaHora > ahora
+
 private val ESTADOS_ATENDIDOS = setOf(EstadoReserva.CONFIRMADA, EstadoReserva.EN_CURSO, EstadoReserva.COMPLETADA)
 
 private fun Instant.aFechaChile(): LocalDate = toLocalDateTime(ZonaHorariaChile).date
@@ -167,6 +176,7 @@ internal fun resumenMensual(reservas: List<Reserva>, ahora: Instant): ResumenMen
     val ingresosMesAnterior = reservas
         .filter { it.esIngreso(ahora) && it.fechaHora.aFechaChile().mismoMes(anterior) }
         .sumOf { it.pago.monto }
+    val porAtender = reservas.filter { it.esCobradoPorAtender(ahora) }
     val comision = delMes.firstOrNull()?.comisionPorcentaje
         ?: reservas.firstOrNull()?.comisionPorcentaje
         ?: COMISION_POR_DEFECTO
@@ -178,6 +188,8 @@ internal fun resumenMensual(reservas: List<Reserva>, ahora: Instant): ResumenMen
         atenciones = delMes.size,
         promedioDiario = ((delMes.size * 10.0 / hoy.day).roundToInt()) / 10.0,
         comisionPlataformaPorcentaje = (comision * 100).roundToInt(),
+        cobradoPorAtender = porAtender.sumOf { it.honorarioNeto() },
+        citasPorAtender = porAtender.size,
     )
 }
 

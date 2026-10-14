@@ -90,6 +90,27 @@ class LiquidacionesYFinanzasViewModelTest {
     }
 
     @Test
+    fun `cobrado por atender suma el honorario neto de citas futuras ya pagadas`() = runTest {
+        conReservas(
+            reservaPagada("futura1", AHORA_FINANZAS + 1.days, monto = 15_000),
+            reservaPagada("futura2", AHORA_FINANZAS + 3.days, monto = 20_000),
+            // ya atendida: es ingreso, no "por atender"
+            reservaPagada("pasada", AHORA_FINANZAS - 1.days, monto = 99_000),
+            // futura pero sin cobrar
+            reservaPagada("sinpago", AHORA_FINANZAS + 2.days, monto = 99_000, estadoPago = EstadoPagoDominio.PENDIENTE),
+            // futura, cobrada, pero cancelada
+            reservaPagada("cancelada", AHORA_FINANZAS + 2.days, monto = 99_000, estado = EstadoReserva.CANCELADA_CLIENTE),
+        )
+
+        val resumen = crearViewModel().state.value.resumenMensual!!
+
+        // 15.000 y 20.000 menos la comision del 10 %.
+        assertEquals(31_500L, resumen.cobradoPorAtender)
+        assertEquals(2, resumen.citasPorAtender)
+        assertEquals(99_000L, resumen.ingresosBrutos)
+    }
+
+    @Test
     fun `promedio diario son las atenciones entre los dias transcurridos del mes`() = runTest {
         conReservas(
             reservaPagada("a", AHORA_FINANZAS - 1.days),
