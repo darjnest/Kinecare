@@ -1016,6 +1016,19 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       y los turnos, que sí se guardan. El código se conserva detrás de
       `MOSTRAR_CONTROLES_SIN_PERSISTENCIA`; reactivarlo requiere campos en `profesionales/{id}`
       y reglas que dejen al dueño escribirlos (junto con "fijar mi zona y radio").
+- [x] Bugs de la prueba en celular (2026-10-13): **Disponibilidad** ya permite crear y quitar
+      turnos (antes con `disponibilidad` vacía no había cómo agregar uno); **Buscar atención**
+      baja a los resultados; **foto de perfil**: todo el avatar abre el selector y los fallos
+      quedan en logcat (`FotoPerfil`/`LectorImagen`); **Finanzas** muestra "Cobrado, por
+      atender" (honorario neto de citas futuras ya pagadas) y "+N por atender" en Atenciones.
+- [x] **Documentos y validación — subir certificaciones** (2026-10-13): selector de documentos del
+      sistema (PDF/JPEG/PNG, < 10 MB) → Storage `profesionales/{uid}/certificaciones/` + registro
+      `EN_REVISION` en `profesionales/{uid}/certificaciones/{id}`; la pantalla lista lo subido con
+      su estado. Se quitó la fila "Mesa Legal & Auditoría" (no tenía destino). Reglas de Firestore
+      y Storage nuevas con tests (442 de Firestore y 32 de Storage en verde). **Falta:** desplegar
+      las reglas a QA, probar la subida real en dispositivo y definir quién revisa
+      (`EN_REVISION` → `APROBADA`/`RECHAZADA` hoy es a mano en la consola; no hay tope de
+      certificaciones por profesional).
 - [ ] R8/ProGuard, revisión de seguridad
 - [ ] Publicación en Play Store
 

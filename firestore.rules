@@ -152,6 +152,26 @@ service cloud.firestore {
               || servicioValido(request.resource.data));
         allow delete: if esDueno(usuarioId);
       }
+
+      // Certificaciones que sube el profesional (el archivo va a Storage, ver storage.rules). Solo el
+      // dueno las crea y las lee, siempre `EN_REVISION`; aprobar o rechazar (y `motivoRechazo`) lo hace
+      // soporte desde la consola con Admin SDK, asi que desde la app no se edita ni se borra nada.
+      match /certificaciones/{certificacionId} {
+        allow read: if esDueno(usuarioId);
+        allow create: if esDueno(usuarioId)
+          && request.resource.data.keys().hasOnly(['nombre', 'archivoPath', 'tipoContenido', 'tamanoBytes', 'estado', 'creadoEn'])
+          && request.resource.data.keys().hasAll(['nombre', 'archivoPath', 'tipoContenido', 'tamanoBytes', 'estado', 'creadoEn'])
+          && request.resource.data.nombre is string
+          && request.resource.data.nombre.size() >= 1 && request.resource.data.nombre.size() <= 120
+          && request.resource.data.archivoPath is string
+          && request.resource.data.archivoPath.matches('profesionales/' + usuarioId + '/certificaciones/[^/]+')
+          && request.resource.data.tipoContenido in ['application/pdf', 'image/jpeg', 'image/png']
+          && request.resource.data.tamanoBytes is int
+          && request.resource.data.tamanoBytes > 0 && request.resource.data.tamanoBytes < 10 * 1024 * 1024
+          && request.resource.data.estado == 'EN_REVISION'
+          && request.resource.data.creadoEn == request.time;
+        allow update, delete: if false;
+      }
     }
 
     match /reservas/{reservaId} {

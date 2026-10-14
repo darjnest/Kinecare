@@ -167,18 +167,26 @@ casi todo esto:
 ### Bugs encontrados probando en el celular (2026-10-13)
 
 Detectados en un moto g56 5G con la app QA (commit `5202886`), cuenta de profesional
-`17694550-8`. Sin diagnosticar todavía: hay que reproducirlos y buscar la causa.
+`17694550-8`. Diagnosticados y corregidos en la rama `claude/bugs-a86669` (2026-10-13), **sin
+verificar todavía en el celular**: se cierran en cuanto se pruebe la app nueva.
 
-- [ ] **Disponibilidad y horarios no muestra las horas**, solo los días laborales. La
+- [ ] **Disponibilidad y horarios no muestra las horas** — *causa: la pantalla solo editaba turnos
+      que ya existían; con `disponibilidad` vacía no había forma de crear uno. Corregido: botón
+      "Agregar turno" (09:00–13:00, luego 14:00–18:00) y "Quitar turno" por día; con tests.*, solo los días laborales. La
       pantalla (`DisponibilidadYHorariosScreen.kt`, `:feature:professional-panel`) debería
       mostrar y permitir editar el tramo horario de cada día. Revisar si el modelo/estado
       trae las horas (`profesionales/{id}.disponibilidad` está vacío en el perfil de prueba)
       o si es un problema de la UI. Sin horarios un cliente no puede reservar.
-- [ ] **La fotografía del perfil no funciona** (subir/cambiar la foto). Revisar Storage de
+- [ ] **La fotografía del perfil no funciona** — *Storage y Firestore de QA están bien (reglas
+      desplegadas, `perfilesPublicos` existe); no se pudo reproducir sin el celular. Cambios: toda
+      el área del avatar abre el selector (la insignia de 26 dp era muy chica), un EXIF ilegible ya
+      no descarta la foto y los fallos de subida quedan en logcat (`FotoPerfil`/`LectorImagen`). Si
+      sigue fallando, mirar ese log.* (subir/cambiar la foto). Revisar Storage de
       QA (`storage.rules`, ruta `profesionales/{uid}/...`), permisos de cámara/galería y
       el guardado de `fotoUrl`. Ya estaba en la lista de pruebas pendientes de la sección 2
       ("Foto de perfil"); ahora es un fallo confirmado.
-- [ ] **El botón "BUSCAR ATENCIÓN" no funciona** (pantalla de búsqueda, `SearchScreen.kt`
+- [ ] **El botón "BUSCAR ATENCIÓN" no funciona** — *causa: sí recargaba, pero los resultados
+      quedan varias pantallas más abajo y no había feedback. Ahora baja hasta los resultados.* (pantalla de búsqueda, `SearchScreen.kt`
       de `:feature:search`; el botón dispara `SearchAction.Buscar`). Revisar si el `ViewModel`
       lo procesa, si falla la consulta a Firestore (reglas/índices, sin resultados) o si no
       navega a la lista de resultados. Reproducir con la app QA y mirar logcat.

@@ -43,19 +43,25 @@ import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Update
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import android.content.ActivityNotFoundException
@@ -67,6 +73,7 @@ import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.darjnest.kinecare.core.designsystem.components.archivo.rememberSelectorDocumento
 import com.darjnest.kinecare.core.designsystem.components.button.KineCarePrimaryButton
 import com.darjnest.kinecare.core.designsystem.components.card.KineCareCard
 import com.darjnest.kinecare.core.designsystem.theme.AzulPetroleo30
@@ -79,8 +86,12 @@ import com.darjnest.kinecare.core.designsystem.theme.LoginGrisTexto
 import com.darjnest.kinecare.core.designsystem.theme.LoginMenta
 import com.darjnest.kinecare.core.designsystem.theme.LoginPrimario
 import com.darjnest.kinecare.core.designsystem.theme.LoginPrimarioOscuro
+import com.darjnest.kinecare.core.designsystem.theme.RojoError40
+import com.darjnest.kinecare.core.designsystem.theme.RojoError90
 import com.darjnest.kinecare.core.designsystem.theme.TextoPrincipal
+import com.darjnest.kinecare.core.common.domain.model.EstadoCertificacion
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.AcreditacionOficial
+import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.CertificacionSubida
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.DocumentoClinico
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.DocumentosYValidacionAction
 import com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel.DocumentosYValidacionState
@@ -97,6 +108,9 @@ fun DocumentosYValidacionRoot(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val abrirSelectorDocumento = rememberSelectorDocumento { uri ->
+        viewModel.onAction(DocumentosYValidacionAction.CertificacionElegida(uri))
+    }
     DocumentosYValidacionScreen(
         state = state,
         onAction = { accion ->
@@ -108,6 +122,8 @@ fun DocumentosYValidacionRoot(
                 DocumentosYValidacionAction.CopiarNumeroSis ->
                     state.acreditacion?.numeroSis?.let { copiarAlPortapapeles(context, "N° SIS", it) }
                 DocumentosYValidacionAction.ConsultarEnSuperSalud -> abrirSuperSalud(context)
+                // El selector de documentos necesita el contexto de la Activity: lo abre el Root.
+                DocumentosYValidacionAction.SubirNuevaCertificacion -> abrirSelectorDocumento()
                 else -> viewModel.onAction(accion)
             }
         },
@@ -138,9 +154,17 @@ fun DocumentosYValidacionScreen(
     onVolver: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(state.mensaje) {
+        state.mensaje?.let {
+            snackbarHostState.showSnackbar(it)
+            onAction(DocumentosYValidacionAction.MensajeMostrado)
+        }
+    }
     Scaffold(
         modifier = modifier,
         containerColor = LoginFondo,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = { EncabezadoDocumentos(onVolver = onVolver) },
     ) { innerPadding ->
         Column(
@@ -180,10 +204,13 @@ fun DocumentosYValidacionScreen(
                 Spacer(modifier = Modifier.height(24.dp))
             }
 
-            TarjetaNuevaCertificacion(onClick = { onAction(DocumentosYValidacionAction.SubirNuevaCertificacion) })
-
+            SeccionCertificacionesSubidas(certificaciones = state.certificaciones)
             Spacer(modifier = Modifier.height(16.dp))
-            FilaMesaLegal(onClick = { onAction(DocumentosYValidacionAction.ContactarMesaLegal) })
+
+            TarjetaNuevaCertificacion(
+                subiendo = state.subiendoCertificacion,
+                onClick = { onAction(DocumentosYValidacionAction.SubirNuevaCertificacion) },
+            )
 
             Spacer(modifier = Modifier.height(24.dp))
         }
@@ -603,7 +630,7 @@ private fun TarjetaVerificarIdentidad(onClick: () -> Unit) {
 }
 
 @Composable
-private fun TarjetaNuevaCertificacion(onClick: () -> Unit) {
+private fun TarjetaNuevaCertificacion(subiendo: Boolean, onClick: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -643,58 +670,106 @@ private fun TarjetaNuevaCertificacion(onClick: () -> Unit) {
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(50))
                     .background(LoginPrimarioOscuro)
-                    .clickable(onClick = onClick)
+                    .clickable(enabled = !subiendo, onClick = onClick)
                     .padding(vertical = 14.dp),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Filled.CloudUpload, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                if (subiendo) {
+                    CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                } else {
+                    Icon(Icons.Filled.CloudUpload, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                }
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(text = "Subir Nueva Certificación", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                Text(
+                    text = if (subiendo) "Subiendo…" else "Subir Nueva Certificación",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                )
             }
         }
     }
 }
 
+/** Listado de lo que el profesional ya subio, con el estado de revision de cada certificacion. */
 @Composable
-private fun FilaMesaLegal(onClick: () -> Unit) {
+private fun SeccionCertificacionesSubidas(certificaciones: List<CertificacionSubida>) {
+    Text(
+        text = "Certificaciones subidas",
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+        color = TextoPrincipal,
+    )
+    Spacer(modifier = Modifier.height(12.dp))
+    if (certificaciones.isEmpty()) {
+        Text(
+            text = "Aún no has subido certificaciones.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = LoginGrisTexto,
+        )
+        return
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        certificaciones.forEach { certificacion -> TarjetaCertificacionSubida(certificacion) }
+    }
+}
+
+@Composable
+private fun TarjetaCertificacionSubida(certificacion: CertificacionSubida) {
+    val (textoEstado, fondoEstado, colorEstado) = when (certificacion.estado) {
+        EstadoCertificacion.EN_REVISION -> Triple("EN REVISIÓN", LoginAzulSuave, AzulPetroleo30)
+        EstadoCertificacion.APROBADA -> Triple("APROBADA", LoginMenta, LoginPrimarioOscuro)
+        EstadoCertificacion.RECHAZADA -> Triple("RECHAZADA", RojoError90, RojoError40)
+    }
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(LoginAzulSuave),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.Filled.Person, contentDescription = null, tint = AzulPetroleo30, modifier = Modifier.size(18.dp))
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Text(text = "Mesa Legal & Auditoría", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = TextoPrincipal)
-                    Text(text = "Soporte clínico KineCare Chile", style = MaterialTheme.typography.labelSmall, color = LoginGrisTexto)
-                }
-            }
+        Column(modifier = Modifier.padding(14.dp)) {
             Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(50))
-                    .background(LoginGrisClaro)
-                    .clickable(onClick = onClick)
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(text = "Contactar", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = TextoPrincipal)
+                Text(
+                    text = certificacion.nombre,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = TextoPrincipal,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = textoEstado,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = colorEstado,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(fondoEstado)
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                )
+            }
+            if (certificacion.detalle.isNotEmpty()) {
+                Text(
+                    text = certificacion.detalle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = LoginGrisTexto,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+            certificacion.motivoRechazo?.let { motivo ->
+                Text(
+                    text = "Motivo: $motivo",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = RojoError40,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
             }
         }
     }

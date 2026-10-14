@@ -1,5 +1,6 @@
 package com.darjnest.kinecare.core.network.firebase.di
 
+import com.darjnest.kinecare.core.common.data.repository.CertificacionRepository
 import com.darjnest.kinecare.core.common.data.repository.ClienteRepository
 import com.darjnest.kinecare.core.common.data.repository.DispositivoPushRepository
 import com.darjnest.kinecare.core.common.data.repository.FotoPerfilRepository
@@ -8,6 +9,7 @@ import com.darjnest.kinecare.core.common.data.repository.ResenaRepository
 import com.darjnest.kinecare.core.common.data.repository.ReservaRepository
 import com.darjnest.kinecare.core.common.data.repository.ServicioRepository
 import com.darjnest.kinecare.core.common.data.repository.UsuarioRepository
+import com.darjnest.kinecare.core.network.firebase.repository.CertificacionRepositoryImpl
 import com.darjnest.kinecare.core.network.firebase.repository.ClienteRepositoryImpl
 import com.darjnest.kinecare.core.network.firebase.repository.DispositivoPushRepositoryImpl
 import com.darjnest.kinecare.core.network.firebase.repository.FotoPerfilRepositoryImpl
@@ -16,6 +18,8 @@ import com.darjnest.kinecare.core.network.firebase.repository.ResenaRepositoryIm
 import com.darjnest.kinecare.core.network.firebase.repository.ReservaRepositoryImpl
 import com.darjnest.kinecare.core.network.firebase.repository.ServicioRepositoryImpl
 import com.darjnest.kinecare.core.network.firebase.repository.UsuarioRepositoryImpl
+import com.darjnest.kinecare.core.network.firebase.storage.LectorDocumento
+import com.darjnest.kinecare.core.network.firebase.storage.LectorDocumentoAndroid
 import com.darjnest.kinecare.core.network.firebase.storage.LectorImagen
 import com.darjnest.kinecare.core.network.firebase.storage.LectorImagenAndroid
 import dagger.Binds
@@ -63,6 +67,13 @@ abstract class FirestoreRepositoryModule {
     @Binds
     @Singleton
     abstract fun bindFotoPerfilRepository(impl: FotoPerfilRepositoryImpl): FotoPerfilRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindCertificacionRepository(impl: CertificacionRepositoryImpl): CertificacionRepository
+
+    @Binds
+    abstract fun bindLectorDocumento(impl: LectorDocumentoAndroid): LectorDocumento
 
     @Binds
     abstract fun bindLectorImagen(impl: LectorImagenAndroid): LectorImagen
