@@ -1,4 +1,12 @@
 import { FieldValue, Timestamp, type Firestore } from "firebase-admin/firestore";
+import {
+  aEntradas,
+  consultaPendientes,
+  estaLibre,
+  margenDeDescuento,
+  reservarEntradas,
+  seleccionarParaDescuento,
+} from "./comisiones.js";
 import { COLECCION_PAGOS, COMISION_PORCENTAJE } from "./constantes.js";
 import { errorDeNegocio } from "./errores.js";
 import { tokenVigente } from "./mercadopago/cuentas.js";
@@ -11,6 +19,11 @@ export interface DepsPago {
   clave: Buffer;
   /** Origen publico HTTPS de las funciones, ej. `https://us-central1-<proyecto>.cloudfunctions.net`. */
   urlBase: string;
+  /**
+   * Access Token de la cuenta de Mercado Pago de la plataforma. Solo lo usan los cobros de comision
+   * adeudada (`pagarSaldoComision` y su webhook); los pagos de reservas usan el token del profesional.
+   */
+  tokenPlataforma?: string;
 }
 
 export interface ResultadoIniciarPago {
@@ -40,6 +53,8 @@ interface PagoPreparado {
   servicioId: string;
   monto: number;
   comisionPorcentaje: number;
+  /** Comision adeudada (efectivo) que se suma al `marketplace_fee` de este pago. */
+  comisionSaldo: number;
   initPointExistente: string | null;
 }
 
@@ -118,13 +133,25 @@ export async function iniciarPagoHandler(
       }
     }
 
+    // Comision adeudada por atenciones en efectivo: se descuenta de este pago hasta donde alcance el
+    // tope del fee y se reserva para que otro pago simultaneo no cobre las mismas entradas.
+    const comisionBase = calcularComision(base.monto, comisionPorcentaje);
+    const pendientes = aEntradas((await tx.get(consultaPendientes(db, base.profesionalId))).docs);
+    const elegidas = seleccionarParaDescuento(
+      pendientes.filter((e) => estaLibre(e, ahora)),
+      margenDeDescuento(base.monto, comisionBase),
+    );
+    const comisionSaldo = elegidas.reduce((acc, e) => acc + e.monto, 0);
+
     const nuevo = pagos.doc();
     tx.set(nuevo, {
       reservaId,
       clienteId: uid,
       profesionalId: base.profesionalId,
       monto: base.monto,
-      comision: calcularComision(base.monto, comisionPorcentaje),
+      comision: comisionBase,
+      comisionSaldoDescontada: comisionSaldo,
+      entradasSaldo: elegidas.map((e) => e.id),
       metodo: null,
       estado: "PENDIENTE" satisfies EstadoPago,
       idTransaccionPasarela: null,
@@ -139,7 +166,8 @@ export async function iniciarPagoHandler(
       "pago.estado": "PENDIENTE",
       actualizadoEn: FieldValue.serverTimestamp(),
     });
-    return { ...base, pagoId: nuevo.id, initPointExistente: null };
+    reservarEntradas(tx, elegidas, nuevo.id);
+    return { ...base, pagoId: nuevo.id, comisionSaldo, initPointExistente: null };
   });
 
   if (preparado.initPointExistente !== null) {
@@ -157,9 +185,9 @@ export async function iniciarPagoHandler(
 
   const { preferenceId, initPoint } = await deps.pasarela.crearPreferencia(token, {
     titulo: typeof nombre === "string" && nombre !== "" ? nombre : "Atención KineCare",
-    reservaId,
+    itemId: reservaId,
     monto: preparado.monto,
-    comision: calcularComision(preparado.monto, preparado.comisionPorcentaje),
+    comision: calcularComision(preparado.monto, preparado.comisionPorcentaje) + preparado.comisionSaldo,
     referenciaExterna: preparado.pagoId,
     notificationUrl: `${deps.urlBase}/webhookMercadoPago?pagoId=${preparado.pagoId}`,
     backUrl: `${deps.urlBase}/retornoPago`,

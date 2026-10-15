@@ -7,6 +7,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { cancelarReservaHandler } from "./cancelarReserva.js";
 import { calificacionTriggerHandler } from "./calificacion.js";
 import { conectarMercadoPagoHandler, oauthCallbackHandler, type RespuestaHttp } from "./conectarMercadoPago.js";
+import { pagarSaldoComisionHandler } from "./cobrosComision.js";
 import { completarReservaHandler } from "./completarReserva.js";
 import { crearReservaHandler } from "./crearReserva.js";
 import { obtenerCuposOcupadosHandler } from "./cupos.js";
@@ -87,9 +88,13 @@ const HOST_AUTORIZACION_POR_DEFECTO = "https://auth.mercadopago.cl";
 const MP_CLIENT_SECRET = defineSecret("MP_CLIENT_SECRET");
 const MP_WEBHOOK_SECRET = defineSecret("MP_WEBHOOK_SECRET");
 const MP_TOKEN_ENCRYPTION_KEY = defineSecret("MP_TOKEN_ENCRYPTION_KEY");
+// Access Token de la cuenta de Mercado Pago de la PLATAFORMA (no el de un profesional). Solo lo usan el
+// cobro de comisiones adeudadas (`pagarSaldoComision`) y su webhook; ver DATA_MODEL.md.
+const MP_PLATFORM_ACCESS_TOKEN = defineSecret("MP_PLATFORM_ACCESS_TOKEN");
 
 const REGION = "us-central1";
 const SECRETOS_MP = [MP_CLIENT_SECRET, MP_WEBHOOK_SECRET, MP_TOKEN_ENCRYPTION_KEY];
+const SECRETOS_MP_CON_PLATAFORMA = [...SECRETOS_MP, MP_PLATFORM_ACCESS_TOKEN];
 
 /** Origen HTTPS publico de las funciones; el proyecto sale del entorno, asi QA nunca apunta a PRD. */
 function urlBase(): string {
@@ -109,6 +114,11 @@ function depsMercadoPago(): DepsPago {
     clave: parseClave(MP_TOKEN_ENCRYPTION_KEY.value()),
     urlBase: base,
   };
+}
+
+/** Igual que `depsMercadoPago` pero con el token de la plataforma, para los cobros de comision. */
+function depsMercadoPagoConPlataforma(): DepsPago {
+  return { ...depsMercadoPago(), tokenPlataforma: MP_PLATFORM_ACCESS_TOKEN.value() };
 }
 
 function responder(res: { status(c: number): { send(b?: string): void }; redirect(c: number, u: string): void }, r: RespuestaHttp) {
@@ -141,6 +151,10 @@ export const iniciarPago = onCall({ region: REGION, secrets: SECRETOS_MP }, (req
   iniciarPagoHandler(getFirestore(), depsMercadoPago(), request.auth?.uid, request.data, new Date()),
 );
 
+export const pagarSaldoComision = onCall({ region: REGION, secrets: SECRETOS_MP_CON_PLATAFORMA }, (request) =>
+  pagarSaldoComisionHandler(getFirestore(), depsMercadoPagoConPlataforma(), request.auth?.uid, new Date()),
+);
+
 export const estadoPago = onCall({ region: REGION, secrets: SECRETOS_MP }, (request) =>
   estadoPagoHandler(getFirestore(), depsMercadoPago(), request.auth?.uid, request.data, new Date()),
 );
@@ -149,7 +163,7 @@ export const retornoPago = onRequest({ region: REGION }, (req, res) => {
   responder(res, retornoPagoHandler(req.query));
 });
 
-export const webhookMercadoPago = onRequest({ region: REGION, secrets: SECRETOS_MP }, async (req, res) => {
+export const webhookMercadoPago = onRequest({ region: REGION, secrets: SECRETOS_MP_CON_PLATAFORMA }, async (req, res) => {
   if (req.method !== "POST") {
     res.status(405).send();
     return;
@@ -158,7 +172,7 @@ export const webhookMercadoPago = onRequest({ region: REGION, secrets: SECRETOS_
     res,
     await webhookHandler(
       getFirestore(),
-      depsMercadoPago(),
+      depsMercadoPagoConPlataforma(),
       MP_WEBHOOK_SECRET.value(),
       { headers: req.headers, query: req.query, body: req.body },
       new Date(),

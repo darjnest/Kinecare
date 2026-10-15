@@ -1,6 +1,8 @@
 import { FieldValue, type Firestore } from "firebase-admin/firestore";
 import { logger } from "firebase-functions/v2";
-import { COLECCION_PAGOS, ESQUEMA_APP, ESTADOS_RESERVA_SIN_ATENCION } from "./constantes.js";
+import { anularEntradaSiHayPagoConTarjeta, aplicarResultadoAEntradas, leerEntradas } from "./comisiones.js";
+import { COLECCION_COBROS_COMISION, COLECCION_COMISIONES, COLECCION_PAGOS, ESQUEMA_APP, ESTADOS_RESERVA_SIN_ATENCION } from "./constantes.js";
+import { aplicarCobroComision } from "./cobrosComision.js";
 import { errorDeNegocio } from "./errores.js";
 import type { RespuestaHttp } from "./conectarMercadoPago.js";
 import type { DepsPago } from "./iniciarPago.js";
@@ -44,6 +46,10 @@ export function metodoDesde(pago: PagoMP): { tipo: TipoMetodo; ultimosDigitos: s
  * nunca corresponde. Cancelar y aplicar el pago leen y escriben ambos documentos en transaccion,
  * asi que se serializan: gana uno y el otro ve el resultado (si cancela primero, esto lo marca;
  * si el pago entra primero, `cancelarReserva` ve `AUTORIZADO` y aplica su politica).
+ *
+ * Comision adeudada: las entradas que el pago descontaba (`entradasSaldo`) pasan a `PAGADA` al
+ * autorizarse y se liberan si se rechaza. Si la atencion ya estaba completada (comision en efectivo
+ * pendiente) y el pago con tarjeta llega tarde, esa entrada se anula: el fee ya cobra la comision.
  */
 export async function aplicarPago(db: Firestore, pagoId: string, pagoMP: PagoMP): Promise<EstadoPago> {
   const pagoRef = db.collection(COLECCION_PAGOS).doc(pagoId);
@@ -69,6 +75,8 @@ export async function aplicarPago(db: Firestore, pagoId: string, pagoMP: PagoMP)
 
     const reservaRef = db.collection("reservas").doc(pago.get("reservaId") as string);
     const reserva = await tx.get(reservaRef);
+    const entradas = await leerEntradas(tx, db, (pago.get("entradasSaldo") as string[] | undefined) ?? []);
+    const entradaDeLaReserva = await tx.get(db.collection(COLECCION_COMISIONES).doc(pago.get("reservaId") as string));
 
     const pagoTardio =
       nuevo === "AUTORIZADO" &&
@@ -96,6 +104,8 @@ export async function aplicarPago(db: Firestore, pagoId: string, pagoMP: PagoMP)
         : {}),
       actualizadoEn: FieldValue.serverTimestamp(),
     });
+    aplicarResultadoAEntradas(tx, entradas, pagoId, nuevo, "DESCUENTO");
+    if (nuevo === "AUTORIZADO") anularEntradaSiHayPagoConTarjeta(tx, entradaDeLaReserva);
     // Un intento viejo (otro pagoId) no debe pisar el estado del intento vigente.
     if (reserva.exists && (reserva.get("pago") as { id?: string } | undefined)?.id === pagoId) {
       tx.update(reservaRef, { "pago.estado": nuevo, actualizadoEn: FieldValue.serverTimestamp() });
@@ -158,6 +168,12 @@ export async function webhookHandler(
   const tipo = cuerpo.type ?? peticion.query.type;
   if (tipo !== "payment" || dataId === undefined) return { status: 200 };
 
+  // Pago de comision adeudada: va a la cuenta de la plataforma, no a la de un profesional.
+  const cobroId = peticion.query.cobroId;
+  if (typeof cobroId === "string" && ID_SEGURO.test(cobroId)) {
+    return webhookCobroComision(db, deps, cobroId, dataId);
+  }
+
   const pagoId = peticion.query.pagoId;
   if (typeof pagoId !== "string" || !ID_SEGURO.test(pagoId)) return { status: 200 };
 
@@ -170,6 +186,26 @@ export async function webhookHandler(
     return { status: 200 };
   } catch (e) {
     logger.error("Mercado Pago: fallo procesar webhook", { pagoId, mensaje: e instanceof Error ? e.message : String(e) });
+    return { status: 500 };
+  }
+}
+
+async function webhookCobroComision(db: Firestore, deps: DepsPago, cobroId: string, dataId: string): Promise<RespuestaHttp> {
+  try {
+    if (deps.tokenPlataforma === undefined || deps.tokenPlataforma === "") {
+      logger.error("Mercado Pago: falta el Access Token de la plataforma para procesar un cobro de comision", { cobroId });
+      return { status: 500 };
+    }
+    const cobro = await db.collection(COLECCION_COBROS_COMISION).doc(cobroId).get();
+    if (!cobro.exists) return { status: 200 }; // notificacion de otro ambiente o cobro desconocido
+    const pagoMP = await deps.pasarela.obtenerPago(deps.tokenPlataforma, dataId);
+    await aplicarCobroComision(db, cobroId, pagoMP);
+    return { status: 200 };
+  } catch (e) {
+    logger.error("Mercado Pago: fallo procesar webhook de cobro de comision", {
+      cobroId,
+      mensaje: e instanceof Error ? e.message : String(e),
+    });
     return { status: 500 };
   }
 }
@@ -211,9 +247,11 @@ export async function estadoPagoHandler(
 /**
  * `retornoPago`: Mercado Pago solo acepta `back_urls` HTTPS, asi que vuelve aqui y esta
  * funcion salta a la app por deep link. Solo reenvia el `pagoId` (validado): el resultado real
- * lo consulta la app a `estadoPago`, jamas se confia en los parametros de esta URL.
+ * lo consulta la app a `estadoPago`, jamas se confia en los parametros de esta URL. Con
+ * `?tipo=comision` (pago de comision adeudada) vuelve a `kinecare://comision/resultado`, sin ids.
  */
 export function retornoPagoHandler(query: Record<string, unknown>): RespuestaHttp {
+  if (query.tipo === "comision") return { status: 302, redirect: `${ESQUEMA_APP}://comision/resultado` };
   const externa = query.external_reference;
   const destino =
     typeof externa === "string" && ID_SEGURO.test(externa)

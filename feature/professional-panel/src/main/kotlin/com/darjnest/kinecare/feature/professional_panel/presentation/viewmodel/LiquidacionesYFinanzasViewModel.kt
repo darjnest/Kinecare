@@ -4,6 +4,7 @@ package com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.darjnest.kinecare.core.common.data.repository.ComisionRepository
 import com.darjnest.kinecare.core.common.data.repository.ReservaRepository
 import com.darjnest.kinecare.core.common.data.repository.ServicioRepository
 import com.darjnest.kinecare.core.common.domain.model.EstadoReserva
@@ -90,6 +91,11 @@ data class LiquidacionesYFinanzasState(
     val cuentaBancaria: CuentaBancaria? = null,
     val resumenMensual: ResumenMensual? = null,
     val historialPagos: List<PagoHistorico> = emptyList(),
+    /**
+     * Comisiones de KineCare que el profesional adeuda por atenciones pagadas en efectivo (CLP). `0` si no
+     * debe nada o si no se pudo leer: es un dato adicional y su falla no bloquea el resto de la pantalla.
+     */
+    val comisionesPorPagar: Long = 0,
     /** Aviso puntual para un Snackbar; la vista lo consume con [LiquidacionesYFinanzasAction.MensajeMostrado]. */
     val mensaje: String? = null,
 )
@@ -99,6 +105,9 @@ sealed interface LiquidacionesYFinanzasAction {
     data class DescargarComprobante(val pagoId: String) : LiquidacionesYFinanzasAction
     data object DescargarCertificadoAnual : LiquidacionesYFinanzasAction
     data object Reintentar : LiquidacionesYFinanzasAction
+
+    /** Navegacion al pago de comisiones adeudadas: la resuelve el `Root` contra el NavGraph. */
+    data object PagarComisiones : LiquidacionesYFinanzasAction
     data object MensajeMostrado : LiquidacionesYFinanzasAction
 }
 
@@ -144,6 +153,8 @@ private fun LocalDate.aTextoCorto(hoy: LocalDate): String {
 }
 
 private fun Reserva.medioTexto(): String = when {
+    // Atencion ya realizada sin pago por la app: se cobro en efectivo y la comision queda por pagar.
+    pago.estado == EstadoPagoDominio.PENDIENTE && estado == EstadoReserva.COMPLETADA -> "Efectivo · comisión por pagar"
     pago.estado == EstadoPagoDominio.PENDIENTE -> "Por cobrar"
     pago.metodo.tipo == TipoMetodoPago.TRANSFERENCIA -> "Transferencia · Mercado Pago"
     pago.metodo.tipo == TipoMetodoPago.DINERO_EN_CUENTA -> "Dinero en cuenta · Mercado Pago"
@@ -207,6 +218,7 @@ private const val COMISION_POR_DEFECTO = 0.10
 class LiquidacionesYFinanzasViewModel @Inject constructor(
     private val reservaRepository: ReservaRepository,
     private val servicioRepository: ServicioRepository,
+    private val comisionRepository: ComisionRepository,
     private val firebaseAuth: FirebaseAuth,
     private val clock: Clock,
 ) : ViewModel() {
@@ -224,6 +236,7 @@ class LiquidacionesYFinanzasViewModel @Inject constructor(
     fun onAction(action: LiquidacionesYFinanzasAction) {
         when (action) {
             LiquidacionesYFinanzasAction.Reintentar -> cargar()
+            LiquidacionesYFinanzasAction.PagarComisiones -> Unit // el Root navega al pago
             LiquidacionesYFinanzasAction.MensajeMostrado -> _state.update { it.copy(mensaje = null) }
 
             // Modificar la cuenta bancaria exige verificacion biometrica adicional,
@@ -244,12 +257,20 @@ class LiquidacionesYFinanzasViewModel @Inject constructor(
             when (val resultado = reservaRepository.obtenerPorProfesional(uid)) {
                 is Result.Success -> {
                     resolverServicios(uid)
-                    _state.update { derivar(it, resultado.data).copy(cargando = false) }
+                    val comisiones = comisionesPorPagar(uid)
+                    _state.update { derivar(it, resultado.data).copy(cargando = false, comisionesPorPagar = comisiones) }
                 }
                 is Result.Error -> _state.update { it.copy(cargando = false, errorCarga = true) }
             }
         }
     }
+
+    /** Lo que adeuda por atenciones en efectivo; si no se puede leer se muestra como sin deuda (no bloquea la pantalla). */
+    private suspend fun comisionesPorPagar(uid: String): Long =
+        when (val resultado = comisionRepository.obtenerSaldo(uid)) {
+            is Result.Success -> resultado.data.total
+            is Result.Error -> 0
+        }
 
     /** Catalogo propio, incluidos los pausados. Si falla, los pagos quedan con un titulo generico. */
     private suspend fun resolverServicios(uid: String) {

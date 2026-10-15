@@ -558,3 +558,30 @@ describe("reglas: profesionales/{uid}/certificaciones/{id}", () => {
     assert.equal(doc.get("estado"), "EN_REVISION");
   });
 });
+
+describe("reglas: comisionesPendientes y cobrosComision (saldo adeudado por atenciones en efectivo)", () => {
+  const colecciones = ["comisionesPendientes", "cobrosComision"] as const;
+
+  beforeEach(async () => {
+    await db.collection("comisionesPendientes").doc("r1").set({ profesionalId: PRO, monto: 2500, estado: "PENDIENTE" });
+    await db.collection("cobrosComision").doc("c1").set({ profesionalId: PRO, monto: 2500, estado: "PENDIENTE" });
+  });
+
+  const idDe = (coleccion: (typeof colecciones)[number]) => (coleccion === "comisionesPendientes" ? "r1" : "c1");
+
+  for (const coleccion of colecciones) {
+    it(`${coleccion}: la lee solo el profesional dueño`, async () => {
+      ok(await llamar(PRO, "GET", `${coleccion}/${idDe(coleccion)}`));
+      denegado(await llamar(OTRO_PRO, "GET", `${coleccion}/${idDe(coleccion)}`));
+      denegado(await llamar(CLIENTE, "GET", `${coleccion}/${idDe(coleccion)}`));
+      denegado(await llamar(null, "GET", `${coleccion}/${idDe(coleccion)}`));
+    });
+
+    it(`${coleccion}: nadie la escribe desde la app, ni el dueño`, async () => {
+      const campos = { profesionalId: str(PRO), monto: { integerValue: "1" }, estado: str("PAGADA") };
+      denegado(await llamar(PRO, "PATCH", `${coleccion}/${idDe(coleccion)}?updateMask.fieldPaths=estado`, { fields: campos }));
+      denegado(await llamar(PRO, "PATCH", `${coleccion}/nuevo`, { fields: campos }));
+      denegado(await llamar(PRO, "DELETE", `${coleccion}/${idDe(coleccion)}`));
+    });
+  }
+});

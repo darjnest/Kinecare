@@ -5,19 +5,22 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import androidx.navigation.navDeepLink
 import androidx.navigation.toRoute
+import com.darjnest.kinecare.feature.payment.presentation.view.ComisionResultadoRoot
 import com.darjnest.kinecare.feature.payment.presentation.view.ConectarMercadoPagoRoot
 import com.darjnest.kinecare.feature.payment.presentation.view.MercadoPagoConectadoRoot
 import com.darjnest.kinecare.feature.payment.presentation.view.MercadoPagoErrorScreen
+import com.darjnest.kinecare.feature.payment.presentation.view.PagarComisionRoot
 import com.darjnest.kinecare.feature.payment.presentation.view.PagoResultadoRoot
 import com.darjnest.kinecare.feature.payment.presentation.view.PaymentRoot
 
 /**
- * Pagar una reserva (cliente) y vincular la cuenta de Mercado Pago (profesional).
+ * Pagar una reserva (cliente), vincular la cuenta de Mercado Pago y pagar las comisiones
+ * adeudadas por atenciones en efectivo (profesional).
  * Los destinos de salida los resuelve `:app` por callback (las features no se
  * dependen entre si); la navegacion interna del flujo de vinculacion usa
  * [navController].
  *
- * Las tres pantallas de retorno cuelgan de deep links `kinecare://...`: el
+ * Las pantallas de retorno cuelgan de deep links `kinecare://...`: el
  * Custom Tab termina en ellos y `:app` los entrega a Navigation.
  */
 fun NavGraphBuilder.paymentGraph(
@@ -42,6 +45,14 @@ fun NavGraphBuilder.paymentGraph(
     }
     composable<ConectarMercadoPagoRoute> {
         ConectarMercadoPagoRoot(onVolver = onVolver, onIniciarSesion = onIniciarSesion)
+    }
+    composable<PagarComisionRoute> {
+        PagarComisionRoot(onVolver = onVolver, onIniciarSesion = onIniciarSesion)
+    }
+    composable<ComisionResultadoRoute>(
+        deepLinks = listOf(navDeepLink<ComisionResultadoRoute>(basePath = COMISION_RESULTADO_DEEP_LINK)),
+    ) {
+        ComisionResultadoRoot(onIrAlPanel = onIrAlPanelProfesional)
     }
     composable<MercadoPagoConectadoRoute>(
         deepLinks = listOf(navDeepLink<MercadoPagoConectadoRoute>(basePath = MP_CONECTADO_DEEP_LINK)),

@@ -2,15 +2,19 @@
 
 package com.darjnest.kinecare.feature.professional_panel.presentation.viewmodel
 
+import com.darjnest.kinecare.core.common.data.error.ComisionError
 import com.darjnest.kinecare.core.common.data.error.ReservaError
 import com.darjnest.kinecare.core.common.data.error.ServicioError
+import com.darjnest.kinecare.core.common.data.repository.ComisionRepository
 import com.darjnest.kinecare.core.common.data.repository.ReservaRepository
 import com.darjnest.kinecare.core.common.data.repository.ServicioRepository
+import com.darjnest.kinecare.core.common.domain.model.ComisionPendiente
 import com.darjnest.kinecare.core.common.domain.model.EstadoReserva
 import com.darjnest.kinecare.core.common.domain.model.MetodoPago
 import com.darjnest.kinecare.core.common.domain.model.ModalidadServicio
 import com.darjnest.kinecare.core.common.domain.model.Pago
 import com.darjnest.kinecare.core.common.domain.model.Reserva
+import com.darjnest.kinecare.core.common.domain.model.SaldoComision
 import com.darjnest.kinecare.core.common.domain.model.Servicio
 import com.darjnest.kinecare.core.common.domain.model.TipoMetodoPago
 import com.darjnest.kinecare.core.common.result.Result
@@ -45,6 +49,7 @@ class LiquidacionesYFinanzasViewModelTest {
 
     private val reservaRepository = mockk<ReservaRepository>()
     private val servicioRepository = mockk<ServicioRepository>()
+    private val comisionRepository = mockk<ComisionRepository>()
     private val firebaseAuth = mockk<FirebaseAuth>()
     private val clock = object : Clock {
         override fun now() = AHORA_FINANZAS
@@ -55,12 +60,13 @@ class LiquidacionesYFinanzasViewModelTest {
         val firebaseUser = mockk<FirebaseUser>()
         every { firebaseUser.uid } returns uid
         every { firebaseAuth.currentUser } returns firebaseUser
+        coEvery { comisionRepository.obtenerSaldo(uid) } returns Result.Success(SaldoComision(emptyList()))
         coEvery { servicioRepository.obtenerPorProfesional(uid) } returns Result.Success(
             listOf(servicioFinanzas("srv-1", "Kinesiología deportiva")),
         )
     }
 
-    private fun crearViewModel() = LiquidacionesYFinanzasViewModel(reservaRepository, servicioRepository, firebaseAuth, clock)
+    private fun crearViewModel() = LiquidacionesYFinanzasViewModel(reservaRepository, servicioRepository, comisionRepository, firebaseAuth, clock)
 
     private fun conReservas(vararg reservas: Reserva) {
         coEvery { reservaRepository.obtenerPorProfesional(uid) } returns Result.Success(reservas.toList())
@@ -248,6 +254,62 @@ class LiquidacionesYFinanzasViewModelTest {
 
         viewModel.onAction(LiquidacionesYFinanzasAction.MensajeMostrado)
         assertNull(viewModel.state.value.mensaje)
+    }
+
+    @Test
+    fun `sin comisiones adeudadas el saldo por pagar es cero`() = runTest {
+        conReservas(reservaPagada("a", AHORA_FINANZAS - 1.days))
+
+        assertEquals(0L, crearViewModel().state.value.comisionesPorPagar)
+    }
+
+    @Test
+    fun `comisiones por pagar suma lo adeudado por atenciones en efectivo`() = runTest {
+        conReservas(reservaPagada("a", AHORA_FINANZAS - 1.days))
+        coEvery { comisionRepository.obtenerSaldo(uid) } returns Result.Success(
+            SaldoComision(listOf(ComisionPendiente("r1", 2_500, null), ComisionPendiente("r2", 4_000, null))),
+        )
+
+        assertEquals(6_500L, crearViewModel().state.value.comisionesPorPagar)
+    }
+
+    @Test
+    fun `si falla leer las comisiones el resto de la pantalla igual carga`() = runTest {
+        conReservas(reservaPagada("a", AHORA_FINANZAS - 1.days))
+        coEvery { comisionRepository.obtenerSaldo(uid) } returns Result.Error(ComisionError.SIN_INTERNET)
+
+        val state = crearViewModel().state.value
+
+        assertEquals(0L, state.comisionesPorPagar)
+        assertFalse(state.errorCarga)
+        assertEquals(1, state.resumenMensual!!.atenciones)
+    }
+
+    @Test
+    fun `una atencion completada sin pago por la app se muestra como efectivo con comision por pagar`() = runTest {
+        conReservas(
+            reservaPagada(
+                "efectivo",
+                AHORA_FINANZAS - 1.days,
+                estado = EstadoReserva.COMPLETADA,
+                estadoPago = EstadoPagoDominio.PENDIENTE,
+            ),
+        )
+
+        val pago = crearViewModel().state.value.historialPagos.single()
+
+        assertEquals("Efectivo · comisión por pagar", pago.medioTexto)
+    }
+
+    @Test
+    fun `pagar comisiones no cambia el estado porque navega el Root`() = runTest {
+        conReservas(reservaPagada("a", AHORA_FINANZAS - 1.days))
+        val viewModel = crearViewModel()
+        val antes = viewModel.state.value
+
+        viewModel.onAction(LiquidacionesYFinanzasAction.PagarComisiones)
+
+        assertEquals(antes, viewModel.state.value)
     }
 }
 

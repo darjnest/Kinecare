@@ -2,7 +2,9 @@ package com.darjnest.kinecare.feature.payment.data.repository_impl
 
 import com.darjnest.kinecare.feature.payment.domain.ConectarMercadoPagoError
 import com.darjnest.kinecare.feature.payment.domain.EstadoPagoError
+import com.darjnest.kinecare.feature.payment.domain.CobroComision
 import com.darjnest.kinecare.feature.payment.domain.IniciarPagoError
+import com.darjnest.kinecare.feature.payment.domain.PagarComisionError
 import com.darjnest.kinecare.core.common.domain.model.EstadoPago
 import com.darjnest.kinecare.feature.payment.domain.IntentoPago
 import com.darjnest.kinecare.core.common.domain.model.MedioPagoElegible
@@ -15,6 +17,7 @@ import com.darjnest.kinecare.core.network.functions.dto.EstadoPagoRequestDto
 import com.darjnest.kinecare.core.network.functions.dto.EstadoPagoResultadoDto
 import com.darjnest.kinecare.core.network.functions.dto.IniciarPagoRequestDto
 import com.darjnest.kinecare.core.network.functions.dto.IniciarPagoResultadoDto
+import com.darjnest.kinecare.core.network.functions.dto.PagarSaldoComisionResultadoDto
 import com.google.android.gms.tasks.Task
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
@@ -221,5 +224,45 @@ class PagoRepositoryImplTest {
         conSesion()
         coEvery { api.conectarMercadoPago(any(), any()) } throws IOException("sin red")
         assertEquals(Result.Error(ConectarMercadoPagoError.SIN_INTERNET), repository.obtenerUrlConexion())
+    }
+
+    // ── pagarComisiones ──────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `pagarComisiones retorna el cobro con su URL y monto`() = runTest {
+        conSesion()
+        coEvery { api.pagarSaldoComision(any(), any()) } returns
+            Response.success(CallableResponse(PagarSaldoComisionResultadoDto("c1", "https://www.mercadopago.cl/checkout?pref_id=1", 6_500)))
+
+        assertEquals(
+            Result.Success(CobroComision("c1", "https://www.mercadopago.cl/checkout?pref_id=1", 6_500)),
+            repository.pagarComisiones(),
+        )
+    }
+
+    @Test
+    fun `pagarComisiones mapea el motivo del backend`() = runTest {
+        conSesion()
+        coEvery { api.pagarSaldoComision(any(), any()) } returns
+            respuestaError(400, cuerpoDeError("FAILED_PRECONDITION", "SIN_SALDO_PENDIENTE"))
+        assertEquals(Result.Error(PagarComisionError.SIN_SALDO_PENDIENTE), repository.pagarComisiones())
+
+        coEvery { api.pagarSaldoComision(any(), any()) } returns
+            respuestaError(403, cuerpoDeError("PERMISSION_DENIED", "ROL_INVALIDO"))
+        assertEquals(Result.Error(PagarComisionError.ROL_INVALIDO), repository.pagarComisiones())
+
+        coEvery { api.pagarSaldoComision(any(), any()) } returns
+            respuestaError(503, cuerpoDeError("UNAVAILABLE", "PASARELA_NO_DISPONIBLE"))
+        assertEquals(Result.Error(PagarComisionError.PASARELA_NO_DISPONIBLE), repository.pagarComisiones())
+    }
+
+    @Test
+    fun `pagarComisiones sin usuario retorna SIN_SESION y con red caida SIN_INTERNET`() = runTest {
+        every { firebaseAuth.currentUser } returns null
+        assertEquals(Result.Error(PagarComisionError.SIN_SESION), repository.pagarComisiones())
+
+        conSesion()
+        coEvery { api.pagarSaldoComision(any(), any()) } throws IOException("sin red")
+        assertEquals(Result.Error(PagarComisionError.SIN_INTERNET), repository.pagarComisiones())
     }
 }

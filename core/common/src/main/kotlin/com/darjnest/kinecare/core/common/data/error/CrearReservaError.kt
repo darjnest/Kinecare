@@ -26,5 +26,8 @@ enum class CrearReservaError : Error {
 
     /** Otra reserva activa del profesional se superpone con el horario. */
     HORARIO_OCUPADO,
+
+    /** El profesional acumula comisiones sin pagar (atenciones en efectivo) y no recibe solicitudes por ahora. */
+    PROFESIONAL_NO_DISPONIBLE,
     DESCONOCIDO,
 }

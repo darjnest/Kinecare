@@ -302,6 +302,53 @@ Tokens OAuth del vendedor. **Solo Admin SDK**: las Security Rules deniegan
 todo acceso (no hay `match`, default-deny). Nunca se loguean ni salen en una
 respuesta. La clave de cifrado es el secreto `MP_TOKEN_ENCRYPTION_KEY`.
 
+### `comisionesPendientes/{reservaId}`
+```
+profesionalId: string
+reservaId: string                // igual al id del documento (completar dos veces no duplica)
+monto: number                    // CLP; = round(montoAtencion × comisionPorcentaje) de la reserva
+montoAtencion: number            // CLP; lo que costaba la atención (referencia)
+estado: "PENDIENTE" | "PAGADA" | "CONDONADA" | "ANULADA"
+origen: "EFECTIVO"
+reservadaPor: string | null      // id del pago (`pagos`) o cobro (`cobrosComision`) en curso que la incluye
+reservadaEn: timestamp | null    // una reserva sin resolver vence a las 24 h y la entrada vuelve a estar libre
+pagadaVia: "DESCUENTO" | "PAGO_DIRECTO"?   // solo en PAGADA
+pagadaPor: string?               // pagoId o cobroId que la saldó
+pagadaEn: timestamp?
+motivoAnulacion: "PAGADA_CON_TARJETA"?     // solo en ANULADA
+creadoEn / actualizadoEn: timestamp
+```
+**Comisión de atenciones que no se pagaron por la app (efectivo).** La
+plataforma no puede retener efectivo, así que la comisión queda como **saldo
+adeudado** del profesional. `completarReserva` crea la entrada cuando la
+atención se completa y `reserva.pago.estado != "AUTORIZADO"`: no depende de que
+el profesional declare "efectivo" (para no deber comisión tendría que no
+completar la atención, y entonces tampoco hay reseña ni historial). Se salda de
+dos formas: descontándola del `marketplace_fee` del siguiente pago con tarjeta
+(`DESCUENTO`) o pagándola directo a la plataforma (`PAGO_DIRECTO`, ver
+`cobrosComision`). Escrita **solo** por Cloud Functions; el profesional dueño
+tiene lectura (Security Rules, probado en `reglas.integration.test.ts`). El
+saldo se calcula sumando las `PENDIENTE` (no hay contador duplicado). Una
+entrada `CONDONADA` la marca soporte a mano (p. ej. si un reporte de problema le
+da la razón al cliente). Límite asumido: la plataforma no verifica que haya
+habido efectivo.
+
+### `cobrosComision/{cobroId}`
+```
+profesionalId: string
+monto: number                    // CLP; suma de las entradas de `entradas` al crear el cobro
+entradas: string[]               // ids de `comisionesPendientes` incluidas (quedan reservadas por este cobro)
+estado: "PENDIENTE" | "AUTORIZADO" | "RECHAZADO" | "REEMBOLSADO"   // mismos estados que `pagos`
+idTransaccionPasarela: string?   // payment_id de Mercado Pago
+preferenceId: string?
+initPoint: string?
+creadoEn / actualizadoEn: timestamp
+```
+Pago voluntario de las comisiones adeudadas, **a la cuenta de Mercado Pago de la
+plataforma** (sin `marketplace_fee`: todo el monto es de KineCare). Solo Admin
+SDK escribe; el profesional dueño lee. `external_reference` de la preferencia es
+este id.
+
 ### `oauthEstados/{state}`
 ```
 profesionalId: string
@@ -476,6 +523,7 @@ ignoran. La modalidad, la duración y el precio salen de
 | `FAILED_PRECONDITION` (400) | `ANTICIPACION_INSUFICIENTE` | `fechaHora` < ahora + 60 min, o > ahora + 60 días |
 | `FAILED_PRECONDITION` (400) | `FUERA_DE_HORARIO` | El tramo `[fechaHora, fechaHora + duracionMinutos)` no cabe completo en una `Disponibilidad` con `activo == true` de ese día |
 | `ALREADY_EXISTS` (409) | `HORARIO_OCUPADO` | Se solapa con otra reserva del profesional en `SOLICITADA`/`CONFIRMADA`/`EN_CURSO` |
+| `FAILED_PRECONDITION` (400) | `PROFESIONAL_NO_DISPONIBLE` | El profesional acumula comisiones sin pagar por encima del tope (`TOPE_SALDO_COMISION_CLP`, 30 000): no se le piden citas hasta que pague |
 
 Reglas de detalle:
 - **Zona horaria.** `Disponibilidad` está en hora de Chile
@@ -532,6 +580,7 @@ del servidor); el resto del documento no cambia.
 | `NOT_FOUND` (404) | `RESERVA_NO_ENCONTRADA` | La reserva no existe **o es de otro profesional** (no se revela que existe) |
 | `FAILED_PRECONDITION` (400) | `RESERVA_YA_RESPONDIDA` | `estado != "SOLICITADA"` (ya aceptada/rechazada, cancelada, etc.) |
 | `FAILED_PRECONDITION` (400) | `RESERVA_VENCIDA` | `ACEPTAR` con `fechaHora <= ahora` (o sin `fechaHora`). Rechazar una vencida sí se permite |
+| `FAILED_PRECONDITION` (400) | `SALDO_COMISION_PENDIENTE` | `ACEPTAR` con comisiones adeudadas ≥ `TOPE_SALDO_COMISION_CLP` (30 000). Rechazar sí se permite; las ya confirmadas se atienden y se completan igual |
 
 Reglas de detalle:
 - Lectura y escritura en una transacción: dos respuestas simultáneas a la
@@ -573,6 +622,11 @@ ni `bloqueosAgenda`.
 | `NOT_FOUND` (404) | `RESERVA_NO_ENCONTRADA` | No existe **o es de otro profesional** |
 | `FAILED_PRECONDITION` (400) | `RESERVA_NO_COMPLETABLE` | `estado` no es `CONFIRMADA`/`EN_CURSO` (solicitada, rechazada, cancelada o ya completada) |
 | `FAILED_PRECONDITION` (400) | `CITA_NO_INICIADA` | `fechaHora > ahora` (o sin `fechaHora`) |
+
+Si el pago no está `AUTORIZADO` (efectivo), `completarReserva` crea además la
+entrada `comisionesPendientes/{reservaId}` en la misma transacción (ver esa
+colección). Con el pago `AUTORIZADO` no hace nada extra: la comisión ya viajó
+como `marketplace_fee`.
 
 Reglas de detalle:
 - Solo el profesional puede completar: un cliente podría dar por hecha una
@@ -889,7 +943,8 @@ Ningún dato de tarjeta pasa por la app ni por el backend. Se paga una reserva
 | `iniciarPago` | callable | cliente | `{ reservaId, medio? }` → `{ pagoId, initPoint }` |
 | `estadoPago` | callable | cliente o profesional de la reserva | `{ pagoId }` → `{ estado }`; si sigue `PENDIENTE` relee Mercado Pago |
 | `webhookMercadoPago` | HTTP POST | Mercado Pago | Valida `x-signature` (HMAC-SHA256), relee el pago con el token del vendedor y lo aplica. 401 firma inválida, 500 falla transitoria (MP reintenta), 200 el resto |
-| `retornoPago` | HTTP GET | navegador | `back_urls` (MP exige HTTPS) → 302 a `kinecare://pago/resultado?pagoId=` |
+| `retornoPago` | HTTP GET | navegador | `back_urls` (MP exige HTTPS) → 302 a `kinecare://pago/resultado?pagoId=`; con `?tipo=comision` → `kinecare://comision/resultado` (sin ids) |
+| `pagarSaldoComision` | callable | profesional | Sin parámetros → `{ cobroId, initPoint, monto }`: cobra las comisiones adeudadas con Checkout Pro **a la cuenta de la plataforma** |
 
 `iniciarPago`: el cliente **solo** envía `reservaId` y, opcionalmente, `medio`
 (`CREDITO`, `DEBITO`, `TRANSFERENCIA`, `DINERO_EN_CUENTA`; cualquier otro valor →
@@ -915,6 +970,37 @@ sobre el mismo pago.
 | `FAILED_PRECONDITION` (400) | `MONTO_INVALIDO` | Monto no entero/positivo o comisión ≥ monto |
 | `UNAVAILABLE` (503) | `PASARELA_NO_DISPONIBLE` | Mercado Pago no respondió |
 
+**Comisión de atenciones en efectivo (saldo adeudado).** Ver
+`comisionesPendientes` y `cobrosComision`. Resumen del flujo:
+1. `completarReserva` registra la comisión si la atención no se pagó por la app.
+2. **Descuento automático.** `iniciarPago` suma al `marketplace_fee` las entradas
+   libres más antiguas que quepan, de modo que el fee total (comisión de la cita
+   + saldo) **nunca pase del 50 % del monto** (`MAX_FEE_PORCENTAJE_DEL_MONTO`;
+   Mercado Pago rechaza `fee >= monto` y el profesional no puede quedarse sin
+   ingreso). Una entrada no se parte. Las entradas quedan reservadas por el pago
+   (`reservadaPor`); al `AUTORIZADO` pasan a `PAGADA`, al `RECHAZADO` se liberan y
+   al `REEMBOLSADO` vuelven a `PENDIENTE`. Un pago `PENDIENTE` reutilizado
+   conserva su descuento.
+3. **Pago directo.** `pagarSaldoComision` suma las entradas libres, crea
+   `cobrosComision/{id}`, las reserva y devuelve el Checkout de la cuenta de la
+   plataforma. El webhook (`?cobroId=`) relee el pago con el token de la plataforma
+   y aplica el resultado con las mismas defensas (`external_reference`, monto,
+   idempotencia, transiciones válidas). Un reintento con el cobro vigente (< 24 h)
+   reutiliza la preferencia.
+4. **Pago con tarjeta tardío.** Si el cliente termina un Checkout abierto después de
+   que la atención ya se completó, la entrada de esa reserva pasa a `ANULADA`: la
+   comisión ya viaja como `marketplace_fee`.
+5. **Bloqueo.** Con comisiones adeudadas ≥ `TOPE_SALDO_COMISION_CLP` el profesional
+   no puede aceptar solicitudes (`SALDO_COMISION_PENDIENTE`) ni se le pueden pedir
+   (`PROFESIONAL_NO_DISPONIBLE`). Pagar el saldo lo desbloquea.
+
+| `status` (HTTP) | `motivo` | Cuándo (`pagarSaldoComision`) |
+|---|---|---|
+| `UNAUTHENTICATED` (401) | `SIN_SESION` | Sin sesión |
+| `PERMISSION_DENIED` (403) | `ROL_INVALIDO` | El usuario no es PROFESIONAL |
+| `FAILED_PRECONDITION` (400) | `SIN_SALDO_PENDIENTE` | No hay comisiones libres (ya pagadas, o reservadas por un pago en curso) |
+| `UNAVAILABLE` (503) | `PASARELA_NO_DISPONIBLE` | Mercado Pago no respondió, o falta `MP_PLATFORM_ACCESS_TOKEN` |
+
 Reglas de detalle:
 - **Estados.** `approved → AUTORIZADO`, `rejected|cancelled → RECHAZADO`,
   `refunded|charged_back → REEMBOLSADO`, el resto `PENDIENTE`. Las
@@ -939,7 +1025,11 @@ Reglas de detalle:
 - **Perfil ausente.** Marcar `mercadoPagoConectado` usa `update`: si
   `profesionales/{id}` no existe la vinculación falla en vez de crear un perfil fantasma.
 - **Configuración** (`firebase functions:secrets:set`): `MP_CLIENT_SECRET`,
-  `MP_WEBHOOK_SECRET`, `MP_TOKEN_ENCRYPTION_KEY` (32 bytes en base64); parámetro
+  `MP_WEBHOOK_SECRET`, `MP_TOKEN_ENCRYPTION_KEY` (32 bytes en base64) y
+  `MP_PLATFORM_ACCESS_TOKEN` (**Access Token de la cuenta de Mercado Pago de la
+  plataforma**, no el de un profesional ni el client secret: solo lo usan
+  `pagarSaldoComision` y el webhook de cobros de comisión; **debe cargarse antes de
+  desplegar**, `firebase functions:secrets:set` la pide al desplegar); parámetro
   `MP_APP_ID` (`functions/.env.<proyecto>`, ver `.env.example`); opcional `MP_AUTH_HOST`
   (por defecto `https://auth.mercadopago.cl`). Probado: el host `.com` del SDK
   muestra antes una página "Seleccione el país", mientras que `.cl` va directo a la

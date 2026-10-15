@@ -1,4 +1,5 @@
 import { FieldValue, Timestamp, type Firestore } from "firebase-admin/firestore";
+import { registrarComisionDeAtencion } from "./comisiones.js";
 import { errorDeNegocio } from "./errores.js";
 import { idObligatorio, esObjeto, invalido } from "./validacion.js";
 
@@ -30,7 +31,8 @@ const ESTADOS_COMPLETABLES = ["CONFIRMADA", "EN_CURSO"];
  * (`RESERVA_NO_ENCONTRADA`). Completar una cita futura se rechaza (`CITA_NO_INICIADA`). Lee y
  * escribe en una transaccion: si una cancelacion o una respuesta simultanea cambia el estado, esta
  * ve el estado nuevo y falla con `RESERVA_NO_COMPLETABLE` en vez de pisarlo. Es idempotente solo
- * en el sentido de que repetirla falla limpio; no toca pagos ni `bloqueosAgenda`.
+ * en el sentido de que repetirla falla limpio; no toca pagos ni `bloqueosAgenda`. Si el pago no esta
+ * `AUTORIZADO` (efectivo), crea la entrada de comision adeudada (ver `comisiones.ts`).
  */
 export async function completarReservaHandler(
   db: Firestore,
@@ -73,6 +75,8 @@ export async function completarReservaHandler(
       completadaEn: FieldValue.serverTimestamp(),
       actualizadoEn: FieldValue.serverTimestamp(),
     });
+    // Una atencion que no se pago por la app (efectivo) deja la comision como saldo adeudado.
+    registrarComisionDeAtencion(tx, db, reserva);
   });
 
   return { estado: "COMPLETADA" };

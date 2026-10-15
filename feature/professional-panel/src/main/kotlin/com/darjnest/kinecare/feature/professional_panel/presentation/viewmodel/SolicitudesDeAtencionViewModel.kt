@@ -276,6 +276,8 @@ private fun ResponderReservaError.aMensaje(): String = when (this) {
     ResponderReservaError.RESERVA_NO_ENCONTRADA -> "La solicitud ya no existe."
     ResponderReservaError.RESERVA_YA_RESPONDIDA -> "Esta solicitud ya fue respondida o cancelada."
     ResponderReservaError.RESERVA_VENCIDA -> "La hora de esta solicitud ya pasó; no se puede aceptar."
+    ResponderReservaError.SALDO_COMISION_PENDIENTE ->
+        "Tienes comisiones pendientes de pago. Págalas en Liquidaciones y Finanzas para aceptar nuevas solicitudes."
     ResponderReservaError.DATOS_INVALIDOS,
     ResponderReservaError.DESCONOCIDO,
     -> "No pudimos enviar tu respuesta. Inténtalo de nuevo."
