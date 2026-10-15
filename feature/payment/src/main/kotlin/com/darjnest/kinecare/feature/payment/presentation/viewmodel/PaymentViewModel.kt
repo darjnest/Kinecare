@@ -3,6 +3,7 @@ package com.darjnest.kinecare.feature.payment.presentation.viewmodel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.darjnest.kinecare.core.common.domain.model.MedioPagoElegible
 import com.darjnest.kinecare.feature.payment.domain.IniciarPagoError
 import com.darjnest.kinecare.feature.payment.data.repository.PagoRepository
 import com.darjnest.kinecare.core.common.result.Result
@@ -26,7 +27,9 @@ data class PaymentState(
     val titulo: String = "",
     /** Total en CLP que mostro la reserva; solo informativo: el cobro real lo fija el backend. */
     val montoClp: Long = 0,
-    /** `iniciarPago` en curso: unico momento en que el boton "Pagar" esta deshabilitado. */
+    /** Medio elegido por el cliente; `null` hasta que elige (el boton "Pagar" sigue deshabilitado). */
+    val medioSeleccionado: MedioPagoElegible? = null,
+    /** `iniciarPago` en curso: el boton "Pagar" tambien se deshabilita mientras tanto. */
     val cargando: Boolean = false,
     val error: IniciarPagoError? = null,
     /** El dispositivo no tiene navegador para abrir el Custom Tab. */
@@ -35,6 +38,8 @@ data class PaymentState(
 
 sealed interface PaymentAction {
     data object Pagar : PaymentAction
+
+    data class SeleccionarMedio(val medio: MedioPagoElegible) : PaymentAction
 
     /** El `Root` no pudo abrir el Custom Tab (sin navegador instalado). */
     data object NavegadorNoDisponible : PaymentAction
@@ -74,6 +79,7 @@ class PaymentViewModel @Inject constructor(
     fun onAction(action: PaymentAction) {
         when (action) {
             PaymentAction.Pagar -> pagar()
+            is PaymentAction.SeleccionarMedio -> _state.update { it.copy(medioSeleccionado = action.medio, error = null) }
             PaymentAction.NavegadorNoDisponible -> _state.update { it.copy(navegadorNoDisponible = true) }
             // Volver atras es navegacion: el Root la resuelve contra el NavGraph.
             PaymentAction.VolverAtras -> Unit
@@ -82,13 +88,14 @@ class PaymentViewModel @Inject constructor(
 
     private fun pagar() {
         if (_state.value.cargando) return
+        val medio = _state.value.medioSeleccionado ?: return
         if (reservaId.isBlank()) {
             _state.update { it.copy(error = IniciarPagoError.DATOS_INVALIDOS) }
             return
         }
         _state.update { it.copy(cargando = true, error = null, navegadorNoDisponible = false) }
         viewModelScope.launch {
-            when (val resultado = pagoRepository.iniciar(reservaId)) {
+            when (val resultado = pagoRepository.iniciar(reservaId, medio)) {
                 is Result.Success -> {
                     val url = resultado.data.urlPago
                     if (esUrlDeMercadoPago(url)) {

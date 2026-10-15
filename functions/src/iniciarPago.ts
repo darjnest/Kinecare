@@ -3,7 +3,7 @@ import { COLECCION_PAGOS, COMISION_PORCENTAJE } from "./constantes.js";
 import { errorDeNegocio } from "./errores.js";
 import { tokenVigente } from "./mercadopago/cuentas.js";
 import { calcularComision, type EstadoPago } from "./mercadopago/estados.js";
-import type { Pasarela } from "./mercadopago/pasarela.js";
+import { esMedioPago, type MedioPago, type Pasarela } from "./mercadopago/pasarela.js";
 import { esObjeto, idObligatorio, invalido } from "./validacion.js";
 
 export interface DepsPago {
@@ -18,10 +18,16 @@ export interface ResultadoIniciarPago {
   initPoint: string;
 }
 
-/** Valida la forma del payload. El cliente solo dice QUE reserva paga; nunca monto, comision ni vendedor. */
-export function parseIniciarPago(data: unknown): { reservaId: string } {
+/**
+ * Valida la forma del payload. El cliente dice QUE reserva paga y, opcionalmente, con que medio;
+ * nunca monto, comision ni vendedor.
+ */
+export function parseIniciarPago(data: unknown): { reservaId: string; medio?: MedioPago } {
   if (!esObjeto(data)) throw invalido("el cuerpo debe ser un objeto");
-  return { reservaId: idObligatorio(data.reservaId, "reservaId") };
+  const reservaId = idObligatorio(data.reservaId, "reservaId");
+  if (data.medio === undefined || data.medio === null) return { reservaId };
+  if (!esMedioPago(data.medio)) throw invalido("medio no es un medio de pago válido");
+  return { reservaId, medio: data.medio };
 }
 
 function reservaNoEncontrada() {
@@ -56,7 +62,7 @@ export async function iniciarPagoHandler(
   if (uid === undefined || uid === "") {
     throw errorDeNegocio("unauthenticated", "SIN_SESION", "Debes iniciar sesión para pagar.");
   }
-  const { reservaId } = parseIniciarPago(data);
+  const { reservaId, medio } = parseIniciarPago(data);
 
   const usuario = await db.collection("usuarios").doc(uid).get();
   if (!usuario.exists || usuario.get("rol") !== "CLIENTE") {
@@ -101,11 +107,14 @@ export async function iniciarPagoHandler(
       comisionPorcentaje,
     };
 
-    // Reintento: si el pago anterior sigue PENDIENTE se reutiliza (y su initPoint, si ya existe).
+    // Reintento: si el pago anterior sigue PENDIENTE se reutiliza el documento; su initPoint solo si
+    // el medio es el mismo (otro medio necesita otra preferencia, restringida a ese medio).
     if (pagoRef.id !== null) {
       const previo = await tx.get(pagos.doc(pagoRef.id));
       if (previo.exists && previo.get("estado") === "PENDIENTE") {
-        return { ...base, pagoId: previo.id, initPointExistente: (previo.get("initPoint") as string | undefined) ?? null };
+        const medioPrevio = (previo.get("medioElegido") as string | null | undefined) ?? undefined;
+        const initPoint = (previo.get("initPoint") as string | undefined) ?? null;
+        return { ...base, pagoId: previo.id, initPointExistente: medioPrevio === medio ? initPoint : null };
       }
     }
 
@@ -121,6 +130,7 @@ export async function iniciarPagoHandler(
       idTransaccionPasarela: null,
       preferenceId: null,
       initPoint: null,
+      medioElegido: medio ?? null,
       creadoEn: FieldValue.serverTimestamp(),
       actualizadoEn: FieldValue.serverTimestamp(),
     });
@@ -153,9 +163,13 @@ export async function iniciarPagoHandler(
     referenciaExterna: preparado.pagoId,
     notificationUrl: `${deps.urlBase}/webhookMercadoPago?pagoId=${preparado.pagoId}`,
     backUrl: `${deps.urlBase}/retornoPago`,
-    claveIdempotencia: preparado.pagoId,
+    // Otro medio = otra clave: Mercado Pago devolveria la preferencia anterior (con otras exclusiones).
+    claveIdempotencia: medio === undefined ? preparado.pagoId : `${preparado.pagoId}:${medio}`,
+    medio,
   });
 
-  await pagos.doc(preparado.pagoId).update({ preferenceId, initPoint, actualizadoEn: FieldValue.serverTimestamp() });
+  await pagos
+    .doc(preparado.pagoId)
+    .update({ preferenceId, initPoint, medioElegido: medio ?? null, actualizadoEn: FieldValue.serverTimestamp() });
   return { pagoId: preparado.pagoId, initPoint };
 }

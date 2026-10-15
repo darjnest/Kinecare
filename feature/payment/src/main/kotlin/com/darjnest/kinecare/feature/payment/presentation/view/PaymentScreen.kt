@@ -1,6 +1,15 @@
 package com.darjnest.kinecare.feature.payment.presentation.view
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.RadioButton
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
+import com.darjnest.kinecare.core.common.domain.model.MedioPagoElegible
+import com.darjnest.kinecare.feature.payment.presentation.util.aTexto
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -91,7 +100,10 @@ fun PaymentScreen(
                 .padding(KineCareSpacing.l),
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(KineCareSpacing.l)) {
+            Column(
+                modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(KineCareSpacing.l),
+            ) {
                 KineCareCard {
                     Text(
                         text = "Servicio",
@@ -103,6 +115,38 @@ fun PaymentScreen(
                         text = state.titulo.ifBlank { "Reserva" },
                         style = MaterialTheme.typography.titleMedium,
                     )
+                }
+                KineCareCard {
+                    Text(
+                        text = "Medio de pago",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Column(modifier = Modifier.selectableGroup()) {
+                        MedioPagoElegible.entries.forEach { medio ->
+                            val seleccionado = state.medioSeleccionado == medio
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .selectable(
+                                        selected = seleccionado,
+                                        enabled = !state.cargando,
+                                        role = Role.RadioButton,
+                                        onClick = { onAction(PaymentAction.SeleccionarMedio(medio)) },
+                                    )
+                                    .padding(vertical = KineCareSpacing.xs),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                // onClick = null: la fila entera es el objetivo tactil y anuncia el rol.
+                                RadioButton(selected = seleccionado, onClick = null, enabled = !state.cargando)
+                                Text(
+                                    text = medio.aTexto(),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier.padding(start = KineCareSpacing.m),
+                                )
+                            }
+                        }
+                    }
                 }
                 Text(
                     text = "Pagas de forma segura en Mercado Pago. Se abrirá en tu navegador y " +
@@ -136,7 +180,7 @@ fun PaymentScreen(
                 KineCarePrimaryButton(
                     text = if (state.cargando) "Preparando el pago…" else "Pagar con Mercado Pago",
                     onClick = { onAction(PaymentAction.Pagar) },
-                    enabled = !state.cargando,
+                    enabled = !state.cargando && state.medioSeleccionado != null,
                 )
             }
         }
@@ -147,7 +191,9 @@ fun PaymentScreen(
 @Composable
 private fun PaymentScreenPreview() {
     KineCareTheme {
-        PaymentScreen(state = PaymentState(titulo = "Kinesiología deportiva", montoClp = 25_000))
+        PaymentScreen(
+            state = PaymentState(titulo = "Kinesiología deportiva", montoClp = 25_000, medioSeleccionado = MedioPagoElegible.DEBITO),
+        )
     }
 }
 

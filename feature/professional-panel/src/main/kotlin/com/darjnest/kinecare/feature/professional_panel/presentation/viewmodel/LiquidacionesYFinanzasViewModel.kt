@@ -146,8 +146,15 @@ private fun LocalDate.aTextoCorto(hoy: LocalDate): String {
 private fun Reserva.medioTexto(): String = when {
     pago.estado == EstadoPagoDominio.PENDIENTE -> "Por cobrar"
     pago.metodo.tipo == TipoMetodoPago.TRANSFERENCIA -> "Transferencia · Mercado Pago"
-    pago.metodo.ultimosDigitos != null -> "Tarjeta •••• ${pago.metodo.ultimosDigitos} · Mercado Pago"
+    pago.metodo.tipo == TipoMetodoPago.DINERO_EN_CUENTA -> "Dinero en cuenta · Mercado Pago"
+    pago.metodo.ultimosDigitos != null -> "${pago.metodo.tipo.nombreTarjeta()} •••• ${pago.metodo.ultimosDigitos} · Mercado Pago"
     else -> "Mercado Pago"
+}
+
+private fun TipoMetodoPago.nombreTarjeta(): String = when (this) {
+    TipoMetodoPago.TARJETA_CREDITO -> "Crédito"
+    TipoMetodoPago.TARJETA_DEBITO -> "Débito"
+    else -> "Tarjeta"
 }
 
 /** `null` si la reserva no tiene un pago que mostrar (p. ej. una solicitud aun sin responder). */

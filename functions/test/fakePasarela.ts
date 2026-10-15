@@ -30,7 +30,7 @@ export class FakePasarela implements Pasarela {
   async crearPreferencia(accessToken: string, datos: DatosPreferencia) {
     if (this.falla) throw new Error("fallo simulado");
     this.preferencias.push({ accessToken, datos });
-    return { preferenceId: `pref-${datos.referenciaExterna}`, initPoint: `https://mp.test/checkout?pref=${datos.referenciaExterna}` };
+    return { preferenceId: `pref-${datos.referenciaExterna}`, initPoint: `https://mp.test/checkout?pref=${datos.referenciaExterna}${datos.medio === undefined ? "" : `&medio=${datos.medio}`}` };
   }
 
   async obtenerPago(_accessToken: string, paymentId: string): Promise<PagoMP> {

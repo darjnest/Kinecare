@@ -416,6 +416,11 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       webhook aplicar el pago. Si el OAuth rechaza el `client_secret`, hay que
       activar las credenciales de producción de la app (piden una URL de sitio
       web que KineCare aún no tiene).
+- [x] **Nuevos medios de pago** (selector en la pantalla Pagar): `TipoMetodoPago`
+      suma `TARJETA_CREDITO`, `TARJETA_DEBITO`, `DINERO_EN_CUENTA`;
+      `MedioPagoElegible` viaja a `iniciarPago` (`medio`) y restringe la preferencia
+      de Checkout Pro. **Pendiente validar en QA** que Mercado Pago Chile ofrezca
+      cada medio (débito, transferencia, dinero en cuenta) a cuentas Marketplace.
 - [ ] Producción (`kinecare-cl`): Redirect URL y webhook productivos, secretos,
       `MP_APP_ID` y deploy; requiere subir producción a Blaze.
 - [x] `:feature:payment` (UI/navegación Android; **no probado contra Mercado

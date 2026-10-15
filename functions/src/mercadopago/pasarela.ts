@@ -14,6 +14,33 @@ export interface TokensVendedor {
   scope: string;
 }
 
+/**
+ * Medios que el cliente puede elegir al pagar (el valor viaja en `iniciarPago`) y el
+ * `payment_type_id` de Mercado Pago al que corresponde cada uno.
+ */
+export const MEDIOS_PAGO = {
+  CREDITO: "credit_card",
+  DEBITO: "debit_card",
+  TRANSFERENCIA: "bank_transfer",
+  DINERO_EN_CUENTA: "account_money",
+} as const;
+
+export type MedioPago = keyof typeof MEDIOS_PAGO;
+
+export function esMedioPago(valor: unknown): valor is MedioPago {
+  return typeof valor === "string" && Object.prototype.hasOwnProperty.call(MEDIOS_PAGO, valor);
+}
+
+/**
+ * Tipos de pago de Mercado Pago que se excluyen de la preferencia: todos los conocidos menos el
+ * del medio elegido. Los que KineCare no ofrece (prepaga, ticket, cajero) quedan siempre excluidos.
+ */
+export function tiposExcluidos(medio: MedioPago): Array<{ id: string }> {
+  const elegido = MEDIOS_PAGO[medio];
+  const conocidos = [...Object.values(MEDIOS_PAGO), "prepaid_card", "ticket", "atm"];
+  return conocidos.filter((id) => id !== elegido).map((id) => ({ id }));
+}
+
 export interface DatosPreferencia {
   titulo: string;
   reservaId: string;
@@ -25,6 +52,8 @@ export interface DatosPreferencia {
   backUrl: string;
   /** Misma clave en reintentos: no se duplican preferencias. */
   claveIdempotencia: string;
+  /** Medio elegido por el cliente; ausente = Checkout Pro ofrece todos los medios. */
+  medio?: MedioPago;
 }
 
 export interface PagoMP {
@@ -190,6 +219,7 @@ export function crearPasarelaMP(config: ConfigPasarela, ahora: () => Date = () =
             back_urls: { success: d.backUrl, failure: d.backUrl, pending: d.backUrl },
             auto_return: "approved",
             statement_descriptor: "KINECARE",
+            ...(d.medio === undefined ? {} : { payment_methods: { excluded_payment_types: tiposExcluidos(d.medio) } }),
           },
           requestOptions: { idempotencyKey: d.claveIdempotencia },
         });

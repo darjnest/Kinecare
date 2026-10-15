@@ -14,12 +14,21 @@ function pagoNoEncontrado() {
   return errorDeNegocio("not-found", "PAGO_NO_ENCONTRADO", "No encontramos ese pago.");
 }
 
-function metodoDesde(pago: PagoMP): { tipo: "TARJETA" | "TRANSFERENCIA"; ultimosDigitos: string | null } | null {
-  if (pago.tipo === "credit_card" || pago.tipo === "debit_card") {
-    return { tipo: "TARJETA", ultimosDigitos: pago.ultimosDigitos };
+type TipoMetodo = "TARJETA_CREDITO" | "TARJETA_DEBITO" | "TRANSFERENCIA" | "DINERO_EN_CUENTA";
+
+export function metodoDesde(pago: PagoMP): { tipo: TipoMetodo; ultimosDigitos: string | null } | null {
+  switch (pago.tipo) {
+    case "credit_card":
+      return { tipo: "TARJETA_CREDITO", ultimosDigitos: pago.ultimosDigitos };
+    case "debit_card":
+      return { tipo: "TARJETA_DEBITO", ultimosDigitos: pago.ultimosDigitos };
+    case "bank_transfer":
+      return { tipo: "TRANSFERENCIA", ultimosDigitos: null };
+    case "account_money":
+      return { tipo: "DINERO_EN_CUENTA", ultimosDigitos: null };
+    default:
+      return null;
   }
-  if (pago.tipo === "bank_transfer") return { tipo: "TRANSFERENCIA", ultimosDigitos: null };
-  return null;
 }
 
 /**
