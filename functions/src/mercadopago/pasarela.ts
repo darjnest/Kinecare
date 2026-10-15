@@ -16,9 +16,11 @@ export interface TokensVendedor {
 
 export interface DatosPreferencia {
   titulo: string;
-  reservaId: string;
+  /** Id del item: la reserva (o el cobro de comision) que se paga. */
+  itemId: string;
   monto: number;
-  comision: number;
+  /** `marketplace_fee`. Ausente en los cobros que van directo a la cuenta de la plataforma. */
+  comision?: number;
   /** Referencia de conciliacion: el id del documento `pagos/{id}`. */
   referenciaExterna: string;
   notificationUrl: string;
@@ -183,8 +185,8 @@ export function crearPasarelaMP(config: ConfigPasarela, ahora: () => Date = () =
       try {
         const r = await new Preference(cliente(accessToken)).create({
           body: {
-            items: [{ id: d.reservaId, title: d.titulo, quantity: 1, unit_price: d.monto, currency_id: MONEDA }],
-            marketplace_fee: d.comision,
+            items: [{ id: d.itemId, title: d.titulo, quantity: 1, unit_price: d.monto, currency_id: MONEDA }],
+            ...(d.comision !== undefined && d.comision > 0 ? { marketplace_fee: d.comision } : {}),
             external_reference: d.referenciaExterna,
             notification_url: d.notificationUrl,
             back_urls: { success: d.backUrl, failure: d.backUrl, pending: d.backUrl },

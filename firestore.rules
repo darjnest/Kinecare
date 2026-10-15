@@ -194,6 +194,18 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Comision adeudada por atenciones en efectivo y sus cobros: solo la lee el profesional dueño;
+    // las escribe unicamente el backend (Admin SDK).
+    match /comisionesPendientes/{reservaId} {
+      allow read: if request.auth != null && resource.data.profesionalId == request.auth.uid;
+      allow write: if false;
+    }
+
+    match /cobrosComision/{cobroId} {
+      allow read: if request.auth != null && resource.data.profesionalId == request.auth.uid;
+      allow write: if false;
+    }
+
     match /resenas/{resenaId} {
       allow read: if true;
       // El id del documento es el reservaId: una segunda resena de la misma reserva

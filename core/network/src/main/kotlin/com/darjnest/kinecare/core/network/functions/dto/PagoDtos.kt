@@ -25,3 +25,15 @@ class ConectarMercadoPagoRequestDto
 
 @Serializable
 data class ConectarMercadoPagoResultadoDto(val authorizationUrl: String)
+
+/** `pagarSaldoComision` no recibe parametros: el profesional sale de la sesion y el monto de Firestore. */
+@Serializable
+class PagarSaldoComisionRequestDto
+
+/** `monto` (CLP) es lo que se cobra en [initPoint]: la suma de las comisiones adeudadas. */
+@Serializable
+data class PagarSaldoComisionResultadoDto(
+    val cobroId: String,
+    val initPoint: String,
+    val monto: Long,
+)

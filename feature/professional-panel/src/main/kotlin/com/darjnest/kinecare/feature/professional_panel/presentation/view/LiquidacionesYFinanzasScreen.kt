@@ -92,9 +92,18 @@ fun LiquidacionesYFinanzasRoot(
     modifier: Modifier = Modifier,
     viewModel: LiquidacionesYFinanzasViewModel = hiltViewModel(),
     onVolver: () -> Unit = {},
+    onPagarComisiones: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    LiquidacionesYFinanzasScreen(state = state, onAction = viewModel::onAction, onVolver = onVolver, modifier = modifier)
+    LiquidacionesYFinanzasScreen(
+        state = state,
+        onAction = { accion ->
+            // Pagar comisiones es navegacion a otra feature: el Root la resuelve contra el NavGraph.
+            if (accion == LiquidacionesYFinanzasAction.PagarComisiones) onPagarComisiones() else viewModel.onAction(accion)
+        },
+        onVolver = onVolver,
+        modifier = modifier,
+    )
 }
 
 @Composable
@@ -141,6 +150,14 @@ fun LiquidacionesYFinanzasScreen(
             } else if (state.errorCarga) {
                 Spacer(modifier = Modifier.height(16.dp))
                 TarjetaErrorCarga(onReintentar = { onAction(LiquidacionesYFinanzasAction.Reintentar) })
+            }
+
+            if (state.comisionesPorPagar > 0) {
+                Spacer(modifier = Modifier.height(16.dp))
+                TarjetaComisionesPorPagar(
+                    monto = state.comisionesPorPagar,
+                    onPagar = { onAction(LiquidacionesYFinanzasAction.PagarComisiones) },
+                )
             }
 
             state.resumenFinanciero?.let { resumenFinanciero ->
@@ -250,6 +267,52 @@ private fun FilaTituloYEstadoSii(siiConectado: Boolean) {
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(text = "SII Conectado", style = MaterialTheme.typography.labelSmall, color = AzulPetroleo30)
+            }
+        }
+    }
+}
+
+/**
+ * Comisiones de KineCare adeudadas por atenciones pagadas en efectivo. Se descuentan solas del siguiente pago
+ * con tarjeta por la app, o se pagan desde aqui con Mercado Pago.
+ */
+@Composable
+private fun TarjetaComisionesPorPagar(monto: Long, onPagar: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Text(
+                text = "COMISIONES POR PAGAR",
+                style = MaterialTheme.typography.labelMedium,
+                color = RojoError40,
+            )
+            Text(
+                text = formatearClp(monto),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = TextoPrincipal,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            Text(
+                text = "Es la comisión de KineCare por atenciones que cobraste en efectivo. Se descuenta sola " +
+                    "del próximo pago con tarjeta que recibas por la app. Si acumulas demasiado, no podrás " +
+                    "aceptar solicitudes nuevas hasta pagarla.",
+                style = MaterialTheme.typography.bodySmall,
+                color = LoginGrisTexto,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(LoginPrimarioOscuro)
+                    .clickable(onClick = onPagar)
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
+            ) {
+                Text(text = "Pagar ahora", style = MaterialTheme.typography.labelLarge, color = Color.White)
             }
         }
     }

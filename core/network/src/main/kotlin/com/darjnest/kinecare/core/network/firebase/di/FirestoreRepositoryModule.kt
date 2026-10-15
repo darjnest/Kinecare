@@ -2,6 +2,7 @@ package com.darjnest.kinecare.core.network.firebase.di
 
 import com.darjnest.kinecare.core.common.data.repository.CertificacionRepository
 import com.darjnest.kinecare.core.common.data.repository.ClienteRepository
+import com.darjnest.kinecare.core.common.data.repository.ComisionRepository
 import com.darjnest.kinecare.core.common.data.repository.DispositivoPushRepository
 import com.darjnest.kinecare.core.common.data.repository.FotoPerfilRepository
 import com.darjnest.kinecare.core.common.data.repository.ProfesionalRepository
@@ -11,6 +12,7 @@ import com.darjnest.kinecare.core.common.data.repository.ServicioRepository
 import com.darjnest.kinecare.core.common.data.repository.UsuarioRepository
 import com.darjnest.kinecare.core.network.firebase.repository.CertificacionRepositoryImpl
 import com.darjnest.kinecare.core.network.firebase.repository.ClienteRepositoryImpl
+import com.darjnest.kinecare.core.network.firebase.repository.ComisionRepositoryImpl
 import com.darjnest.kinecare.core.network.firebase.repository.DispositivoPushRepositoryImpl
 import com.darjnest.kinecare.core.network.firebase.repository.FotoPerfilRepositoryImpl
 import com.darjnest.kinecare.core.network.firebase.repository.ProfesionalRepositoryImpl
@@ -59,6 +61,10 @@ abstract class FirestoreRepositoryModule {
     @Binds
     @Singleton
     abstract fun bindServicioRepository(impl: ServicioRepositoryImpl): ServicioRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindComisionRepository(impl: ComisionRepositoryImpl): ComisionRepository
 
     @Binds
     @Singleton

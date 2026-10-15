@@ -1,8 +1,10 @@
 package com.darjnest.kinecare.feature.payment.data.repository
 
+import com.darjnest.kinecare.feature.payment.domain.CobroComision
 import com.darjnest.kinecare.feature.payment.domain.ConectarMercadoPagoError
 import com.darjnest.kinecare.feature.payment.domain.EstadoPagoError
 import com.darjnest.kinecare.feature.payment.domain.IniciarPagoError
+import com.darjnest.kinecare.feature.payment.domain.PagarComisionError
 import com.darjnest.kinecare.core.common.domain.model.EstadoPago
 import com.darjnest.kinecare.feature.payment.domain.IntentoPago
 import com.darjnest.kinecare.core.common.result.Result
@@ -34,4 +36,12 @@ interface PagoRepository {
      * vincular su cuenta de Mercado Pago y poder cobrar.
      */
     suspend fun obtenerUrlConexion(): Result<String, ConectarMercadoPagoError>
+
+    /**
+     * El profesional autenticado paga las comisiones que adeuda por atenciones
+     * en efectivo (`pagarSaldoComision`). Retorna la URL de Checkout Pro de la
+     * cuenta de KineCare; el monto lo calcula el backend desde Firestore.
+     * Reintentar mientras el cobro sigue vigente devuelve el mismo.
+     */
+    suspend fun pagarComisiones(): Result<CobroComision, PagarComisionError>
 }

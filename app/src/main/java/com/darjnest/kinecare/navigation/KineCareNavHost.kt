@@ -32,6 +32,7 @@ import com.darjnest.kinecare.feature.client_panel.presentation.navigation.MiPerf
 import com.darjnest.kinecare.feature.client_panel.presentation.navigation.MisCitasRoute
 import com.darjnest.kinecare.feature.client_panel.presentation.navigation.client_panelGraph
 import com.darjnest.kinecare.feature.payment.presentation.navigation.ConectarMercadoPagoRoute
+import com.darjnest.kinecare.feature.payment.presentation.navigation.PagarComisionRoute
 import com.darjnest.kinecare.feature.payment.presentation.navigation.PaymentRoute
 import com.darjnest.kinecare.feature.payment.presentation.navigation.paymentGraph
 import com.darjnest.kinecare.feature.professional_panel.presentation.navigation.ProfessionalPanelRoute
@@ -223,6 +224,7 @@ fun KineCareNavHost(modifier: Modifier = Modifier) {
             // "Previsualizar": abre el perfil publico tal como lo ve un cliente.
             onPrevisualizarPerfil = onProfesionalClick,
             onConectarMercadoPago = { navController.navigate(ConectarMercadoPagoRoute) },
+            onPagarComisiones = { navController.navigate(PagarComisionRoute) },
             onVerificarIdentidad = { navController.navigate(VerificationRoute) { launchSingleTop = true } },
         )
         reviewsGraph(onVolver = { navController.popBackStack() })
@@ -233,7 +235,7 @@ fun KineCareNavHost(modifier: Modifier = Modifier) {
  * Navigation Compose procesa el deep link de la Activity solo al crear el
  * grafo (arranque en frio); no reacciona a `onNewIntent`. Como `MainActivity`
  * es `singleTask`, el retorno desde el Custom Tab (`kinecare://pago/...`,
- * `kinecare://mp/...`, `kinecare://verificacion/...`) llega a la Activity ya abierta por `onNewIntent`, asi
+ * `kinecare://comision/...`, `kinecare://mp/...`, `kinecare://verificacion/...`) llega a la Activity ya abierta por `onNewIntent`, asi
  * que se entrega aqui al `NavController`.
  *
  * Se navega con `navigate(uri)` y no con `handleDeepLink(intent)`: este ultimo

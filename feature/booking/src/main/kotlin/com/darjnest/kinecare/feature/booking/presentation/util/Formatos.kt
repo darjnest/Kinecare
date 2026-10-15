@@ -96,5 +96,6 @@ fun mensajeErrorEnvio(error: CrearReservaError): String = when (error) {
     CrearReservaError.ANTICIPACION_INSUFICIENTE -> "Ese horario ya no se puede reservar. Elige otro con al menos una hora de anticipación."
     CrearReservaError.FUERA_DE_HORARIO -> "Ese horario ya no está dentro de la agenda del profesional. Elige otro."
     CrearReservaError.HORARIO_OCUPADO -> "Alguien acaba de reservar ese horario. Elige otro."
+    CrearReservaError.PROFESIONAL_NO_DISPONIBLE -> "Este profesional no está recibiendo solicitudes por ahora. Prueba con otro."
     CrearReservaError.DESCONOCIDO -> "No pudimos crear la reserva. Inténtalo de nuevo en unos minutos."
 }

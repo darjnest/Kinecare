@@ -3,6 +3,7 @@ package com.darjnest.kinecare.feature.payment.presentation.util
 import com.darjnest.kinecare.feature.payment.domain.ConectarMercadoPagoError
 import com.darjnest.kinecare.feature.payment.domain.EstadoPagoError
 import com.darjnest.kinecare.feature.payment.domain.IniciarPagoError
+import com.darjnest.kinecare.feature.payment.domain.PagarComisionError
 
 private const val MENSAJE_SIN_INTERNET = "Sin conexión a internet. Revisa tu red e inténtalo de nuevo."
 
@@ -54,6 +55,17 @@ fun mensajeErrorConexion(error: ConectarMercadoPagoError): String = when (error)
     ConectarMercadoPagoError.SIN_INTERNET -> MENSAJE_SIN_INTERNET
     ConectarMercadoPagoError.ROL_INVALIDO -> "Solo una cuenta de profesional puede vincular Mercado Pago."
     ConectarMercadoPagoError.DESCONOCIDO -> "No pudimos iniciar la vinculación. Inténtalo de nuevo en unos minutos."
+}
+
+fun mensajeErrorPagarComision(error: PagarComisionError): String = when (error) {
+    PagarComisionError.SIN_SESION -> "Tu sesión expiró. Inicia sesión de nuevo para pagar tus comisiones."
+    PagarComisionError.SIN_INTERNET -> MENSAJE_SIN_INTERNET
+    PagarComisionError.ROL_INVALIDO -> "Solo una cuenta de profesional puede pagar comisiones."
+    PagarComisionError.SIN_SALDO_PENDIENTE ->
+        "No tienes comisiones pendientes de pago, o ya hay un pago en curso que las incluye."
+    PagarComisionError.PASARELA_NO_DISPONIBLE ->
+        "Mercado Pago no está disponible en este momento. Inténtalo de nuevo en unos minutos."
+    PagarComisionError.DESCONOCIDO -> "No pudimos iniciar el pago. Inténtalo de nuevo en unos minutos."
 }
 
 /**

@@ -17,6 +17,8 @@ import com.darjnest.kinecare.core.network.functions.dto.EstadoVerificacionReques
 import com.darjnest.kinecare.core.network.functions.dto.EstadoVerificacionResultadoDto
 import com.darjnest.kinecare.core.network.functions.dto.IniciarPagoRequestDto
 import com.darjnest.kinecare.core.network.functions.dto.IniciarPagoResultadoDto
+import com.darjnest.kinecare.core.network.functions.dto.PagarSaldoComisionRequestDto
+import com.darjnest.kinecare.core.network.functions.dto.PagarSaldoComisionResultadoDto
 import com.darjnest.kinecare.core.network.functions.dto.ResponderReservaRequestDto
 import com.darjnest.kinecare.core.network.functions.dto.ResponderReservaResultadoDto
 import com.darjnest.kinecare.core.network.functions.dto.SolicitarVerificacionRequestDto
@@ -83,6 +85,12 @@ interface CloudFunctionsApi {
         @Header("Authorization") autorizacion: String,
         @Body cuerpo: CallableRequest<EstadoPagoRequestDto>,
     ): Response<CallableResponse<EstadoPagoResultadoDto>>
+
+    @POST("pagarSaldoComision")
+    suspend fun pagarSaldoComision(
+        @Header("Authorization") autorizacion: String,
+        @Body cuerpo: CallableRequest<PagarSaldoComisionRequestDto>,
+    ): Response<CallableResponse<PagarSaldoComisionResultadoDto>>
 
     @POST("conectarMercadoPago")
     suspend fun conectarMercadoPago(
