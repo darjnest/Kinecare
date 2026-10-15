@@ -23,5 +23,8 @@ enum class ResponderReservaError : Error {
 
     /** Se intento aceptar una solicitud cuya hora ya paso. */
     RESERVA_VENCIDA,
+
+    /** Debe comisiones por atenciones en efectivo y alcanzo el tope: no puede aceptar hasta pagarlas. */
+    SALDO_COMISION_PENDIENTE,
     DESCONOCIDO,
 }

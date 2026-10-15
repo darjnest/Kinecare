@@ -1,8 +1,10 @@
 package com.darjnest.kinecare.feature.payment.data.repository_impl
 
+import com.darjnest.kinecare.feature.payment.domain.CobroComision
 import com.darjnest.kinecare.feature.payment.domain.ConectarMercadoPagoError
 import com.darjnest.kinecare.feature.payment.domain.EstadoPagoError
 import com.darjnest.kinecare.feature.payment.domain.IniciarPagoError
+import com.darjnest.kinecare.feature.payment.domain.PagarComisionError
 import com.darjnest.kinecare.feature.payment.data.repository.PagoRepository
 import com.darjnest.kinecare.core.common.domain.model.EstadoPago
 import com.darjnest.kinecare.feature.payment.domain.IntentoPago
@@ -14,6 +16,7 @@ import com.darjnest.kinecare.core.network.functions.dto.CallableRequest
 import com.darjnest.kinecare.core.network.functions.dto.ConectarMercadoPagoRequestDto
 import com.darjnest.kinecare.core.network.functions.dto.EstadoPagoRequestDto
 import com.darjnest.kinecare.core.network.functions.dto.IniciarPagoRequestDto
+import com.darjnest.kinecare.core.network.functions.dto.PagarSaldoComisionRequestDto
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
@@ -91,6 +94,34 @@ class PagoRepositoryImpl @Inject constructor(
             is Result.Success -> Result.Success(resultado.data.authorizationUrl)
             is Result.Error -> resultado
         }
+    }
+
+    override suspend fun pagarComisiones(): Result<CobroComision, PagarComisionError> {
+        val resultado = llamarCallable(
+            firebaseAuth = firebaseAuth,
+            json = json,
+            sinSesion = PagarComisionError.SIN_SESION,
+            sinInternet = PagarComisionError.SIN_INTERNET,
+            desconocido = PagarComisionError.DESCONOCIDO,
+            aError = { error ->
+                error.aErrorDe(PagarComisionError.entries, PagarComisionError.DESCONOCIDO, ::estadoCanonicoPagarComision)
+            },
+            llamada = { autorizacion ->
+                cloudFunctionsApi.pagarSaldoComision(autorizacion, CallableRequest(PagarSaldoComisionRequestDto()))
+            },
+        )
+        return when (resultado) {
+            is Result.Success ->
+                Result.Success(CobroComision(resultado.data.cobroId, resultado.data.initPoint, resultado.data.monto))
+            is Result.Error -> resultado
+        }
+    }
+
+    private fun estadoCanonicoPagarComision(status: String?): PagarComisionError? = when (status) {
+        "UNAUTHENTICATED" -> PagarComisionError.SIN_SESION
+        "PERMISSION_DENIED" -> PagarComisionError.ROL_INVALIDO
+        "UNAVAILABLE" -> PagarComisionError.PASARELA_NO_DISPONIBLE
+        else -> null
     }
 
     private fun estadoCanonicoIniciar(status: String?): IniciarPagoError? = when (status) {

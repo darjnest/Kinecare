@@ -416,6 +416,32 @@ feature tiene datos de verdad — eso arranca en la Fase 2.
       webhook aplicar el pago. Si el OAuth rechaza el `client_secret`, hay que
       activar las credenciales de producción de la app (piden una URL de sitio
       web que KineCare aún no tiene).
+- [x] **Comisión de atenciones en efectivo** (saldo adeudado; **sin desplegar,
+      sin probar contra Mercado Pago real**). Backend (`functions/`):
+      `completarReserva` crea `comisionesPendientes/{reservaId}` si la atención no se
+      pagó por la app; `iniciarPago` descuenta el saldo del `marketplace_fee` (fee
+      total ≤ 50 % del monto) y `aplicarPago` salda/libera/devuelve las entradas;
+      `pagarSaldoComision` + webhook `?cobroId=` para pagarlo a la cuenta de la
+      plataforma; bloqueo al llegar a `TOPE_SALDO_COMISION_CLP` (30 000) en
+      `responderReserva` (`SALDO_COMISION_PENDIENTE`) y `crearReserva`
+      (`PROFESIONAL_NO_DISPONIBLE`); reglas de Firestore (lectura solo del dueño).
+      Android: `ComisionRepository` (`:core:common`/`:core:network`), tarjeta
+      "Comisiones por pagar" en Liquidaciones y Finanzas, pantallas `PagarComisionRoute`
+      y `ComisionResultadoRoute` (deep link `kinecare://comision/resultado`) en
+      `:feature:payment`, y "Efectivo · comisión por pagar" en el historial. 482 tests
+      de backend con el emulador; tests Android de ViewModels y repositorios. Detalle en
+      [DATA_MODEL.md](DATA_MODEL.md).
+- [ ] Comisión en efectivo, antes de desplegar: cargar el secreto
+      `MP_PLATFORM_ACCESS_TOKEN` (Access Token de la cuenta de Mercado Pago de la
+      plataforma, distinto de `MP_CLIENT_SECRET`), desplegar `functions` y `firestore`
+      (reglas) en QA y probarlo de punta a punta: completar una cita sin pagar → ver el
+      saldo en Finanzas → pagar otra con tarjeta y ver el fee aumentado → "Pagar ahora".
+- [ ] Comisión en efectivo, pendientes de producto: recordatorio por atenciones pasadas
+      que nunca se completaron (hoy no hay comisión si el profesional no las completa);
+      condonar/ajustar una comisión cuando un reporte de problema le da la razón al
+      cliente (hoy sería a mano, `estado = CONDONADA`); definir con un contador cómo se
+      factura la comisión en Chile (¿el 10 % es neto + IVA?); confirmar con Mercado Pago
+      Chile si descuenta su tarifa de procesamiento sobre el monto completo.
 - [ ] Producción (`kinecare-cl`): Redirect URL y webhook productivos, secretos,
       `MP_APP_ID` y deploy; requiere subir producción a Blaze.
 - [x] `:feature:payment` (UI/navegación Android; **no probado contra Mercado

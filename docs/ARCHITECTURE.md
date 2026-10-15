@@ -325,7 +325,9 @@ de Firebase (`firebase use qa` / `firebase use prod`) al proyecto correcto.
 - Pasarela de pago: **Mercado Pago** (decidido): Marketplace + Checkout Pro.
   Cada profesional vincula su cuenta por OAuth; el cliente paga en la página
   de Mercado Pago (Custom Tabs) y el dinero llega directo al profesional con
-  `marketplace_fee` para la plataforma. Todo el backend vive en Cloud
+  `marketplace_fee` para la plataforma. Las atenciones pagadas en efectivo dejan la
+  comisión como saldo adeudado del profesional (se descuenta de un pago con tarjeta o
+  se paga a la cuenta de la plataforma; ver `comisionesPendientes`). Todo el backend vive en Cloud
   Functions (ver [DATA_MODEL.md](DATA_MODEL.md#pagos-con-mercado-pago-marketplace--checkout-pro--sin-desplegar)).
 - Verificación de identidad: proveedor **Didit** (elegido 2026-10-08;
   detalle en [DATA_MODEL.md](DATA_MODEL.md#verificación-de-identidad-con-didit--sin-desplegar)) — la app

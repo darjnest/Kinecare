@@ -29,6 +29,10 @@ export type Motivo =
   | "PROFESIONAL_SIN_CUENTA_MP"
   | "MONTO_INVALIDO"
   | "PASARELA_NO_DISPONIBLE"
+  // comision adeudada por atenciones en efectivo
+  | "SALDO_COMISION_PENDIENTE"
+  | "SIN_SALDO_PENDIENTE"
+  | "PROFESIONAL_NO_DISPONIBLE"
   // verificacion de identidad
   | "NO_ES_PROFESIONAL"
   | "TIPO_NO_SOPORTADO"

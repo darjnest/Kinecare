@@ -110,6 +110,11 @@ Núcleo transaccional del marketplace.
 - `estado: EstadoReserva`
 - `pago: Pago`
 - `comisionPorcentaje: Double` (ej. 0.10 — fijado por Cloud Function, no editable por el cliente)
+  - **Comisión en efectivo.** Si la atención se completa sin pago `AUTORIZADO` por la app
+    (el cliente pagó en efectivo), KineCare no puede descontar su comisión: queda como
+    **saldo adeudado** del profesional (`ComisionPendiente`, `SaldoComision`). Se descuenta
+    sola del siguiente pago con tarjeta o se paga desde Liquidaciones y Finanzas. Al llegar al
+    tope (30 000 CLP) el profesional no puede aceptar solicitudes nuevas hasta pagar.
 - `expirada: Boolean` (opcional, por defecto `false`: `true` si `expirarSolicitudes` cerró
   una solicitud sin respuesta; el `estado` queda `RECHAZADA` y la UI la muestra como
   "vencida sin respuesta")

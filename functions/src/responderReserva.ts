@@ -1,4 +1,5 @@
 import { FieldValue, Timestamp, type Firestore } from "firebase-admin/firestore";
+import { profesionalBloqueadoPorSaldo } from "./comisiones.js";
 import { errorDeNegocio } from "./errores.js";
 import { idObligatorio, invalido, esObjeto } from "./validacion.js";
 
@@ -63,6 +64,15 @@ export async function responderReservaHandler(
   const usuario = await db.collection("usuarios").doc(uid).get();
   if (!usuario.exists || usuario.get("rol") !== "PROFESIONAL") {
     throw errorDeNegocio("permission-denied", "ROL_INVALIDO", "Solo un profesional puede responder solicitudes.");
+  }
+
+  // Con el tope de comisiones adeudadas (atenciones en efectivo) no se aceptan citas nuevas hasta pagar.
+  if (respuesta === "ACEPTAR" && (await profesionalBloqueadoPorSaldo(db, uid))) {
+    throw errorDeNegocio(
+      "failed-precondition",
+      "SALDO_COMISION_PENDIENTE",
+      "Tienes comisiones pendientes de pago. Págalas desde Liquidaciones y Finanzas para aceptar nuevas solicitudes.",
+    );
   }
 
   const reservaRef = db.collection("reservas").doc(reservaId);

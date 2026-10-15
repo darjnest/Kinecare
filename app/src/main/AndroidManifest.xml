@@ -65,6 +65,17 @@
                 <category android:name="android.intent.category.BROWSABLE" />
 
                 <data
+                    android:host="comision"
+                    android:path="/resultado"
+                    android:scheme="kinecare" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
                     android:host="verificacion"
                     android:path="/resultado"
                     android:scheme="kinecare" />

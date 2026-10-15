@@ -45,6 +45,26 @@ export const COLECCION_PAGOS = "pagos";
 export const COLECCION_CUENTAS_MP = "cuentasMercadoPago";
 export const COLECCION_ESTADOS_OAUTH = "oauthEstados";
 
+/**
+ * Comision de atenciones que no se pagaron por la app (efectivo): la plataforma no puede retener ese
+ * dinero, asi que queda como saldo adeudado del profesional (`comisionesPendientes/{reservaId}`) y se
+ * cobra descontandolo de un pago con tarjeta o con un pago directo (`cobrosComision`).
+ */
+export const COLECCION_COMISIONES = "comisionesPendientes";
+export const COLECCION_COBROS_COMISION = "cobrosComision";
+
+/** Con este saldo adeudado (CLP) el profesional no puede aceptar ni recibir solicitudes nuevas. */
+export const TOPE_SALDO_COMISION_CLP = 30_000;
+
+/**
+ * Tope del `marketplace_fee` total de un pago (comision + saldo descontado) como fraccion del monto:
+ * Mercado Pago rechaza `fee >= monto` y el profesional no puede quedarse sin ingreso por una cita.
+ */
+export const MAX_FEE_PORCENTAJE_DEL_MONTO = 0.5;
+
+/** Una entrada de comision reservada por un pago/cobro sin resolver vuelve a quedar libre pasado este tiempo. */
+export const RESERVA_COMISION_VIGENCIA_HORAS = 24;
+
 /** Moneda de todos los cobros (Mercado Pago Chile). El CLP no tiene decimales. */
 export const MONEDA = "CLP";
 

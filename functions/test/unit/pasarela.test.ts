@@ -139,7 +139,7 @@ describe("OAuth /oauth/token", () => {
 describe("preferencias y pagos", () => {
   const datos = {
     titulo: "Kinesiología",
-    reservaId: "res1",
+    itemId: "res1",
     monto: 25000,
     comision: 2500,
     referenciaExterna: "pago1",

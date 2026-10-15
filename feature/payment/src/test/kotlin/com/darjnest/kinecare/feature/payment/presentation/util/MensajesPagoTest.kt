@@ -3,6 +3,7 @@ package com.darjnest.kinecare.feature.payment.presentation.util
 import com.darjnest.kinecare.feature.payment.domain.ConectarMercadoPagoError
 import com.darjnest.kinecare.feature.payment.domain.EstadoPagoError
 import com.darjnest.kinecare.feature.payment.domain.IniciarPagoError
+import com.darjnest.kinecare.feature.payment.domain.PagarComisionError
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
@@ -30,6 +31,13 @@ class MensajesPagoTest {
     fun `cada EstadoPagoError y ConectarMercadoPagoError tiene mensaje`() {
         assertTrue(EstadoPagoError.entries.all { mensajeErrorEstado(it).isNotBlank() })
         assertTrue(ConectarMercadoPagoError.entries.all { mensajeErrorConexion(it).isNotBlank() })
+    }
+
+    @Test
+    fun `cada PagarComisionError tiene un mensaje propio en espanol`() {
+        val mensajes = PagarComisionError.entries.map(::mensajeErrorPagarComision)
+        assertTrue(mensajes.all { it.isNotBlank() })
+        assertEquals(mensajes.size, mensajes.toSet().size, "dos errores distintos comparten mensaje")
     }
 
     @Test

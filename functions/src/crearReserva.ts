@@ -5,6 +5,7 @@ import {
   COLECCION_BLOQUEOS_AGENDA,
   COMISION_PORCENTAJE,
 } from "./constantes.js";
+import { profesionalBloqueadoPorSaldo } from "./comisiones.js";
 import { errorDeNegocio } from "./errores.js";
 import { slotDentroDeDisponibilidad } from "./horario.js";
 import { fin, hayReservaSolapada, ventanaDeConsulta, type ReservaExistente } from "./solapamiento.js";
@@ -89,6 +90,15 @@ export async function crearReservaHandler(
   const usuario = await db.collection("usuarios").doc(uid).get();
   if (!usuario.exists || usuario.get("rol") !== "CLIENTE" || uid === solicitud.profesionalId) {
     throw errorDeNegocio("permission-denied", "ROL_INVALIDO", "Solo un cliente puede reservar con otro profesional.");
+  }
+
+  // Un profesional que alcanzo el tope de comisiones adeudadas no puede aceptar: no se le piden citas.
+  if (await profesionalBloqueadoPorSaldo(db, solicitud.profesionalId)) {
+    throw errorDeNegocio(
+      "failed-precondition",
+      "PROFESIONAL_NO_DISPONIBLE",
+      "Este profesional no está recibiendo solicitudes por ahora.",
+    );
   }
 
   const profesionalRef = db.collection("profesionales").doc(solicitud.profesionalId);
