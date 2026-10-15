@@ -2,9 +2,12 @@ package com.darjnest.kinecare.core.network.functions.dto
 
 import kotlinx.serialization.Serializable
 
-/** `data` de `iniciarPago`: solo la reserva; monto, comision y vendedor salen del servidor. */
+/**
+ * `data` de `iniciarPago`: la reserva y, opcionalmente, el medio elegido (`CREDITO`, `DEBITO`,
+ * `TRANSFERENCIA`, `DINERO_EN_CUENTA`); monto, comision y vendedor salen del servidor.
+ */
 @Serializable
-data class IniciarPagoRequestDto(val reservaId: String)
+data class IniciarPagoRequestDto(val reservaId: String, val medio: String? = null)
 
 @Serializable
 data class IniciarPagoResultadoDto(

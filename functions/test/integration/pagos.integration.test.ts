@@ -151,6 +151,40 @@ describe("iniciarPago: camino feliz", () => {
     assert.equal((await db.collection("pagos").get()).size, 1);
   });
 
+  it("con un medio elegido la preferencia lo lleva y el pago lo registra", async () => {
+    await sembrarCuenta();
+    const reservaId = await sembrarReserva();
+    const { pagoId, initPoint } = await iniciarPagoHandler(db, deps, CLIENTE, { reservaId, medio: "DEBITO" }, AHORA);
+
+    assert.equal(initPoint, `https://mp.test/checkout?pref=${pagoId}&medio=DEBITO`);
+    assert.equal(pasarela.preferencias[0]!.datos.medio, "DEBITO");
+    assert.equal(pasarela.preferencias[0]!.datos.claveIdempotencia, `${pagoId}:DEBITO`);
+    assert.equal((await leerPago(pagoId)).medioElegido, "DEBITO");
+  });
+
+  it("reintentar con el mismo medio reutiliza la preferencia; con otro medio crea una nueva sobre el mismo pago", async () => {
+    await sembrarCuenta();
+    const reservaId = await sembrarReserva();
+    const elegir = (medio: string) => iniciarPagoHandler(db, deps, CLIENTE, { reservaId, medio }, AHORA);
+    const credito = await elegir("CREDITO");
+    assert.deepEqual(await elegir("CREDITO"), credito);
+    assert.equal(pasarela.preferencias.length, 1);
+
+    const transferencia = await elegir("TRANSFERENCIA");
+    assert.equal(transferencia.pagoId, credito.pagoId, "mismo documento de pago");
+    assert.notEqual(transferencia.initPoint, credito.initPoint);
+    assert.equal(pasarela.preferencias.length, 2);
+    assert.equal((await leerPago(credito.pagoId)).medioElegido, "TRANSFERENCIA");
+    assert.equal((await db.collection("pagos").get()).size, 1);
+  });
+
+  it("un medio invalido se rechaza antes de tocar nada", async () => {
+    await sembrarCuenta();
+    const reservaId = await sembrarReserva();
+    await esperarError(() => iniciarPagoHandler(db, deps, CLIENTE, { reservaId, medio: "EFECTIVO" }, AHORA), "invalid-argument", "DATOS_INVALIDOS");
+    assert.equal((await db.collection("pagos").get()).size, 0);
+  });
+
   it("tras un intento RECHAZADO se crea un pago nuevo y la reserva apunta a el", async () => {
     await sembrarCuenta();
     const reservaId = await sembrarReserva();
@@ -305,7 +339,7 @@ describe("webhookMercadoPago", () => {
     const pago = await leerPago(pagoId);
     assert.equal(pago.estado, "AUTORIZADO");
     assert.equal(pago.idTransaccionPasarela, "9001");
-    assert.deepEqual(pago.metodo, { tipo: "TARJETA", ultimosDigitos: "4321" });
+    assert.deepEqual(pago.metodo, { tipo: "TARJETA_CREDITO", ultimosDigitos: "4321" });
     assert.equal((await leerReserva(reservaId)).pago.estado, "AUTORIZADO");
   });
 

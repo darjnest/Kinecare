@@ -7,6 +7,7 @@ import com.darjnest.kinecare.feature.payment.domain.IniciarPagoError
 import com.darjnest.kinecare.feature.payment.domain.PagarComisionError
 import com.darjnest.kinecare.core.common.domain.model.EstadoPago
 import com.darjnest.kinecare.feature.payment.domain.IntentoPago
+import com.darjnest.kinecare.core.common.domain.model.MedioPagoElegible
 import com.darjnest.kinecare.core.common.result.Result
 import com.darjnest.kinecare.core.network.functions.CloudFunctionsApi
 import com.darjnest.kinecare.core.network.functions.dto.CallableRequest
@@ -93,6 +94,18 @@ class PagoRepositoryImplTest {
         assertEquals(Result.Success(IntentoPago("pago-1", "https://www.mercadopago.cl/checkout/v1/redirect?pref_id=1")), resultado)
         assertEquals("Bearer token-123", autorizacion.captured)
         assertEquals(IniciarPagoRequestDto("res-1"), cuerpo.captured.data)
+    }
+
+    @Test
+    fun `iniciar envia el medio elegido por su id de backend`() = runTest {
+        conSesion()
+        val cuerpo = slot<CallableRequest<IniciarPagoRequestDto>>()
+        coEvery { api.iniciarPago(any(), capture(cuerpo)) } returns
+            Response.success(CallableResponse(IniciarPagoResultadoDto("pago-1", "https://www.mercadopago.cl/checkout/v1/redirect?pref_id=1")))
+
+        repository.iniciar("res-1", MedioPagoElegible.DINERO_EN_CUENTA)
+
+        assertEquals(IniciarPagoRequestDto("res-1", "DINERO_EN_CUENTA"), cuerpo.captured.data)
     }
 
     @Test

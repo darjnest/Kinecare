@@ -7,6 +7,7 @@ import com.darjnest.kinecare.feature.payment.domain.IniciarPagoError
 import com.darjnest.kinecare.feature.payment.domain.PagarComisionError
 import com.darjnest.kinecare.feature.payment.data.repository.PagoRepository
 import com.darjnest.kinecare.core.common.domain.model.EstadoPago
+import com.darjnest.kinecare.core.common.domain.model.MedioPagoElegible
 import com.darjnest.kinecare.feature.payment.domain.IntentoPago
 import com.darjnest.kinecare.core.common.result.Result
 import com.darjnest.kinecare.core.network.functions.CloudFunctionsApi
@@ -37,7 +38,7 @@ class PagoRepositoryImpl @Inject constructor(
     private val json: Json,
 ) : PagoRepository {
 
-    override suspend fun iniciar(reservaId: String): Result<IntentoPago, IniciarPagoError> {
+    override suspend fun iniciar(reservaId: String, medio: MedioPagoElegible?): Result<IntentoPago, IniciarPagoError> {
         val resultado = llamarCallable(
             firebaseAuth = firebaseAuth,
             json = json,
@@ -46,7 +47,7 @@ class PagoRepositoryImpl @Inject constructor(
             desconocido = IniciarPagoError.DESCONOCIDO,
             aError = { error -> error.aErrorDe(IniciarPagoError.entries, IniciarPagoError.DESCONOCIDO, ::estadoCanonicoIniciar) },
             llamada = { autorizacion ->
-                cloudFunctionsApi.iniciarPago(autorizacion, CallableRequest(IniciarPagoRequestDto(reservaId)))
+                cloudFunctionsApi.iniciarPago(autorizacion, CallableRequest(IniciarPagoRequestDto(reservaId, medio?.idBackend)))
             },
         )
         // `when` explicito y no `Result.map`: ver ReservaRepositoryImpl.crear.

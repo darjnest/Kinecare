@@ -174,6 +174,20 @@ describe("preferencias y pagos", () => {
     assert.ok(!JSON.stringify(cuerpo).includes("sandbox"), "nunca sandbox_init_point");
   });
 
+  it("crearPreferencia con medio excluye todos los tipos de pago salvo el elegido", async () => {
+    responder = () => json({ id: "pref-1", init_point: "https://www.mercadopago.cl/checkout/v1/redirect?pref_id=pref-1" }, 201);
+    await crearPasarelaMP(config, () => AHORA).crearPreferencia("token-vendedor", { ...datos, medio: "DEBITO" });
+
+    const ids = JSON.parse(llamadas[0]!.cuerpo).payment_methods.excluded_payment_types.map((t: { id: string }) => t.id).sort();
+    assert.deepEqual(ids, ["account_money", "atm", "bank_transfer", "credit_card", "prepaid_card", "ticket"]);
+  });
+
+  it("crearPreferencia sin medio no restringe los tipos de pago", async () => {
+    responder = () => json({ id: "pref-1", init_point: "https://www.mercadopago.cl/checkout/v1/redirect?pref_id=pref-1" }, 201);
+    await crearPasarelaMP(config, () => AHORA).crearPreferencia("token-vendedor", datos);
+    assert.equal(JSON.parse(llamadas[0]!.cuerpo).payment_methods, undefined);
+  });
+
   it("crearPreferencia falla con PASARELA_NO_DISPONIBLE si Mercado Pago no devuelve init_point", async () => {
     responder = () => json({ id: "pref-1" }, 201);
     await esperarError(() => crearPasarelaMP(config, () => AHORA).crearPreferencia("t", datos), "unavailable", "PASARELA_NO_DISPONIBLE");

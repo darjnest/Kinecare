@@ -1,9 +1,17 @@
 package com.darjnest.kinecare.feature.payment.presentation.util
 
+import com.darjnest.kinecare.core.common.domain.model.MedioPagoElegible
 import com.darjnest.kinecare.feature.payment.domain.ConectarMercadoPagoError
 import com.darjnest.kinecare.feature.payment.domain.EstadoPagoError
 import com.darjnest.kinecare.feature.payment.domain.IniciarPagoError
 import com.darjnest.kinecare.feature.payment.domain.PagarComisionError
+
+fun MedioPagoElegible.aTexto(): String = when (this) {
+    MedioPagoElegible.CREDITO -> "Tarjeta de crédito"
+    MedioPagoElegible.DEBITO -> "Tarjeta de débito"
+    MedioPagoElegible.TRANSFERENCIA -> "Transferencia bancaria"
+    MedioPagoElegible.DINERO_EN_CUENTA -> "Dinero en cuenta Mercado Pago"
+}
 
 private const val MENSAJE_SIN_INTERNET = "Sin conexión a internet. Revisa tu red e inténtalo de nuevo."
 

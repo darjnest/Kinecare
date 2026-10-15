@@ -176,6 +176,23 @@ class LiquidacionesYFinanzasViewModelTest {
     }
 
     @Test
+    fun `historial distingue credito, debito, transferencia y dinero en cuenta`() = runTest {
+        conReservas(
+            reservaPagada("credito", AHORA_FINANZAS - 1.days, ultimosDigitos = "4321", tipoMetodo = TipoMetodoPago.TARJETA_CREDITO),
+            reservaPagada("debito", AHORA_FINANZAS - 2.days, ultimosDigitos = "1234", tipoMetodo = TipoMetodoPago.TARJETA_DEBITO),
+            reservaPagada("transferencia", AHORA_FINANZAS - 3.days, tipoMetodo = TipoMetodoPago.TRANSFERENCIA),
+            reservaPagada("saldo", AHORA_FINANZAS - 4.days, tipoMetodo = TipoMetodoPago.DINERO_EN_CUENTA),
+        )
+
+        val textos = crearViewModel().state.value.historialPagos.associate { it.id to it.medioTexto }
+
+        assertEquals("Crédito •••• 4321 · Mercado Pago", textos["credito"])
+        assertEquals("Débito •••• 1234 · Mercado Pago", textos["debito"])
+        assertEquals("Transferencia · Mercado Pago", textos["transferencia"])
+        assertEquals("Dinero en cuenta · Mercado Pago", textos["saldo"])
+    }
+
+    @Test
     fun `historial refleja rechazados, reembolsados y por cobrar, y omite solicitudes sin pago`() = runTest {
         conReservas(
             reservaPagada("rechazado", AHORA_FINANZAS - 1.days, estadoPago = EstadoPagoDominio.RECHAZADO),
@@ -303,6 +320,7 @@ private fun reservaPagada(
     estado: EstadoReserva = EstadoReserva.CONFIRMADA,
     estadoPago: EstadoPagoDominio = EstadoPagoDominio.AUTORIZADO,
     ultimosDigitos: String? = null,
+    tipoMetodo: TipoMetodoPago = TipoMetodoPago.TARJETA,
 ) = Reserva(
     id = id,
     clienteId = "cli-1",
@@ -316,7 +334,7 @@ private fun reservaPagada(
         id = "pago-$id",
         reservaId = id,
         monto = monto,
-        metodo = MetodoPago(TipoMetodoPago.TARJETA, ultimosDigitos, ""),
+        metodo = MetodoPago(tipoMetodo, ultimosDigitos, ""),
         estado = estadoPago,
         idTransaccionPasarela = null,
     ),

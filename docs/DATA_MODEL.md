@@ -266,10 +266,9 @@ reservaId: string
 clienteId: string                // copiado de la reserva
 profesionalId: string            // vendedor que recibe el pago
 monto: number                    // CLP enteros; copiado de reservas.pago.monto (nunca del cliente)
-comision: number                 // CLP; = round(monto × comisionPorcentaje). Es la comisión de ESTA cita
-comisionSaldoDescontada: number  // CLP de comisión adeudada (efectivo) que se suma al marketplace_fee; 0 si no hay
-entradasSaldo: string[]          // ids de `comisionesPendientes` descontadas; quedan reservadas por este pago
-metodo: { tipo: "TARJETA" | "TRANSFERENCIA", ultimosDigitos: string? }?  // null hasta que MP informa el pago
+comision: number                 // CLP; = round(monto × comisionPorcentaje). Es el marketplace_fee
+metodo: { tipo: "TARJETA_CREDITO" | "TARJETA_DEBITO" | "TRANSFERENCIA" | "DINERO_EN_CUENTA" | "TARJETA"(histórico), ultimosDigitos: string? }?  // null hasta que MP informa el pago (o si el tipo es otro)
+medioElegido: "CREDITO" | "DEBITO" | "TRANSFERENCIA" | "DINERO_EN_CUENTA"?  // el que eligió el cliente; null = sin restricción
 estado: "PENDIENTE" | "AUTORIZADO" | "RECHAZADO" | "REEMBOLSADO"
 idTransaccionPasarela: string?   // id del pago en Mercado Pago (payment_id)
 preferenceId: string?            // preferencia de Checkout Pro
@@ -941,17 +940,22 @@ Ningún dato de tarjeta pasa por la app ni por el backend. Se paga una reserva
 |---|---|---|---|
 | `conectarMercadoPago` | callable | profesional | Devuelve `{ authorizationUrl }` con un `state` de un solo uso (10 min) |
 | `mercadoPagoOAuthCallback` | HTTP GET | navegador (Mercado Pago) | Consume `state`, canjea `code`, guarda tokens cifrados, 302 a `kinecare://mp/conectado` o `kinecare://mp/error?motivo=` (`estado_invalido`, `cancelado`, `sin_codigo`, `pasarela`) |
-| `iniciarPago` | callable | cliente | `{ reservaId }` → `{ pagoId, initPoint }` |
+| `iniciarPago` | callable | cliente | `{ reservaId, medio? }` → `{ pagoId, initPoint }` |
 | `estadoPago` | callable | cliente o profesional de la reserva | `{ pagoId }` → `{ estado }`; si sigue `PENDIENTE` relee Mercado Pago |
 | `webhookMercadoPago` | HTTP POST | Mercado Pago | Valida `x-signature` (HMAC-SHA256), relee el pago con el token del vendedor y lo aplica. 401 firma inválida, 500 falla transitoria (MP reintenta), 200 el resto |
 | `retornoPago` | HTTP GET | navegador | `back_urls` (MP exige HTTPS) → 302 a `kinecare://pago/resultado?pagoId=`; con `?tipo=comision` → `kinecare://comision/resultado` (sin ids) |
 | `pagarSaldoComision` | callable | profesional | Sin parámetros → `{ cobroId, initPoint, monto }`: cobra las comisiones adeudadas con Checkout Pro **a la cuenta de la plataforma** |
 
-`iniciarPago`: el cliente **solo** envía `reservaId`. Monto = `reservas.pago.monto`,
+`iniciarPago`: el cliente **solo** envía `reservaId` y, opcionalmente, `medio`
+(`CREDITO`, `DEBITO`, `TRANSFERENCIA`, `DINERO_EN_CUENTA`; cualquier otro valor →
+`DATOS_INVALIDOS`). Con `medio`, la preferencia excluye (`payment_methods.excluded_payment_types`)
+todos los tipos de Mercado Pago salvo el elegido; sin `medio` ofrece todos. Monto = `reservas.pago.monto`,
 comisión = `reservas.comisionPorcentaje`, vendedor = `reservas.profesionalId`; se
 cobra con el token OAuth del profesional (sin cuenta conectada falla; jamás cae al
 token de la plataforma). Un reintento con el pago `PENDIENTE` reutiliza el mismo
-`pagos/{id}` y la misma preferencia (`idempotencyKey = pagoId`).
+`pagos/{id}`; si el `medio` es el mismo reutiliza la misma preferencia
+(`idempotencyKey = pagoId` o `pagoId:medio`), y si cambió crea una nueva preferencia
+sobre el mismo pago.
 
 | `status` (HTTP) | `motivo` | Cuándo |
 |---|---|---|

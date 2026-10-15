@@ -158,9 +158,17 @@ Resuelto exclusivamente por las Cloud Functions `iniciarPago` / `estadoPago`
 (ver [ARCHITECTURE.md](ARCHITECTURE.md#backend-firebase)).
 
 ### MetodoPago
-- `tipo: TipoMetodoPago` (`TARJETA`, `TRANSFERENCIA`, según pasarela elegida)
+- `tipo: TipoMetodoPago` (`TARJETA_CREDITO`, `TARJETA_DEBITO`, `TRANSFERENCIA`,
+  `DINERO_EN_CUENTA`; `TARJETA` solo en pagos anteriores a separar crédito/débito).
+  Lo deduce el webhook del `payment_type_id` que informa Mercado Pago.
 - `ultimosDigitos: String?`
 - `tokenPasarela: String` (nunca el número de tarjeta completo)
+
+### MedioPagoElegible
+Medio que el cliente elige en la pantalla **Pagar** antes de ir a Mercado Pago:
+`CREDITO`, `DEBITO`, `TRANSFERENCIA`, `DINERO_EN_CUENTA`. Viaja a `iniciarPago`
+y la preferencia de Checkout Pro se restringe a ese medio. Es la intención del
+cliente; el medio realmente usado queda en `Pago.metodo`.
 
 ## Resena
 - `id: String`
